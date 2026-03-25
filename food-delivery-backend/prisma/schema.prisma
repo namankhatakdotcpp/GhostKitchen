@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  SHOPKEEPER
+  DELIVERY
+  ADMIN
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+model User {
+  id             String       @id @default(uuid())
+  name           String
+  email          String       @unique
+  phone          String?
+  password       String
+  role           Role         @default(CUSTOMER)
+  isAvailable    Boolean      @default(false)
+  currentLat     Float?
+  currentLng     Float?
+  restaurants    Restaurant[] @relation("RestaurantOwner")
+  customerOrders Order[]      @relation("CustomerOrders")
+  deliveryOrders Order[]      @relation("DeliveryOrders")
+  reviews        Review[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Restaurant {
+  id             String     @id @default(uuid())
+  name           String
+  ownerId        String
+  description    String
+  cuisines       String[]
+  rating         Float      @default(0)
+  imageUrl       String
+  address        Json
+  isOpen         Boolean    @default(true)
+  deliveryRadius Float      @default(5)
+  owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  menuItems      MenuItem[]
+  orders         Order[]
+  reviews        Review[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model MenuItem {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  description  String
+  price        Decimal    @db.Decimal(10, 2)
+  category     String
+  imageUrl     String
+  isVeg        Boolean    @default(false)
+  isAvailable  Boolean    @default(true)
+  isBestseller Boolean    @default(false)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([restaurantId, category])
+}
+
+model Order {
+  id                String      @id @default(uuid())
+  customerId        String
+  restaurantId      String
+  agentId           String?
+  status            OrderStatus @default(PLACED)
+  items             Json
+  subtotal          Decimal     @db.Decimal(10, 2)
+  deliveryFee       Decimal     @db.Decimal(10, 2)
+  discount          Decimal     @default(0) @db.Decimal(10, 2)
+  total             Decimal     @db.Decimal(10, 2)
+  deliveryAddress   Json
+  placedAt          DateTime    @default(now())
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+  customer          User        @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  agent             User?       @relation("DeliveryOrders", fields: [agentId], references: [id], onDelete: SetNull)
+  review            Review?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@index([customerId, status])
+  @@index([restaurantId, status])
+}
+
+model Review {
+  id           String     @id @default(uuid())
+  orderId      String     @unique
+  customerId   String
+  restaurantId String
+  rating       Int
+  comment      String?
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer     User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId, rating])
+}
+
+model Coupon {
+  id            String       @id @default(uuid())
+  code          String       @unique
+  discountType  DiscountType
+  discountValue Decimal      @db.Decimal(10, 2)
+  minOrder      Decimal      @db.Decimal(10, 2)
+  maxUses       Int
+  usedCount     Int          @default(0)
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
