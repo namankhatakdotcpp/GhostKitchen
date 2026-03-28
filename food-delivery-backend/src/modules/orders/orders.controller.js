@@ -56,6 +56,17 @@ export const placeOrder = async (req, res) => {
 
     return res.status(201).json({ order });
   } catch (error) {
+    // Handle specific validation errors
+    if (
+      error.message?.includes("Invalid items") ||
+      error.message?.includes("Invalid coupon") ||
+      error.message?.includes("Coupon") ||
+      error.message?.includes("Not found")
+    ) {
+      return res.status(400).json({ message: error.message });
+    }
+
+    console.error("Order creation error:", error);
     return res.status(500).json({ message: "Unable to place order" });
   }
 };
