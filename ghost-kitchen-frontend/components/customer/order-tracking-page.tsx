@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import type {
   AgentLocation,
@@ -138,22 +139,7 @@ function patchTimeline(
 }
 
 async function fetchTrackedOrder(orderId: string) {
-  const response = await fetch(`/api/orders/${orderId}`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const errorPayload = (await response.json().catch(() => null)) as
-      | ApiErrorPayload
-      | null;
-    throw {
-      error: errorPayload?.error ?? "Unable to load order.",
-      code: errorPayload?.code ?? response.status,
-    } satisfies ApiErrorPayload;
-  }
-
-  const payload = (await response.json()) as OrderResponse;
-  return payload.order;
+  return api.get(`/orders/${orderId}`).then(r => r.data);
 }
 
 function StageNode({
@@ -249,7 +235,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
     queryKey: ["order", orderId],
     queryFn: () => fetchTrackedOrder(orderId),
     retry: false,
-    refetchInterval: isSocketConnected ? false : 30_000,
+    refetchInterval: 30_000, // Poll every 30 seconds as fallback if socket disconnects
   });
 
   const order = query.data;

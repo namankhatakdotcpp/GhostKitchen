@@ -1,10 +1,10 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-import { getRestaurantById, primaryAddress } from "@/lib/mockData";
-import { useOrderStore } from "@/store/orderStore";
-import type { CartItem, MenuItem, Order } from "@/types";
+import { api } from "@/lib/api";
+import type { CartItem, MenuItem } from "@/types";
 
 type CartStore = {
   restaurantId: string | null;
@@ -18,7 +18,9 @@ type CartStore = {
   placeOrder: () => Promise<void>;
 };
 
-export const useCartStore = create<CartStore>((set, get) => ({
+export const useCartStore = create<CartStore>(
+  persist(
+    (set, get) => ({
   restaurantId: null,
   items: [],
   isPlacingOrder: false,
@@ -95,50 +97,29 @@ export const useCartStore = create<CartStore>((set, get) => ({
       return;
     }
 
-    const restaurant = getRestaurantById(restaurantId);
-
-    if (!restaurant) {
-      return;
-    }
-
     set({ isPlacingOrder: true });
 
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      await api.post('/orders', {
+        restaurantId,
+        items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
+        deliveryAddress: {},
+        couponCode: undefined,
+      });
 
-    const subtotal = items.reduce(
-      (sum, item) => sum + item.menuItem.price * item.quantity,
-      0,
-    );
-    const deliveryFee = restaurant.deliveryFee;
-    const discount = subtotal > 799 ? 120 : 0;
-
-    const order: Order = {
-      id: `gk-order-${Date.now()}`,
-      customerId: "demo-customer",
-      restaurantId,
-      restaurant,
-      items: items.map((item) => ({
-        menuItem: item.menuItem,
-        quantity: item.quantity,
-        price: item.menuItem.price,
-      })),
-      status: "PLACED",
-      subtotal,
-      total: subtotal + deliveryFee - discount,
-      deliveryFee,
-      discount,
-      deliveryAddress: primaryAddress,
-      createdAt: new Date().toISOString(),
-      estimatedDelivery: new Date(Date.now() + 32 * 60 * 1000).toISOString(),
-    };
-
-    useOrderStore.getState().createOrder(order);
-
-    set({
-      restaurantId: null,
-      items: [],
-      isPlacingOrder: false,
-      lastUpdatedAt: Date.now(),
-    });
+      set({
+        restaurantId: null,
+        items: [],
+        isPlacingOrder: false,
+        lastUpdatedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error('Error placing order:', error);
+      set({ isPlacingOrder: false });
+      throw error;
+    }
   },
-}));
+}),
+  { name: 'ghost-kitchen-cart' }
+  )
+);

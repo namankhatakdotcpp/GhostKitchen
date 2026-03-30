@@ -1,10 +1,12 @@
 import {
+  assignDeliveryAgent,
   createOrder,
   getOrderById,
   listOrders,
+  updateOrderStatus,
 } from "./orders.service.js";
-import { validateCreateOrder } from "./orders.validation.js";
-import { emitOrderAssignedToAgent, emitOrderNew } from "../../socket/socket.server.js";
+import { validateCreateOrder, validateStatusUpdate } from "./orders.validation.js";
+import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "../../socket/socket.server.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -68,5 +70,63 @@ export const placeOrder = async (req, res) => {
 
     console.error("Order creation error:", error);
     return res.status(500).json({ message: "Unable to place order" });
+  }
+};
+
+export const updateOrderStatusHTTP = async (req, res) => {
+  try {
+    const { id: orderId } = req.params;
+    const { status: newStatus } = req.body;
+    const io = req.app.locals.io;
+
+    // Fetch current order to get existing status
+    const currentOrder = await getOrderById(orderId);
+
+    if (!currentOrder) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // Validate status transition based on user role
+    const validationError = validateStatusUpdate(
+      req.body,
+      currentOrder.status,
+      req.user.role
+    );
+
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    // Update order status
+    const updatedOrder = await updateOrderStatus({
+      orderId,
+      status: newStatus,
+      agentId: req.user.role === "DELIVERY" ? req.user.userId : undefined,
+    });
+
+    // If status changed to CONFIRMED, assign delivery agent
+    if (newStatus === "CONFIRMED" && io) {
+      const assignedAgent = await assignDeliveryAgent(orderId, io);
+      if (!assignedAgent) {
+        console.warn(`No agents available for order ${orderId}`);
+      }
+    }
+
+    // Emit socket event to notify all parties
+    if (io) {
+      emitOrderStatusUpdated({
+        orderId,
+        status: newStatus,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.json({
+      message: "Order status updated successfully",
+      order: updatedOrder,
+    });
+  } catch (error) {
+    console.error("Order status update error:", error);
+    return res.status(500).json({ message: "Unable to update order status" });
   }
 };

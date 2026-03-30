@@ -88,6 +88,7 @@ model Order {
   customerId        String
   restaurantId      String
   agentId           String?
+  cfOrderId         String?     @unique
   status            OrderStatus @default(PLACED)
   items             Json
   subtotal          Decimal     @db.Decimal(10, 2)
@@ -135,4 +136,19 @@ model Coupon {
   expiresAt     DateTime
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  cfOrderId       String   @unique
+  cfPaymentId     String?
+  customerId      String
+  restaurantId    String
+  amount          Int
+  status          String   @default("PENDING")
+  itemsSnapshot   String
+  deliveryAddress String
+  couponCode      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

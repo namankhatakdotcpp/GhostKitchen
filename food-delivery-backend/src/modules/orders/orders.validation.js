@@ -59,3 +59,46 @@ export const validateCreateOrder = (payload) => {
 
   return null;
 };
+
+const VALID_STATUSES = ["PLACED", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+
+const STATUS_TRANSITIONS = {
+  PLACED: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["PREPARING", "CANCELLED"],
+  PREPARING: ["OUT_FOR_DELIVERY", "CANCELLED"],
+  OUT_FOR_DELIVERY: ["DELIVERED"],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+
+const ROLE_PERMISSIONS = {
+  RESTAURANT: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"],
+  DELIVERY: ["OUT_FOR_DELIVERY", "DELIVERED"],
+  CUSTOMER: ["CANCELLED"],
+};
+
+export const validateStatusUpdate = (payload, currentStatus, userRole) => {
+  if (!payload?.status) {
+    return "status is required";
+  }
+
+  if (!VALID_STATUSES.includes(payload.status)) {
+    return `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`;
+  }
+
+  // Check if transition is valid
+  if (!STATUS_TRANSITIONS[currentStatus]?.includes(payload.status)) {
+    return `Cannot transition from ${currentStatus} to ${payload.status}`;
+  }
+
+  // Check role-based permissions
+  if (userRole === "CUSTOMER" && payload.status === "CANCELLED" && currentStatus !== "PLACED") {
+    return "Orders can only be cancelled when in PLACED status";
+  }
+
+  if (!ROLE_PERMISSIONS[userRole]?.includes(payload.status)) {
+    return `${userRole} role cannot set status to ${payload.status}`;
+  }
+
+  return null;
+};

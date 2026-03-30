@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,13 +9,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MenuItemCard } from "@/components/customer/MenuItemCard";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
-import type { RestaurantFeedCard, RestaurantMenuSection } from "@/types";
 
 type RestaurantMenuPageProps = {
-  restaurant: RestaurantFeedCard;
-  menu: RestaurantMenuSection[];
+  restaurantId: string;
 };
 
 const STICKY_HEADER_HEIGHT = 64;
@@ -50,50 +50,56 @@ function CartIcon() {
   );
 }
 
-function InfoIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 10v5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <circle cx="12" cy="7.5" fill="currentColor" r="1" />
-    </svg>
-  );
-}
-
 function StarIcon() {
   return (
     <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-      <path
-        d="m12 3 2.8 5.66L21 9.6l-4.5 4.4 1.06 6.21L12 17.32l-5.56 2.89L7.5 14 3 9.6l6.2-.94L12 3Z"
-        fill="#FF5200"
-        stroke="#FF5200"
-        strokeLinejoin="round"
-        strokeWidth="1.2"
-      />
+      <path d="m12 3 2.8 5.66L21 9.6l-4.5 4.4 1.06 6.21L12 17.32l-5.56 2.89L7.5 14 3 9.6l6.2-.94L12 3Z" fill="#FF5200" stroke="#FF5200" strokeLinejoin="round" strokeWidth="1.2"/>
     </svg>
   );
 }
 
-function formatCurrency(value: number) {
-  return `₹${value}`;
-}
-
 export function RestaurantMenuPage({
-  restaurant,
-  menu,
+  restaurantId,
 }: RestaurantMenuPageProps) {
   const router = useRouter();
   const [vegOnly, setVegOnly] = useState(false);
-  const [activeCategory, setActiveCategory] = useState(menu[0]?.category ?? "");
-  const { items, restaurantId, updateQuantity, clearCart } = useCartStore();
+  const { items, restaurantId: cartRestaurantId, updateQuantity, clearCart } = useCartStore();
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const [activeCategory, setActiveCategory] = useState<string>("");
+
+  const { data: restaurant, isLoading: restaurantLoading } = useQuery({
+    queryKey: ['restaurant', restaurantId],
+    queryFn: () => api.get(`/restaurants/${restaurantId}`).then(r => r.data),
+  });
+
+  const { data: menuByCategory = {}, isLoading: menuLoading } = useQuery({
+    queryKey: ['menu', restaurantId],
+    queryFn: () => api.get(`/restaurants/${restaurantId}/menu`).then(r => r.data),
+    enabled: !!restaurantId,
+  });
+
+  const isLoading = restaurantLoading || menuLoading;
+
+  // Transform menu data from { "Category": [ items ] } to array format
+  const menu = useMemo(() => {
+    return Object.entries(menuByCategory || {}).map(([category, items]) => ({
+      category,
+      items: items as typeof undefined[],
+    }));
+  }, [menuByCategory]);
+
+  useEffect(() => {
+    if (menu.length > 0 && !activeCategory) {
+      setActiveCategory(menu[0].category);
+    }
+  }, [menu, activeCategory]);
 
   const currentCartItems = useMemo(
     () =>
-      restaurantId === restaurant.id
+      cartRestaurantId === restaurantId
         ? items
         : [],
-    [items, restaurantId, restaurant.id],
+    [items, cartRestaurantId, restaurantId],
   );
   const totalQuantity = currentCartItems.reduce(
     (sum, item) => sum + item.quantity,
@@ -103,7 +109,7 @@ export function RestaurantMenuPage({
     (sum, item) => sum + item.menuItem.price * item.quantity,
     0,
   );
-  const total = subtotal + restaurant.deliveryFee;
+  const total = subtotal + (restaurant?.address?.deliveryFee || 0);
 
   const filteredMenu = useMemo(
     () =>
@@ -188,12 +194,8 @@ export function RestaurantMenuPage({
               <BackIcon />
             </button>
             <div className="min-w-0">
-              <h1 className="line-clamp-1 text-base font-bold text-text-primary md:text-lg">
-                {restaurant.name}
-              </h1>
-              <p className="line-clamp-1 text-xs text-text-secondary">
-                {restaurant.address.label}
-              </p>
+              <h1 className="line-clamp-1 text-base font-bold text-text-primary md:text-lg">{restaurant.name}</h1>
+              <p className="line-clamp-1 text-xs text-text-secondary">{restaurant.cuisines?.join(', ')}</p>
             </div>
           </div>
 
@@ -226,36 +228,14 @@ export function RestaurantMenuPage({
             {restaurant.name}
           </h2>
           <p className="mt-1 text-[13px] text-text-secondary">
-            {restaurant.cuisines.join(" • ")}
+            {restaurant.cuisines?.join(' • ')}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-text-secondary">
             <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
               <StarIcon />
-              {restaurant.rating.toFixed(1)}
+              {restaurant.rating?.toFixed(1) || '0'}
             </span>
-            <span>•</span>
-            <span>{restaurant.deliveryTime} mins</span>
-            <span>•</span>
-            <span>{formatCurrency(restaurant.costForTwo)} for two</span>
-            <span>•</span>
-            <span>{restaurant.distanceKm.toFixed(1)} km</span>
-          </div>
-
-          <div className="scrollbar-none mt-4 flex gap-2 overflow-x-auto pb-1">
-            {restaurant.offers.map((offer) => (
-              <span
-                className="shrink-0 rounded-pill bg-success px-3 py-1.5 text-[12px] font-semibold text-white"
-                key={offer}
-              >
-                {offer}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-4 inline-flex items-center gap-2 text-sm text-text-secondary">
-            <InfoIcon />
-            <span>{restaurant.outletLabel}</span>
           </div>
         </section>
       </div>
@@ -424,7 +404,7 @@ export function RestaurantMenuPage({
                     <div className="flex items-center justify-between">
                       <span>Delivery fee</span>
                       <span className="font-semibold text-text-primary">
-                        ₹{restaurant.deliveryFee}
+                        ₹{deliveryFee}
                       </span>
                     </div>
                     <div className="flex items-center justify-between border-t border-border pt-3 text-base">
@@ -462,7 +442,7 @@ export function RestaurantMenuPage({
                       {totalQuantity} items in cart
                     </p>
                     <p className="mt-1 text-xs text-text-secondary">
-                      Subtotal ₹{subtotal} + delivery ₹{restaurant.deliveryFee}
+                      Subtotal ₹{subtotal} + delivery ₹{deliveryFee}
                     </p>
                   </div>
                   <div className="text-right">

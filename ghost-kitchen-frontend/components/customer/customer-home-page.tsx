@@ -10,9 +10,9 @@ import {
   categoryOptions,
   featuredBanners,
   filterOptions,
-  getRestaurantsPage,
   popularLocations,
 } from "@/lib/mockData";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/store/userStore";
 import type { FilterOption } from "@/types";
@@ -68,18 +68,20 @@ export function CustomerHomePage() {
     hasNextPage,
     isFetching,
     isFetchingNextPage,
+    isLoading,
   } = useInfiniteQuery({
     queryKey: ["restaurants", category, activeFilters, searchTerm, location?.label],
-    queryFn: ({ pageParam }) =>
-      getRestaurantsPage({
-        pageParam,
-        category,
-        filters: activeFilters,
-        search: searchTerm,
-        location: location?.label ?? null,
-      }),
-    getNextPageParam: (lastPage) => lastPage.nextPage,
-    initialPageParam: 0,
+    queryFn: ({ pageParam = 1 }) =>
+      api.get('/restaurants', {
+        params: {
+          search: searchTerm || undefined,
+          cuisine: category !== null ? category : undefined,
+          page: pageParam,
+          limit: 12,
+        }
+      }).then(r => r.data),
+    getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
+    initialPageParam: 1,
   });
 
   useEffect(() => {
@@ -106,7 +108,7 @@ export function CustomerHomePage() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const restaurantPages = data?.pages ?? [];
-  const restaurants = restaurantPages.flatMap((page) => page.items);
+  const restaurants = restaurantPages.flatMap((page) => page.restaurants ?? []);
   const restaurantCount = restaurantPages[0]?.total ?? 0;
 
   function toggleFilter(filter: FilterOption) {
@@ -308,32 +310,38 @@ export function CustomerHomePage() {
           className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-3"
           layout
         >
-          {restaurants.map((restaurant, index) => (
-            <RestaurantCard
-              cuisines={restaurant.cuisines}
-              deliveryFee={restaurant.deliveryFee}
-              deliveryTime={restaurant.deliveryTime}
-              id={restaurant.id}
-              imageUrl={restaurant.imageUrl}
-              index={index}
-              isNew={restaurant.isNew}
-              isVeg={restaurant.isVeg}
-              key={restaurant.id}
-              minOrder={restaurant.minOrder}
-              name={restaurant.name}
-              offer={restaurant.offer}
-              rating={restaurant.rating}
-            />
-          ))}
+          {isLoading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-64 rounded-[24px] bg-gray-200 animate-pulse" />
+            ))
+          ) : (
+            restaurants.map((restaurant, index) => (
+              <RestaurantCard
+                cuisines={restaurant.cuisines}
+                deliveryFee={restaurant.address?.deliveryFee || 0}
+                deliveryTime={restaurant.address?.deliveryTime || 30}
+                id={restaurant.id}
+                imageUrl={restaurant.imageUrl}
+                index={index}
+                isNew={false}
+                isVeg={false}
+                key={restaurant.id}
+                minOrder={restaurant.address?.minOrder || 0}
+                name={restaurant.name}
+                offer={null}
+                rating={restaurant.rating}
+              />
+            ))
+          )}
         </motion.div>
 
-        {!restaurants.length && !isFetching ? (
+        {!restaurants.length && !isLoading ? (
           <div className="mt-5 rounded-[24px] border border-dashed border-border bg-white p-8 text-center">
             <h3 className="text-lg font-bold text-text-primary">
-              No restaurants match this filter set
+              No restaurants found
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
-              Try switching cuisine chips or removing one of the delivery filters.
+              Try adjusting your search or location.
             </p>
           </div>
         ) : null}
