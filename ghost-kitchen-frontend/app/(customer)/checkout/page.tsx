@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { load } from '@cashfreepayments/cashfree-js'
 import { useCartStore } from '@/store/cartStore'
@@ -12,14 +12,29 @@ export default function CheckoutPage() {
   const [couponCode, setCouponCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [deliveryFee, setDeliveryFee] = useState<number | null>(null)
+  const [orderInProgress, setOrderInProgress] = useState(false) // Prevent double-submit
 
-  const deliveryFee = 30 // shown as estimate; server calculates real value
   const subtotal = getSubtotal()
 
+  // When checkout data would be fetched, we'd get delivery fee from backend
+  // For now, use a reasonable default, but will be overridden by API response
+  useEffect(() => {
+    // Set default - will be overridden when order is created
+    setDeliveryFee(50); // Backend standard is ₹50
+  }, [])
+
   async function handlePlaceOrder() {
+    // Prevent double-submit
+    if (orderInProgress) {
+      setError('Order is already being processed. Please wait...');
+      return;
+    }
+
     if (!address.trim()) { setError('Please enter a delivery address'); return }
     if (items.length === 0) { setError('Your cart is empty'); return }
 
+    setOrderInProgress(true)
     setIsLoading(true)
     setError('')
 
@@ -31,6 +46,10 @@ export default function CheckoutPage() {
         deliveryAddress: { line1: address, city: 'Delhi' },
         couponCode: couponCode || undefined,
       })
+
+      // Backend returns actual delivery fee - use it to ensure consistency
+      const actualDeliveryFee = data.deliveryFee || deliveryFee || 50;
+      setDeliveryFee(actualDeliveryFee);
 
       // 2. Load Cashfree SDK
       const cashfree = await load({
@@ -47,6 +66,7 @@ export default function CheckoutPage() {
 
       if (result.error) {
         setError(result.error.message ?? 'Payment failed')
+        setOrderInProgress(false)
         setIsLoading(false)
         return
       }
@@ -66,7 +86,15 @@ export default function CheckoutPage() {
         router.push(`/order/${verifyRes.data.orderId}/track`)
       }
     } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Something went wrong. Please try again.')
+      const errorMsg = err.response?.data?.message ?? 'Something went wrong. Please try again.'
+      setError(errorMsg)
+      
+      // If idempotency error (409), let user reload
+      if (err.response?.status === 409) {
+        setError('Payment already in progress. Please refresh the page.');
+      }
+    } finally {
+      setOrderInProgress(false)
       setIsLoading(false)
     }
   }
@@ -86,11 +114,11 @@ export default function CheckoutPage() {
         ))}
         <div className="flex justify-between pt-3 text-sm text-gray-500">
           <span>Delivery fee</span>
-          <span>₹{deliveryFee}</span>
+          <span>₹{deliveryFee !== null ? (deliveryFee / 100) : '...'}</span>
         </div>
         <div className="flex justify-between pt-2 font-bold text-gray-900">
           <span>Total (approx)</span>
-          <span>₹{(subtotal / 100) + deliveryFee}</span>
+          <span>₹{deliveryFee !== null ? ((subtotal + deliveryFee) / 100) : '...'}</span>
         </div>
         <p className="text-xs text-gray-400 mt-1">Final amount confirmed at payment</p>
       </div>
@@ -124,10 +152,10 @@ export default function CheckoutPage() {
 
       <button
         onClick={handlePlaceOrder}
-        disabled={isLoading || items.length === 0}
+        disabled={isLoading || items.length === 0 || deliveryFee === null || orderInProgress}
         className="w-full h-14 bg-brand hover:bg-brand-dark disabled:bg-gray-300 text-white font-bold text-base rounded-xl transition-colors"
       >
-        {isLoading ? 'Processing...' : `Pay ₹${(subtotal / 100) + deliveryFee}`}
+        {isLoading ? 'Processing...' : `Pay ₹${deliveryFee !== null ? ((subtotal + deliveryFee) / 100) : '...'}`}
       </button>
 
       <p className="text-center text-xs text-gray-400 mt-3">
