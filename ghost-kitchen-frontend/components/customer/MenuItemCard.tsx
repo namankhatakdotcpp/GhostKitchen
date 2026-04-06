@@ -52,7 +52,7 @@ export function MenuItemCard({
 
   const menuItem: MenuItem = {
     id,
-    restaurantId: params.id,
+    restaurantId: params?.id || "",
     name,
     description,
     price,

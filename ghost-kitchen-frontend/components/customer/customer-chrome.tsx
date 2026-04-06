@@ -13,8 +13,9 @@ type CustomerChromeProps = {
 
 export function CustomerChrome({ children }: CustomerChromeProps) {
   const pathname = usePathname();
-  const useImmersivePageChrome =
-    /^\/restaurant\/[^/]+$/.test(pathname) || /^\/order\/[^/]+\/track$/.test(pathname);
+  const useImmersivePageChrome = pathname
+    ? /^\/restaurant\/[^/]+$/.test(pathname) || /^\/order\/[^/]+\/track$/.test(pathname)
+    : false;
 
   return (
     <>

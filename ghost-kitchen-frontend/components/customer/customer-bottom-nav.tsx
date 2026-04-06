@@ -85,7 +85,7 @@ export function CustomerBottomNav() {
   const { items } = useCartStore();
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
+  if (!pathname || pathname.startsWith("/login") || pathname.startsWith("/register")) {
     return null;
   }
 

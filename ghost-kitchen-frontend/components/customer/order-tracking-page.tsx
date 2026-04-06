@@ -331,7 +331,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
   }
 
   if (query.isError) {
-    const error = query.error as ApiErrorPayload;
+    const error = query.error as unknown as ApiErrorPayload;
 
     if (error.code === 404) {
       return (
@@ -421,7 +421,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     Live status
                   </p>
                   <h2 className="mt-3 text-[24px] font-bold text-text-primary">
-                    {headlineByStatus[order.status]}
+                    {headlineByStatus[order.status as OrderStatus] || "Order Update"}
                   </h2>
                   <p className="mt-2 text-sm text-text-secondary">
                     {isDelivered
@@ -434,14 +434,14 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                 </div>
               </div>
               <p className="mt-4 text-sm leading-6 text-text-secondary">
-                {subTextByStatus[order.status]}
+                {subTextByStatus[order.status as OrderStatus]}
               </p>
             </section>
 
             <section className="rounded-[28px] border border-border bg-white p-6 shadow-[0_20px_40px_rgba(28,28,28,0.05)]">
               <h3 className="text-xl font-bold text-text-primary">Order status timeline</h3>
               <div className="mt-6">
-                {order.timeline.map((stage, index) => (
+                {order.timeline.map((stage: TimelineStage, index: number) => (
                   <StageNode
                     currentIndex={currentIndex}
                     index={index}
@@ -459,7 +459,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-light text-lg font-bold text-brand">
                       {order.deliveryAgent.name
                         .split(" ")
-                        .map((part) => part[0])
+                        .map((part: string) => part[0])
                         .join("")
                         .slice(0, 2)}
                     </div>
@@ -524,7 +524,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     <div className="mt-5 space-y-4">
-                      {order.items.map((item) => (
+                      {order.items.map((item: any) => (
                         <div className="flex items-start justify-between gap-3" key={item.menuItem.id}>
                           <div className="min-w-0">
                             <p className="line-clamp-1 text-sm font-semibold text-text-primary">

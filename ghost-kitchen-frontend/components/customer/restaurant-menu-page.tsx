@@ -109,7 +109,8 @@ export function RestaurantMenuPage({
     (sum, item) => sum + item.menuItem.price * item.quantity,
     0,
   );
-  const total = subtotal + (restaurant?.address?.deliveryFee || 0);
+  const deliveryFee = restaurant?.address?.deliveryFee || 0;
+  const total = subtotal + deliveryFee;
 
   const filteredMenu = useMemo(
     () =>
@@ -117,7 +118,7 @@ export function RestaurantMenuPage({
         .map((section) => ({
           ...section,
           items: vegOnly
-            ? section.items.filter((item) => item.isVeg)
+            ? section.items.filter((item: any) => item?.isVeg)
             : section.items,
         }))
         .filter((section) => section.items.length > 0),
@@ -312,7 +313,7 @@ export function RestaurantMenuPage({
                 {section.category}
               </h3>
               <div className="mt-1">
-                {section.items.map((item) => (
+                {section.items.map((item: any) => (
                   <MenuItemCard
                     customizable={item.category !== "Beverages"}
                     description={item.description}

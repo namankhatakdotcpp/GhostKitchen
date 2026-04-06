@@ -328,7 +328,6 @@ export function CustomerHomePage() {
                 key={restaurant.id}
                 minOrder={restaurant.address?.minOrder || 0}
                 name={restaurant.name}
-                offer={null}
                 rating={restaurant.rating}
               />
             ))

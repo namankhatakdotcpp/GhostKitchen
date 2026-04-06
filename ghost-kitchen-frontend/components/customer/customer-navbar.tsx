@@ -71,7 +71,7 @@ export function CustomerNavbar() {
     previousCountRef.current = totalQuantity;
   }, [lastUpdatedAt, totalQuantity]);
 
-  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isAuthPage = pathname && (pathname.startsWith("/login") || pathname.startsWith("/register"));
 
   if (isAuthPage) {
     return null;
