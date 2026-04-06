@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, type PersistStorage } from "zustand/middleware";
 
 import { api } from "@/lib/api";
 import type { CartItem, MenuItem } from "@/types";
@@ -16,9 +16,10 @@ type CartStore = {
   updateQuantity: (menuItemId: string, quantity: number) => void;
   clearCart: () => void;
   placeOrder: () => Promise<void>;
+  getSubtotal: () => number;
 };
 
-export const useCartStore = create<CartStore>(
+export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
   restaurantId: null,
@@ -119,7 +120,14 @@ export const useCartStore = create<CartStore>(
       throw error;
     }
   },
-}),
-  { name: 'ghost-kitchen-cart' }
+  getSubtotal: () => {
+    const { items } = get();
+    return items.reduce((total, cartItem) => {
+      const itemPrice = cartItem.menuItem.price || 0;
+      return total + (itemPrice * cartItem.quantity);
+    }, 0);
+  },
+    }),
+    { name: 'ghost-kitchen-cart' }
   )
 );

@@ -371,10 +371,11 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    role: string;
-    accessToken: string;
-  }
-}
+// JWT augmentation commented out as next-auth/jwt may not be available
+// declare module "next-auth/jwt" {
+//   interface JWT {
+//     id: string;
+//     role: string;
+//     accessToken: string;
+//   }
+// }
