@@ -1,19 +1,59 @@
-import { Cashfree } from "cashfree-pg";
+import Cashfree from "cashfree-pg";
 import { v4 as uuid } from "uuid";
 import { prisma } from "../../config/prisma.js";
 import { createOrder, calculateOrderTotal } from "../orders/orders.service.js";
+import { emitOrderNew } from "../../socket/socket.server.js";
 
-Cashfree.XClientId = process.env.CASHFREE_APP_ID;
-Cashfree.XClientSecret = process.env.CASHFREE_SECRET_KEY;
-Cashfree.XEnvironment =
-  process.env.CASHFREE_ENV === "PRODUCTION"
-    ? Cashfree.Environment.PRODUCTION
-    : Cashfree.Environment.SANDBOX;
+// Initialize Cashfree SDK
+const initializeCashfree = () => {
+  const appId = process.env.CASHFREE_APP_ID;
+  const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+  if (!appId || !secretKey) {
+    console.warn("⚠️  Cashfree credentials not configured. Payment features will not work.");
+    return false;
+  }
+
+  Cashfree.XClientId = appId;
+  Cashfree.XClientSecret = secretKey;
+
+  // Set environment - use string value directly
+  const env = process.env.CASHFREE_ENV || "TEST";
+  Cashfree.XEnvironment = env === "PRODUCTION" ? "PRODUCTION" : "TEST";
+
+  console.log(`✓ Cashfree initialized in ${Cashfree.XEnvironment} mode`);
+  return true;
+};
+
+const cashfreeReady = initializeCashfree();
 
 export async function createPaymentOrder(req, res) {
   try {
     const { restaurantId, items, deliveryAddress, couponCode } = req.body;
     const customerId = req.user.userId;
+
+    // Input validation
+    if (!restaurantId || !items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Invalid request. Items required." });
+    }
+
+    // Check if payment already exists (idempotency prevention)
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        customerId,
+        restaurantId,
+        status: "PENDING",
+        createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // within 5 minutes
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (existingPayment) {
+      return res.status(409).json({
+        message: "Payment already in progress. Please complete or cancel the existing payment.",
+        cfOrderId: existingPayment.cfOrderId,
+      });
+    }
 
     // 1. Fetch customer details
     const customer = await prisma.user.findUnique({
@@ -57,13 +97,20 @@ export async function createPaymentOrder(req, res) {
     const response = await Cashfree.PGCreateOrder("2023-08-01", orderRequest);
     const cfData = response.data;
 
-    // 5. Store pending payment record so we can verify later
+    console.log(`✓ Cashfree order created: ${cfOrderId}`, {
+      amount: total / 100,
+      sessionId: cfData.payment_session_id,
+    });
+    
+    // Store amount as integer paise to match DB Int type and prevent rounding errors
+    const amountInPaise = Math.round(total * 100);
+    
     await prisma.payment.create({
       data: {
         cfOrderId,
         customerId,
         restaurantId,
-        amount: total,
+        amount: amountInPaise, // Integer paise instead of Decimal rupees
         status: "PENDING",
         itemsSnapshot: JSON.stringify(items),
         deliveryAddress: JSON.stringify(deliveryAddress),
@@ -75,10 +122,37 @@ export async function createPaymentOrder(req, res) {
       cfOrderId,
       paymentSessionId: cfData.payment_session_id,
       orderAmount: total / 100,
+      deliveryFee, // Return backend-calculated delivery fee to frontend for display consistency
+      subtotal,
+      discount,
+      total,
     });
   } catch (error) {
-    console.error("Cashfree create order error:", error);
-    return res.status(500).json({ message: "Failed to create payment order" });
+    console.error("❌ Cashfree create order error:", {
+      message: error.message,
+      code: error.code,
+      status: error.status,
+      details: error.errorParameters,
+    });
+
+    // Return specific error based on type
+    if (error.status === 400) {
+      return res.status(400).json({
+        message: "Invalid payment request. Please try again.",
+        error: error.message,
+      });
+    }
+
+    if (error.message?.includes("Cashfree")) {
+      return res.status(502).json({
+        message: "Payment gateway unavailable. Please try again later.",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Failed to create payment order",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 }
 
@@ -87,9 +161,30 @@ export async function verifyPayment(req, res) {
     const { cfOrderId } = req.body;
     const customerId = req.user.userId;
 
-    // 1. Fetch order status from Cashfree
-    const response = await Cashfree.PGFetchOrder("2023-08-01", cfOrderId);
-    const cfOrder = response.data;
+    if (!cfOrderId) {
+      return res.status(400).json({ message: "cfOrderId is required" });
+    }
+
+    // 1. Fetch order status from Cashfree with error handling
+    let response;
+    try {
+      response = await Cashfree.PGFetchOrder("2023-08-01", cfOrderId);
+    } catch (cfError) {
+      console.error("Cashfree API error:", cfError);
+      return res.status(502).json({
+        message: "Payment verification failed. Please contact support.",
+      });
+    }
+
+    const cfOrder = response?.data;
+
+    // Null safety: ensure response has required data
+    if (!cfOrder || !cfOrder.order_status) {
+      console.error("Invalid Cashfree response:", response);
+      return res.status(502).json({
+        message: "Invalid response from payment gateway",
+      });
+    }
 
     if (cfOrder.order_status !== "PAID") {
       return res.status(400).json({
@@ -140,27 +235,43 @@ export async function verifyPayment(req, res) {
       include: { restaurant: true, agent: true },
     });
 
-    // 4. Mark payment as SUCCESS
+    // 4. Mark payment as SUCCESS with correct Cashfree response field
     await prisma.payment.update({
       where: { cfOrderId },
       data: {
         status: "SUCCESS",
-        cfPaymentId: cfOrder.cf_order_id?.toString(),
+        cfPaymentId: cfOrder.order_id?.toString(), // FIXED: was cf_order_id (wrong field)
       },
     });
 
-    // 5. Emit real-time events
-    const io = req.app.locals.io;
-    if (io) {
-      io.to(`shop-${pendingPayment.restaurantId}`).emit("order:new", {
-        order,
+    // 5. Emit real-time events using proper socket emitters
+    try {
+      emitOrderNew({
+        restaurantId: pendingPayment.restaurantId,
+        order: updatedOrder,
       });
-      io.to("admin").emit("order:new", { order });
+    } catch (socketError) {
+      console.warn("Socket emission failed (order still created):", socketError);
+      // Don't fail - order was already created successfully in DB
     }
 
     return res.json({ orderId: updatedOrder.id, success: true });
   } catch (error) {
-    console.error("Cashfree verify error:", error);
-    return res.status(500).json({ message: "Payment verification failed" });
+    console.error("❌ Cashfree verify error:", {
+      cfOrderId: req.body.cfOrderId,
+      message: error.message,
+      code: error.code,
+    });
+
+    if (error.message?.includes("order") || error.message?.includes("not found")) {
+      return res.status(404).json({
+        message: "Order not found or payment verification failed",
+      });
+    }
+
+    return res.status(500).json({
+      message: "Payment verification failed",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 }
