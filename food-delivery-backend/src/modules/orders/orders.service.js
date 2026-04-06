@@ -92,49 +92,53 @@ export const createOrder = async (payload, customerId) => {
   // 5. Use fixed delivery fee
   const deliveryFee = FIXED_DELIVERY_FEE;
 
-  // 6. Validate and apply coupon if provided
-  let discount = 0;
-  let couponId = null;
+  // 6-8. Calculate total = subtotal + deliveryFee - discount
+  // NOTE: Coupon validation moved into transaction for atomicity (prevents race condition)
+  const total = subtotal + deliveryFee; // discount calculated in transaction
 
-  if (payload.couponCode) {
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: payload.couponCode },
-    });
-
-    if (!coupon) {
-      throw new Error("Invalid coupon code");
-    }
-
-    // Validate coupon conditions
-    if (new Date() > new Date(coupon.expiresAt)) {
-      throw new Error("Coupon has expired");
-    }
-
-    if (coupon.usedCount >= coupon.maxUses) {
-      throw new Error("Coupon usage limit exceeded");
-    }
-
-    if (subtotal < Number(coupon.minOrder)) {
-      throw new Error(
-        `Coupon requires minimum order of ₹${coupon.minOrder}`
-      );
-    }
-
-    // Calculate discount
-    if (coupon.discountType === "PERCENTAGE") {
-      discount = subtotal * (Number(coupon.discountValue) / 100);
-    } else if (coupon.discountType === "FLAT") {
-      discount = Number(coupon.discountValue);
-    }
-
-    couponId = coupon.id;
-  }
-
-  // 8. Calculate total = subtotal + deliveryFee - discount
-  const total = subtotal + deliveryFee - discount;
-
-  // 9-11. Create order in transaction
+  // 9-11. Create order in transaction with coupon validation inside to prevent race condition
   const order = await prisma.$transaction(async (tx) => {
+    // Handle coupon validation INSIDE transaction for atomicity
+    let discount = 0;
+    let couponId = null;
+
+    if (payload.couponCode) {
+      const coupon = await tx.coupon.findUnique({
+        where: { code: payload.couponCode },
+      });
+
+      if (!coupon) {
+        throw new Error("Invalid coupon code");
+      }
+
+      // Validate coupon conditions
+      if (new Date() > new Date(coupon.expiresAt)) {
+        throw new Error("Coupon has expired");
+      }
+
+      if (coupon.usedCount >= coupon.maxUses) {
+        throw new Error("Coupon usage limit exceeded");
+      }
+
+      if (subtotal < Number(coupon.minOrder)) {
+        throw new Error(
+          `Coupon requires minimum order of ₹${coupon.minOrder}`
+        );
+      }
+
+      // Calculate discount
+      if (coupon.discountType === "PERCENTAGE") {
+        discount = subtotal * (Number(coupon.discountValue) / 100);
+      } else if (coupon.discountType === "FLAT") {
+        discount = Number(coupon.discountValue);
+      }
+
+      couponId = coupon.id;
+    }
+
+    // Final total with discount
+    const finalTotal = subtotal + deliveryFee - discount;
+
     // Create order with server-calculated values only
     const newOrder = await tx.order.create({
       data: {
@@ -146,7 +150,7 @@ export const createOrder = async (payload, customerId) => {
         subtotal,
         deliveryFee,
         discount,
-        total,
+        total: finalTotal,
         deliveryAddress: payload.deliveryAddress,
         estimatedDelivery: payload.estimatedDelivery
           ? new Date(payload.estimatedDelivery)
@@ -158,7 +162,7 @@ export const createOrder = async (payload, customerId) => {
       },
     });
 
-    // If coupon was used, increment usedCount
+    // If coupon was used, increment usedCount INSIDE transaction
     if (couponId) {
       await tx.coupon.update({
         where: { id: couponId },
