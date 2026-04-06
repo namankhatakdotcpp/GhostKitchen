@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { RestaurantMenuPage } from "@/components/customer/restaurant-menu-page";
-import { getRestaurantById, getRestaurantMenuById } from "@/lib/mockData";
+
+export const dynamic = 'force-dynamic';
 
 type RestaurantDetailsPageProps = {
   params: {
@@ -12,12 +13,9 @@ type RestaurantDetailsPageProps = {
 export default function RestaurantDetailsPage({
   params,
 }: RestaurantDetailsPageProps) {
-  const restaurant = getRestaurantById(params.id);
-  const menu = getRestaurantMenuById(params.id);
-
-  if (!restaurant || !menu.length) {
+  if (!params.id) {
     notFound();
   }
 
-  return <RestaurantMenuPage menu={menu} restaurant={restaurant} />;
+  return <RestaurantMenuPage restaurantId={params.id} />;
 }
