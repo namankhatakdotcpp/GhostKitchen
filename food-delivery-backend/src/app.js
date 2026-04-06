@@ -15,6 +15,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// root health check
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
+});
+
 // health check
 app.get("/health", (req, res) => {
   res.json({
