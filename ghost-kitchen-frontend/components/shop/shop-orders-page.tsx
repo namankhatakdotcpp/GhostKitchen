@@ -329,7 +329,7 @@ export function ShopOrdersPage() {
     );
   }
 
-  const board = boardQuery.data ?? [];
+  const board = useMemo(() => boardQuery.data ?? [], [boardQuery.data]);
   const grouped = useMemo(
     () => ({
       new: board.filter((item) => item.status === "new"),

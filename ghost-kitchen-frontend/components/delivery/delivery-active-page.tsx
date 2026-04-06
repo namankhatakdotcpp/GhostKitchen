@@ -90,6 +90,8 @@ export function DeliveryActivePage() {
   }
 
   function handleStatusTap(step: 1 | 2 | 3) {
+    if (!activeAssignment) return;
+
     const socket = getSocket();
     const statusByStep = {
       1: "CONFIRMED",
