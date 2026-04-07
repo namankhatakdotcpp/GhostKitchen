@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    // For newer Next.js versions (using remotePatterns)
     remotePatterns: [
       {
         protocol: "https",
@@ -14,8 +15,34 @@ const nextConfig = {
         protocol: "https",
         hostname: "**.vercel.app",
       },
+      {
+        protocol: "https",
+        hostname: "cloudinary.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.cloudinary.com",
+      },
+      {
+        protocol: "https",
+        hostname: "s3.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.s3.amazonaws.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.s3.*.amazonaws.com",
+      },
     ],
-    // Fallback for missing or broken images
+    // For backward compatibility with older Next.js
+    domains: [
+      "images.unsplash.com",
+      "cloudinary.com",
+      "s3.amazonaws.com",
+      "localhost",
+    ],
     unoptimized: false,
   },
 };
