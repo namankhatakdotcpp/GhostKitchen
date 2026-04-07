@@ -1,0 +1,13 @@
+# Next.js
+.next/
+out/
+build/
+
+# Node
+node_modules/
+
+# Logs
+*.log
+
+# Env
+.env
