@@ -24,7 +24,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use(async (config) => {
-  const url = config.baseURL + config.url;
+  const url = new URL(config.url || '', config.baseURL || (typeof window !== "undefined" ? window.location.origin : '')).href;
   if (typeof window !== "undefined") {
     console.log("📤 API Request:", url);
   }
