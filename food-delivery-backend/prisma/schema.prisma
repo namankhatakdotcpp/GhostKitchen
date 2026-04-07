@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Prisma seed configuration
+// Run: npm run seed
+// Or: npx prisma db seed
+
 enum Role {
   CUSTOMER
   SHOPKEEPER
