@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     const response = await proxyJson<RestaurantListResponse>({
-      path: "/restaurants",
+      path: "/api/restaurants",
       searchParams: request.nextUrl.searchParams,
     });
 

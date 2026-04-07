@@ -31,7 +31,7 @@ export async function GET(_: Request, { params }: Context) {
     }
 
     const response = await proxyJson<RestaurantMenuResponse>({
-      path: `/restaurants/${params.id}/menu`,
+      path: `/api/restaurants/${params.id}/menu`,
     });
 
     return NextResponse.json(response);
