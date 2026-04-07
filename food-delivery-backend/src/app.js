@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { env } from "./config/env.js";
+import { prisma } from "./config/prisma.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import orderRoutes from "./modules/orders/orders.routes.js";
 import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
@@ -27,6 +28,16 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     environment: env.CASHFREE_ENV,
   });
+});
+
+// debug endpoint - test database connection
+app.get("/debug-db", async (req, res) => {
+  try {
+    const data = await prisma.restaurant.findMany();
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // auth routes
