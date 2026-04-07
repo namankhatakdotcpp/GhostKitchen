@@ -22,12 +22,22 @@ export const listRestaurants = async (req, res) => {
   try {
     const { search, city, isVeg, minRating, page = 1, limit = 12 } = req.query;
 
+    console.log("📋 Fetching restaurants:", { search, city, minRating, page, limit });
+
     const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit));
 
+    console.log(`✅ Found ${result.restaurants?.length || 0} restaurants`);
     return res.status(200).json(result);
   } catch (error) {
-    console.error("Error listing restaurants:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Error listing restaurants:", {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+    });
+    return res.status(500).json({
+      message: "Failed to fetch restaurants",
+      error: process.env.NODE_ENV === "development" ? error?.message : undefined,
+    });
   }
 };
 
@@ -35,16 +45,29 @@ export const getRestaurant = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({ message: "Restaurant ID is required" });
+    }
+
+    console.log("🔍 Fetching restaurant:", id);
     const restaurant = await getRestaurantById(id);
 
     if (!restaurant) {
+      console.warn("⚠️ Restaurant not found:", id);
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
+    console.log("✅ Restaurant found:", restaurant.name);
     return res.status(200).json(restaurant);
   } catch (error) {
-    console.error("Error fetching restaurant:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Error fetching restaurant:", {
+      message: error?.message,
+      restaurantId: req.params.id,
+    });
+    return res.status(500).json({
+      message: "Failed to fetch restaurant",
+      error: process.env.NODE_ENV === "development" ? error?.message : undefined,
+    });
   }
 };
 
@@ -52,18 +75,31 @@ export const getMenu = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!id) {
+      return res.status(400).json({ message: "Restaurant ID is required" });
+    }
+
     const isOwner = req.user && req.user.role === "SHOPKEEPER";
 
+    console.log("📖 Fetching menu for restaurant:", { id, isOwner });
     const menu = await getRestaurantMenu(id, isOwner);
 
     if (!menu) {
+      console.warn("⚠️ Restaurant not found or no menu:", id);
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
+    console.log("✅ Menu fetched:", { restaurantId: id, categories: Object.keys(menu).length });
     return res.status(200).json(menu);
   } catch (error) {
-    console.error("Error fetching menu:", error);
-    return res.status(500).json({ message: "Internal server error" });
+    console.error("❌ Error fetching menu:", {
+      message: error?.message,
+      restaurantId: req.params.id,
+    });
+    return res.status(500).json({
+      message: "Failed to fetch menu",
+      error: process.env.NODE_ENV === "development" ? error?.message : undefined,
+    });
   }
 };
 
