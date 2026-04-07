@@ -9,9 +9,21 @@ import paymentRoutes from "./modules/payment/payment.routes.js";
 
 const app = express();
 
-// middleware to read JSON body
+// CORS configuration with multiple allowed origins
+const allowedOrigins = [
+  "https://ghost-kitchen-three.vercel.app",
+  "https://ghost-kitchen-hh4rjw1fx-namans-projects-dfbad539.vercel.app",
+  process.env.FRONTEND_URL || "http://localhost:3000"
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
