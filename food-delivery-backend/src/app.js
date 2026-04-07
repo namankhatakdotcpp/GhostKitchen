@@ -9,16 +9,13 @@ import paymentRoutes from "./modules/payment/payment.routes.js";
 
 const app = express();
 
-// CORS configuration with multiple allowed origins
-const allowedOrigins = [
-  "https://ghost-kitchen-three.vercel.app",
-  "https://ghost-kitchen-hh4rjw1fx-namans-projects-dfbad539.vercel.app",
-  process.env.FRONTEND_URL || "http://localhost:3000"
-];
-
+// CORS configuration - Dynamic verification for all Vercel deployments
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests without origin (same-origin requests)
+    // Allow all vercel.app domains (preview + production)
+    // Allow localhost for development
+    if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));
