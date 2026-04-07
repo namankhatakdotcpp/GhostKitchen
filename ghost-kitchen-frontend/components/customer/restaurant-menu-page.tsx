@@ -195,8 +195,8 @@ export function RestaurantMenuPage({
               <BackIcon />
             </button>
             <div className="min-w-0">
-              <h1 className="line-clamp-1 text-base font-bold text-text-primary md:text-lg">{restaurant.name}</h1>
-              <p className="line-clamp-1 text-xs text-text-secondary">{restaurant.cuisines?.join(', ')}</p>
+              <h1 className="line-clamp-1 text-base font-bold text-text-primary md:text-lg">{restaurant?.name || "Unknown Restaurant"}</h1>
+              <p className="line-clamp-1 text-xs text-text-secondary">{restaurant?.cuisines?.join(', ') || "Cuisines not available"}</p>
             </div>
           </div>
 
@@ -215,27 +215,27 @@ export function RestaurantMenuPage({
       <div className="mx-auto max-w-shell">
         <div className="relative h-[220px] w-full">
           <Image
-            alt={restaurant.name}
+            alt={restaurant?.name || "Restaurant image"}
             className="object-cover"
             fill
             priority
             sizes="100vw"
-            src={restaurant.imageUrl}
+            src={restaurant?.imageUrl || "/fallback.jpg"}
           />
         </div>
 
         <section className="relative z-10 mx-4 -mt-8 rounded-[18px] border border-border bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.08)] md:mx-6 lg:mx-8">
           <h2 className="text-[22px] font-bold text-text-primary">
-            {restaurant.name}
+            {restaurant?.name || "Unknown Restaurant"}
           </h2>
           <p className="mt-1 text-[13px] text-text-secondary">
-            {restaurant.cuisines?.join(' • ')}
+            {restaurant?.cuisines?.join(' • ') || "Cuisines not available"}
           </p>
 
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-text-secondary">
             <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
               <StarIcon />
-              {restaurant.rating?.toFixed(1) || '0'}
+              {restaurant?.rating?.toFixed(1) || '0'}
             </span>
           </div>
         </section>

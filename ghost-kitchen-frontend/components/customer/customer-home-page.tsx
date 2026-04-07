@@ -79,7 +79,11 @@ export function CustomerHomePage() {
           page: pageParam,
           limit: 12,
         }
-      }).then(r => r.data),
+      }).then(r => {
+        console.log("🔥 API RESPONSE - Full Response:", r);
+        console.log("🔥 API RESPONSE - r.data:", r.data);
+        return r.data;
+      }),
     getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
     initialPageParam: 1,
   });
@@ -315,20 +319,20 @@ export function CustomerHomePage() {
               <div key={i} className="h-64 rounded-[24px] bg-gray-200 animate-pulse" />
             ))
           ) : (
-            restaurants.map((restaurant, index) => (
+            restaurants?.filter(Boolean).map((restaurant, index) => (
               <RestaurantCard
-                cuisines={restaurant.cuisines}
-                deliveryFee={restaurant.address?.deliveryFee || 0}
-                deliveryTime={restaurant.address?.deliveryTime || 30}
-                id={restaurant.id}
-                imageUrl={restaurant.imageUrl}
+                cuisines={restaurant?.cuisines || []}
+                deliveryFee={restaurant?.address?.deliveryFee || 0}
+                deliveryTime={restaurant?.address?.deliveryTime || 30}
+                id={restaurant?.id || "unknown"}
+                imageUrl={restaurant?.imageUrl || "/fallback.jpg"}
                 index={index}
                 isNew={false}
                 isVeg={false}
-                key={restaurant.id}
-                minOrder={restaurant.address?.minOrder || 0}
-                name={restaurant.name}
-                rating={restaurant.rating}
+                key={restaurant?.id || index}
+                minOrder={restaurant?.address?.minOrder || 0}
+                name={restaurant?.name || "Unknown Restaurant"}
+                rating={restaurant?.rating || 0}
               />
             ))
           )}
