@@ -8,8 +8,10 @@ type ApiErrorResponse = {
   code?: number;
 };
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "/api",
+  baseURL: API_BASE,
   headers: {
     "Content-Type": "application/json",
   },
@@ -42,4 +44,5 @@ api.interceptors.response.use(
   },
 );
 
+export { API_BASE };
 export default api;
