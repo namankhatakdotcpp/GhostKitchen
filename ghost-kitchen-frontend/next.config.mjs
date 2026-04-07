@@ -6,7 +6,17 @@ const nextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      {
+        protocol: "https",
+        hostname: "**.onrender.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.vercel.app",
+      },
     ],
+    // Fallback for missing or broken images
+    unoptimized: false,
   },
 };
 
