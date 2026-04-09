@@ -1,133 +1,149 @@
+/**
+ * Cart Store (Zustand)
+ * 
+ * WHY backend-persistent cart:
+ * - Cart shared across devices (login on phone → see same cart on laptop)
+ * - Can't lose cart data (no localStorage dependency)
+ * - Better checkout flow (can save for later)
+ * 
+ * Architecture:
+ * - Frontend state: current cart (for UI updates)
+ * - Backend source of truth: database cart items
+ * - Sync: Every add/remove/update syncs with backend
+ */
+
 "use client";
 
 import { create } from "zustand";
-import { persist, type PersistStorage } from "zustand/middleware";
+import axiosInstance from "./authStore";
 
-import { api } from "@/lib/api";
-import type { CartItem, MenuItem } from "@/types";
+type CartItem = {
+  id: string;
+  userId: string;
+  menuItemId: string;
+  quantity: number;
+  menuItem: {
+    name: string;
+    price: number;
+    imageUrl: string;
+    restaurantId: string;
+  };
+};
 
-type CartStore = {
-  restaurantId: string | null;
+type CartState = {
   items: CartItem[];
-  isPlacingOrder: boolean;
-  lastUpdatedAt: number;
-  addItem: (menuItem: MenuItem) => void;
-  removeItem: (menuItemId: string) => void;
-  updateQuantity: (menuItemId: string, quantity: number) => void;
-  clearCart: () => void;
-  placeOrder: () => Promise<void>;
+  total: number;
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  fetchCart: () => Promise<void>;
+  addToCart: (menuItemId: string, quantity?: number) => Promise<void>;
+  removeFromCart: (cartItemId: string) => Promise<void>;
+  updateQuantity: (cartItemId: string, quantity: number) => Promise<void>;
+  clearCart: () => Promise<void>;
   getSubtotal: () => number;
 };
 
-export const useCartStore = create<CartStore>()(
-  persist(
-    (set, get) => ({
-  restaurantId: null,
+export const useCartStore = create<CartState>((set, get) => ({
   items: [],
-  isPlacingOrder: false,
-  lastUpdatedAt: 0,
-  addItem: (menuItem) => {
-    const { restaurantId, items } = get();
+  total: 0,
+  isLoading: false,
+  error: null,
 
-    if (restaurantId && restaurantId !== menuItem.restaurantId) {
-      window.alert("Cart already contains items from another restaurant");
-      return;
-    }
-
-    const existingItem = items.find(
-      (cartItem) => cartItem.menuItem.id === menuItem.id,
-    );
-
-    if (existingItem) {
-      set({
-        items: items.map((cartItem) =>
-          cartItem.menuItem.id === menuItem.id
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem,
-        ),
-        lastUpdatedAt: Date.now(),
-      });
-
-      return;
-    }
-
-    set({
-      restaurantId: menuItem.restaurantId,
-      items: [...items, { menuItem, quantity: 1 }],
-      lastUpdatedAt: Date.now(),
-    });
-  },
-  removeItem: (menuItemId) => {
-    set((state) => {
-      const nextItems = state.items.filter(
-        (item) => item.menuItem.id !== menuItemId,
-      );
-
-      return {
-        items: nextItems,
-        restaurantId: nextItems.length ? state.restaurantId : null,
-        lastUpdatedAt: Date.now(),
-      };
-    });
-  },
-  updateQuantity: (menuItemId, quantity) => {
-    if (quantity <= 0) {
-      get().removeItem(menuItemId);
-      return;
-    }
-
-    set((state) => ({
-      items: state.items.map((item) =>
-        item.menuItem.id === menuItemId ? { ...item, quantity } : item,
-      ),
-      lastUpdatedAt: Date.now(),
-    }));
-  },
-  clearCart: () => {
-    set({
-      restaurantId: null,
-      items: [],
-      isPlacingOrder: false,
-      lastUpdatedAt: Date.now(),
-    });
-  },
-  placeOrder: async () => {
-    const { items, restaurantId } = get();
-
-    if (!items.length || !restaurantId) {
-      return;
-    }
-
-    set({ isPlacingOrder: true });
-
+  /**
+   * Fetch cart from backend
+   * Source of truth is always the server
+   */
+  fetchCart: async () => {
+    set({ isLoading: true, error: null });
     try {
-      await api.post('/orders', {
-        restaurantId,
-        items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
-        deliveryAddress: {},
-        couponCode: undefined,
-      });
-
-      set({
-        restaurantId: null,
-        items: [],
-        isPlacingOrder: false,
-        lastUpdatedAt: Date.now(),
-      });
-    } catch (error) {
-      console.error('Error placing order:', error);
-      set({ isPlacingOrder: false });
+      const response = await axiosInstance.get("/cart");
+      const { items, total } = response.data.data;
+      set({ items, total, isLoading: false });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Failed to fetch cart";
+      set({ error: errorMsg, isLoading: false, items: [] });
       throw error;
     }
   },
+
+  /**
+   * Add item to cart (or increase quantity if already exists)
+   */
+  addToCart: async (menuItemId: string, quantity = 1) => {
+    set({ isLoading: true, error: null });
+    try {
+      await axiosInstance.post("/cart/add", { menuItemId, quantity });
+      // Fetch updated cart
+      await get().fetchCart();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Failed to add to cart";
+      set({ error: errorMsg, isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Remove item from cart
+   */
+  removeFromCart: async (cartItemId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await axiosInstance.delete(`/cart/${cartItemId}`);
+      // Fetch updated cart
+      await get().fetchCart();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Failed to remove from cart";
+      set({ error: errorMsg, isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Update item quantity
+   */
+  updateQuantity: async (cartItemId: string, quantity: number) => {
+    if (quantity < 1) {
+      // If quantity is 0 or negative, remove item instead
+      return get().removeFromCart(cartItemId);
+    }
+
+    set({ isLoading: true, error: null });
+    try {
+      await axiosInstance.patch(`/cart/${cartItemId}`, { quantity });
+      // Fetch updated cart
+      await get().fetchCart();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Failed to update quantity";
+      set({ error: errorMsg, isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Clear entire cart
+   */
+  clearCart: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      await axiosInstance.delete("/cart");
+      set({ items: [], total: 0, isLoading: false });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || "Failed to clear cart";
+      set({ error: errorMsg, isLoading: false });
+      throw error;
+    }
+  },
+
+  /**
+   * Calculate subtotal (price only, no delivery fee)
+   */
   getSubtotal: () => {
     const { items } = get();
-    return items.reduce((total, cartItem) => {
-      const itemPrice = cartItem.menuItem.price || 0;
-      return total + (itemPrice * cartItem.quantity);
+    return items.reduce((sum, item) => {
+      return sum + item.menuItem.price * item.quantity;
     }, 0);
   },
-    }),
-    { name: 'ghost-kitchen-cart' }
-  )
-);
+}));
+

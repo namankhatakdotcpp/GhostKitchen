@@ -47,6 +47,7 @@ model User {
   deliveryOrders  Order[]        @relation("DeliveryOrders")
   reviews         Review[]
   refreshTokens   RefreshToken[]
+  cartItems       CartItem[]     @relation("UserCart")
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -62,6 +63,21 @@ model RefreshToken {
   createdAt DateTime @default(now())
 
   @@index([userId, expiresAt])
+}
+
+model CartItem {
+  id         String   @id @default(uuid())
+  userId     String
+  menuItemId String
+  quantity   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user      User     @relation("UserCart", fields: [userId], references: [id], onDelete: Cascade)
+  menuItem  MenuItem @relation("MenuItemCart", fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, menuItemId]) // Prevent duplicate items in cart
+  @@index([userId])
 }
 
 model Restaurant {
@@ -95,6 +111,7 @@ model MenuItem {
   isAvailable  Boolean    @default(true)
   isBestseller Boolean    @default(false)
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  cartItems    CartItem[] @relation("MenuItemCart")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
