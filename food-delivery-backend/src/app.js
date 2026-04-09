@@ -16,6 +16,7 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
+import { logger, httpLogger } from "./utils/logger.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import cartRoutes from "./modules/cart/cart.routes.js";
 import orderRoutes from "./modules/order/order.routes.js";
@@ -102,6 +103,30 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * Webhook Raw Body Handling
+ * 
+ * CRITICAL: Must come BEFORE JSON parser
+ * Cashfree webhook signature verification requires the raw body
+ * We store the raw body and also parse it for the controller
+ */
+app.post("/api/payments/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
+  // Store raw body for signature verification
+  req.rawBody = req.body;
+  
+  // Parse the body
+  if (Buffer.isBuffer(req.body)) {
+    try {
+      req.body = JSON.parse(req.body.toString());
+    } catch (e) {
+      logger.error("Failed to parse webhook body", { error: e.message });
+    }
+  }
+  
+  next();
+});
+
+// JSON and URL parsers for all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // Parse cookies

@@ -4,11 +4,12 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useOrderStore } from "@/store/orderStore";
+import { PaymentFailureAlert } from "@/components/ui/PaymentFailureAlert";
 
 /**
- * Payment Success Page
+ * Payment Result Page
  * 
- * Shown after successful payment
+ * Shown after payment attempt (success or failure)
  * User is redirected here by Cashfree
  * 
  * URL: /payment-success?order_id={orderId}
@@ -112,6 +113,93 @@ function PaymentSuccessContent() {
     );
   }
 
+  // Check payment status
+  const isPaymentFailed = selectedOrder.paymentStatus === "FAILED";
+  const isPaymentSuccess = selectedOrder.paymentStatus === "SUCCESS";
+
+  if (isPaymentFailed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-red-50 to-white py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-2xl mx-auto">
+          <PaymentFailureAlert
+            orderId={selectedOrder.id}
+            orderAmount={selectedOrder.totalAmount}
+            onRetrySuccess={() => {
+              // Refresh order details after retry
+              fetchOrderById(selectedOrder.id);
+            }}
+          />
+
+          {/* Order Details Card */}
+          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">
+              Order Details
+            </h2>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Order ID</p>
+                <p className="text-lg font-mono font-bold text-gray-800">
+                  {selectedOrder.id.slice(0, 8).toUpperCase()}...
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+                <p className="text-lg font-bold text-gray-800">
+                  ₹{selectedOrder.totalAmount.toFixed(2)}
+                </p>
+              </div>
+            </div>
+
+            {/* Order Items */}
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">
+                Your Items
+              </h3>
+              <div className="space-y-3">
+                {selectedOrder.orderItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between items-center"
+                  >
+                    <div>
+                      <p className="font-semibold text-gray-800">
+                        {item.menuItem?.name || "Menu Item"}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Qty: {item.quantity} × ₹{item.price.toFixed(2)}
+                      </p>
+                    </div>
+                    <p className="font-bold text-gray-800">
+                      ₹{(item.quantity * item.price).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-4 justify-center">
+            <Link
+              href="/customer/orders"
+              className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg transition-colors"
+            >
+              My Orders
+            </Link>
+            <Link
+              href="/customer/search"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-lg transition-colors"
+            >
+              Order More
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Payment successful or pending
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl mx-auto">
@@ -121,7 +209,7 @@ function PaymentSuccessContent() {
             <div className="text-6xl">✅</div>
           </div>
           <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Payment Successful! 🎉
+            {isPaymentSuccess ? "Payment Successful! 🎉" : "Order Confirmed! 🎉"}
           </h1>
           <p className="text-xl text-gray-600">
             Your order has been confirmed
@@ -152,10 +240,15 @@ function PaymentSuccessContent() {
               </p>
             </div>
             <div>
-              <p className="text-sm text-gray-600 mb-1">Items</p>
-              <p className="text-lg font-bold text-gray-800">
-                {selectedOrder.orderItems.length} item
-                {selectedOrder.orderItems.length !== 1 ? "s" : ""}
+              <p className="text-sm text-gray-600 mb-1">Payment Status</p>
+              <p className="text-lg font-bold">
+                <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${
+                  isPaymentSuccess
+                    ? "bg-green-100 text-green-800"
+                    : "bg-yellow-100 text-yellow-800"
+                }`}>
+                  {selectedOrder.paymentStatus}
+                </span>
               </p>
             </div>
           </div>

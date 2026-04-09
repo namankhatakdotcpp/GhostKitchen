@@ -52,4 +52,17 @@ router.get(
   paymentController.verifyPayment
 );
 
+/**
+ * POST /api/payments/retry/:orderId
+ * Retry payment for a failed order
+ * 
+ * Required: authMiddleware (user must own the order)
+ * Returns new payment session
+ */
+router.post(
+  "/retry/:orderId",
+  authMiddleware,
+  paymentController.retryPayment
+);
+
 export default router;

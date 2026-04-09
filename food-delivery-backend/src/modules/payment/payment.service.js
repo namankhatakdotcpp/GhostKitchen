@@ -2,6 +2,7 @@ import cashfree from "../../config/cashfree.js";
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { env } from "../../config/env.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Payment Service - Cashfree Integration
@@ -79,6 +80,11 @@ export const createPaymentSession = async (orderId, user) => {
   try {
     const response = await cashfree.PGCreateOrder(request);
 
+    logger.info("Payment session created", {
+      orderId,
+      paymentSessionId: response.payment_session_id,
+    });
+
     // 6️⃣ RETURN SESSION DATA
     return {
       order_id: response.order_id,
@@ -87,7 +93,10 @@ export const createPaymentSession = async (orderId, user) => {
       currency: response.order_currency,
     };
   } catch (error) {
-    console.error("❌ Cashfree API Error:", error);
+    logger.error("Cashfree API Error", {
+      orderId,
+      error: error.message,
+    });
     throw new AppError(
       "Failed to create payment session. Please try again.",
       500
@@ -99,9 +108,11 @@ export const createPaymentSession = async (orderId, user) => {
  * HANDLE WEBHOOK (FROM CASHFREE)
  * 
  * Called by Cashfree when payment is completed
+ * Uses idempotency check to prevent duplicate processing
  * Updates order status based on payment status
  * 
  * 🔐 CRITICAL: This updates DB based on external source
+ * ✅ IDEMPOTENT: Multiple webhooks are safe (duplicates ignored)
  * 
  * @param {object} webhookData - Data from Cashfree
  * @returns {boolean} Success
@@ -110,58 +121,95 @@ export const handlePaymentWebhook = async (webhookData) => {
   try {
     // 1️⃣ EXTRACT PAYMENT DATA FROM WEBHOOK
     const orderId = webhookData.order_id;
+    const eventId = webhookData.cf_payment_id || webhookData.order_id; // Use payment ID as event ID
     const paymentStatus = webhookData.payment?.payment_status;
 
-    console.log(
-      `💳 Webhook received for order ${orderId}: ${paymentStatus}`
-    );
+    logger.info("Webhook received", {
+      orderId,
+      eventId,
+      paymentStatus,
+    });
 
     if (!orderId || !paymentStatus) {
+      logger.warn("Invalid webhook data", { webhookData });
       throw new AppError("Invalid webhook data", 400);
     }
 
-    // 2️⃣ FETCH ORDER
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    // 2️⃣ CHECK FOR DUPLICATE WEBHOOK (IDEMPOTENCY)
+    const existingWebhook = await prisma.paymentWebhook.findUnique({
+      where: { eventId },
     });
 
-    if (!order) {
-      console.warn(`⚠️ Webhook for non-existent order: ${orderId}`);
-      return false;
+    if (existingWebhook) {
+      logger.info("Duplicate webhook ignored", {
+        orderId,
+        eventId,
+        previousCreatedAt: existingWebhook.createdAt,
+      });
+      return true; // Return success but don't reprocess
     }
 
-    // 3️⃣ UPDATE BASED ON PAYMENT STATUS
-    if (paymentStatus === "SUCCESS") {
-      // 🟢 PAYMENT SUCCESSFUL
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: "SUCCESS",
-          status: "CONFIRMED", // Auto-move to CONFIRMED
-        },
+    // 3️⃣ ATOMIC TRANSACTION - Record webhook + Update order
+    await prisma.$transaction(async (tx) => {
+      // Record the webhook to prevent duplicates
+      await tx.paymentWebhook.create({
+        data: { eventId },
       });
 
-      console.log(`✅ Order ${orderId} payment confirmed`);
-      return true;
-    } else if (paymentStatus === "FAILED" || paymentStatus === "CANCELLED") {
-      // 🔴 PAYMENT FAILED
-      await prisma.order.update({
+      // 4️⃣ FETCH ORDER
+      const order = await tx.order.findUnique({
         where: { id: orderId },
-        data: {
-          paymentStatus: "FAILED",
-          status: "CANCELLED", // Auto-cancel if payment fails
-        },
       });
 
-      console.log(`❌ Order ${orderId} payment failed`);
-      return true;
-    } else {
-      // ⚪ UNKNOWN STATUS
-      console.warn(`⚠️ Unknown payment status: ${paymentStatus}`);
-      return false;
-    }
+      if (!order) {
+        logger.warn("Webhook for non-existent order", { orderId, eventId });
+        return;
+      }
+
+      // 5️⃣ UPDATE BASED ON PAYMENT STATUS
+      if (paymentStatus === "SUCCESS") {
+        // 🟢 PAYMENT SUCCESSFUL
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: "SUCCESS",
+            status: "CONFIRMED", // Auto-move to CONFIRMED
+          },
+        });
+
+        logger.info("Order payment confirmed", {
+          orderId,
+          newStatus: "CONFIRMED",
+        });
+      } else if (paymentStatus === "FAILED" || paymentStatus === "CANCELLED") {
+        // 🔴 PAYMENT FAILED
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            paymentStatus: "FAILED",
+            status: "CANCELLED", // Auto-cancel if payment fails
+          },
+        });
+
+        logger.warn("Order payment failed", {
+          orderId,
+          paymentStatus,
+        });
+      } else {
+        // ⚪ UNKNOWN STATUS
+        logger.warn("Unknown payment status", {
+          orderId,
+          paymentStatus,
+        });
+      }
+    });
+
+    return true;
   } catch (error) {
-    console.error("❌ Webhook processing error:", error);
+    logger.error("Webhook processing error", {
+      error: error.message,
+      webhookData: JSON.stringify(webhookData).substring(0, 100),
+    });
     throw error;
   }
 };
@@ -178,9 +226,16 @@ export const handlePaymentWebhook = async (webhookData) => {
 export const verifyPaymentStatus = async (orderId) => {
   try {
     const response = await cashfree.PGOrderFetchPayments(orderId);
+    logger.info("Payment status verified", {
+      orderId,
+      status: response.payment_status,
+    });
     return response;
   } catch (error) {
-    console.error("❌ Payment verification error:", error);
+    logger.error("Payment verification error", {
+      orderId,
+      error: error.message,
+    });
     throw new AppError("Failed to verify payment status", 500);
   }
 };

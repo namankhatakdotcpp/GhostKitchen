@@ -190,3 +190,14 @@ model Payment {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
+
+// Webhook Idempotency - Prevents duplicate webhook processing
+// Each webhook has a unique eventId from Cashfree
+// If a webhook is received multiple times, we can ignore the duplicate
+model PaymentWebhook {
+  id        String   @id @default(uuid())
+  eventId   String   @unique // Unique webhook event ID from Cashfree
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+}
