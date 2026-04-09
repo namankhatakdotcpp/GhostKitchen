@@ -63,7 +63,8 @@ export function RestaurantMenuPage({
 }: RestaurantMenuPageProps) {
   const router = useRouter();
   const [vegOnly, setVegOnly] = useState(false);
-  const { items, restaurantId: cartRestaurantId, updateQuantity, clearCart } = useCartStore();
+  const { items, getRestaurantId, updateQuantity, clearCart } = useCartStore();
+  const cartRestaurantId = getRestaurantId();
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const [activeCategory, setActiveCategory] = useState<string>("");
 

@@ -26,7 +26,38 @@ const axiosInstance = axios.create({
   withCredentials: true, // Send cookies with requests
 });
 
-export const useAuthStore = create(
+// Type definitions for store
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  role: string;
+  avatar?: string;
+  address?: string;
+}
+
+interface AuthStore {
+  // State
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+
+  // Methods
+  clearError: () => void;
+  register: (data: { email: string; password: string; name: string; phone?: string; role?: string }) => Promise<any>;
+  login: (email: string, password: string) => Promise<any>;
+  logout: () => Promise<void>;
+  refreshAccessToken: () => Promise<string>;
+  getCurrentUser: () => Promise<any>;
+  updateProfile: (data: any) => Promise<any>;
+  setUser?: (user: User | null) => void;
+}
+
+export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
       // State
@@ -58,7 +89,7 @@ export const useAuthStore = create(
           });
 
           return response.data;
-        } catch (error) {
+        } catch (error: any) {
           const errorMessage =
             error.response?.data?.message || "Registration failed";
           set({
@@ -90,7 +121,7 @@ export const useAuthStore = create(
           });
 
           return response.data;
-        } catch (error) {
+        } catch (error: any) {
           const errorMessage =
             error.response?.data?.message || "Login failed";
           set({
@@ -120,7 +151,7 @@ export const useAuthStore = create(
           set({ accessToken });
 
           return accessToken;
-        } catch (error) {
+        } catch (error: any) {
           // If refresh fails, logout
           get().logout();
           throw error;
@@ -139,7 +170,7 @@ export const useAuthStore = create(
               refreshToken: state.refreshToken,
             });
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error("Logout error:", error);
         } finally {
           // Clear state regardless of API error
@@ -165,7 +196,7 @@ export const useAuthStore = create(
           const user = response.data.data.user;
           set({ user, isLoading: false });
           return user;
-        } catch (error) {
+        } catch (error: any) {
           set({ isLoading: false, isAuthenticated: false });
           throw error;
         }
@@ -181,7 +212,7 @@ export const useAuthStore = create(
           const user = response.data.data.user;
           set({ user, isLoading: false });
           return response.data;
-        } catch (error) {
+        } catch (error: any) {
           const errorMessage =
             error.response?.data?.message || "Update failed";
           set({
@@ -201,7 +232,7 @@ export const useAuthStore = create(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
-    }
+    },
   )
 );
 

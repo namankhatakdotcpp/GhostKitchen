@@ -7,7 +7,8 @@ import api from '@/lib/api'
 
 export default function CheckoutPage() {
   const router = useRouter()
-  const { items, restaurantId, getSubtotal, clearCart } = useCartStore()
+  const { items, getRestaurantId, getSubtotal, clearCart } = useCartStore()
+  const restaurantId = getRestaurantId()
   const [address, setAddress] = useState('')
   const [couponCode, setCouponCode] = useState('')
   const [isLoading, setIsLoading] = useState(false)

@@ -23,6 +23,7 @@ type CartItem = {
   menuItemId: string;
   quantity: number;
   menuItem: {
+    id: string;
     name: string;
     price: number;
     imageUrl: string;
@@ -35,6 +36,7 @@ type CartState = {
   total: number;
   isLoading: boolean;
   error: string | null;
+  lastUpdatedAt?: number; // Timestamp for bounce animation
 
   // Actions
   fetchCart: () => Promise<void>;
@@ -43,6 +45,7 @@ type CartState = {
   updateQuantity: (cartItemId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
   getSubtotal: () => number;
+  getRestaurantId: () => string | null; // Added getter for restaurantId
 };
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -50,6 +53,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   total: 0,
   isLoading: false,
   error: null,
+  lastUpdatedAt: undefined,
 
   /**
    * Fetch cart from backend
@@ -144,6 +148,15 @@ export const useCartStore = create<CartState>((set, get) => ({
     return items.reduce((sum, item) => {
       return sum + item.menuItem.price * item.quantity;
     }, 0);
+  },
+
+  /**
+   * Get restaurant ID from first cart item
+   * All items in cart must be from same restaurant
+   */
+  getRestaurantId: () => {
+    const { items } = get();
+    return items.length > 0 ? items[0].menuItem.restaurantId : null;
   },
 }));
 

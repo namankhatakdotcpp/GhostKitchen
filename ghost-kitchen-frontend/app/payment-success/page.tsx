@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useOrderStore } from "@/store/orderStore";
@@ -14,7 +14,7 @@ import { useOrderStore } from "@/store/orderStore";
  * URL: /payment-success?order_id={orderId}
  */
 
-export default function PaymentSuccessPage() {
+function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get("order_id");
   
@@ -190,7 +190,7 @@ export default function PaymentSuccessPage() {
             <ol className="text-sm text-blue-800 space-y-2">
               <li className="flex gap-2">
                 <span className="font-bold">1.</span>
-                <span>We've sent you a confirmation email</span>
+                <span>We&apos;ve sent you a confirmation email</span>
               </li>
               <li className="flex gap-2">
                 <span className="font-bold">2.</span>
@@ -198,7 +198,7 @@ export default function PaymentSuccessPage() {
               </li>
               <li className="flex gap-2">
                 <span className="font-bold">3.</span>
-                <span>We'll notify you when it's out for delivery</span>
+                <span>We&apos;ll notify you when it&apos;s out for delivery</span>
               </li>
               <li className="flex gap-2">
                 <span className="font-bold">4.</span>
@@ -226,7 +226,7 @@ export default function PaymentSuccessPage() {
 
         {/* Contact Support */}
         <div className="mt-8 text-center text-gray-600">
-          <p className="mb-2">Questions? We're here to help!</p>
+          <p className="mb-2">Questions? We&apos;re here to help!</p>
           <a
             href="mailto:support@ghostkitchen.com"
             className="text-orange-600 hover:text-orange-700 font-medium"
@@ -236,5 +236,38 @@ export default function PaymentSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function LoadingFallback() {
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin text-orange-500 mb-4">
+          <svg
+            className="w-12 h-12 mx-auto"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 10V3L4 14h7v7l9-11h-7z"
+            />
+          </svg>
+        </div>
+        <p className="text-gray-600">Loading order details...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }

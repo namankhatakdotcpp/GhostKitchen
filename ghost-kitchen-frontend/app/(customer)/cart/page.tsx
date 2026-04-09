@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCartStore } from "@/store/cartStore";
 import { useOrderStore } from "@/store/orderStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 
 /**
  * Cart Page Component
@@ -142,9 +143,11 @@ export default function CartPage() {
                       className="flex gap-4 pb-4 border-b border-gray-200 last:border-b-0 last:pb-0"
                     >
                       {/* Item Image */}
-                      <img
+                      <Image
                         src={item.menuItem.imageUrl}
                         alt={item.menuItem.name}
+                        width={80}
+                        height={80}
                         className="w-20 h-20 object-cover rounded-lg"
                       />
 

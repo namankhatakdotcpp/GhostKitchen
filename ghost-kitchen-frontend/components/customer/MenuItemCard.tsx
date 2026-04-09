@@ -45,7 +45,7 @@ export function MenuItemCard({
   customizable,
 }: MenuItemCardProps) {
   const params = useParams<{ id: string }>();
-  const { items, addItem, updateQuantity } = useCartStore();
+  const { items, addToCart, updateQuantity } = useCartStore();
 
   const currentItem = items.find((item) => item.menuItem.id === id);
   const quantity = currentItem?.quantity ?? 0;
@@ -107,7 +107,11 @@ export function MenuItemCard({
             >
               <button
                 className="text-lg font-bold text-brand"
-                onClick={() => updateQuantity(id, quantity - 1)}
+                onClick={() => {
+                  if (currentItem) {
+                    updateQuantity(currentItem.id, quantity - 1);
+                  }
+                }}
                 type="button"
               >
                 -
@@ -115,7 +119,7 @@ export function MenuItemCard({
               <span className="text-sm font-bold text-brand">{quantity}</span>
               <button
                 className="text-lg font-bold text-brand"
-                onClick={() => addItem(menuItem)}
+                onClick={() => addToCart(id)}
                 type="button"
               >
                 +
@@ -128,7 +132,7 @@ export function MenuItemCard({
               exit={{ opacity: 0, scale: 0.92, y: 6 }}
               initial={{ opacity: 0, scale: 0.92, y: 6 }}
               key="add"
-              onClick={() => addItem(menuItem)}
+              onClick={() => addToCart(id)}
               transition={{ duration: 0.18, ease: "easeOut" }}
               type="button"
             >
