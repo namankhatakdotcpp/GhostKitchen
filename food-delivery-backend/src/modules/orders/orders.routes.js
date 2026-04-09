@@ -1,13 +1,13 @@
 import express from "express";
 
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 import { getOrder, getOrders, placeOrder, updateOrderStatusHTTP } from "./orders.controller.js";
 
 const router = express.Router();
 
-router.get("/", authMiddleware, getOrders);
-router.get("/:id", authMiddleware, getOrder);
-router.post("/", authMiddleware, placeOrder);
-router.patch("/:id/status", authMiddleware, updateOrderStatusHTTP);
+router.get("/", authenticate, getOrders);
+router.get("/:id", authenticate, getOrder);
+router.post("/", authenticate, placeOrder);
+router.patch("/:id/status", authenticate, updateOrderStatusHTTP);
 
 export default router;

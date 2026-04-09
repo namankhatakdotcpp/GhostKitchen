@@ -2,7 +2,7 @@
  * Role-Based Access Control (RBAC) Middleware
  * 
  * Usage:
- * router.delete("/:id", authMiddleware, roleMiddleware(["ADMIN"]), deleteUser)
+ * router.delete("/:id", authenticate, authorize(["ADMIN"]), deleteUser)
  * 
  * Only ADMIN role can access this route
  */

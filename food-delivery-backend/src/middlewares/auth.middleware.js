@@ -11,8 +11,9 @@
 
 import { verifyAccessToken } from "../utils/jwt.js";
 import AppError from "../utils/AppError.js";
+import { roleMiddleware } from "./role.middleware.js";
 
-export const authMiddleware = (req, res, next) => {
+export const authenticate = (req, res, next) => {
   try {
     // Get token from multiple sources
     let token = null;
@@ -50,3 +51,4 @@ export const authMiddleware = (req, res, next) => {
   }
 };
 
+export const authorize = roleMiddleware;

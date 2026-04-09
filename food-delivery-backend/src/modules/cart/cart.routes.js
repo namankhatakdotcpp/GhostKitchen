@@ -1,18 +1,18 @@
 /**
  * Cart Routes
  * 
- * All routes are protected with authMiddleware
+ * All routes are protected with authenticate middleware
  * User must be logged in to manage cart
  */
 
 import express from "express";
 import * as cartController from "./cart.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate);
 
 // POST /api/cart/add - Add item to cart
 router.post("/add", cartController.add);

@@ -1,6 +1,5 @@
 import express from "express";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { roleMiddleware } from "../../middlewares/role.middleware.js";
+import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
 import {
   listRestaurants,
   getRestaurant,
@@ -22,9 +21,9 @@ router.get("/:id", getRestaurant);
 router.get("/:id/menu", getMenu);
 
 // Authenticated routes (SHOPKEEPER role only)
-router.post("/", authMiddleware, roleMiddleware(["SHOPKEEPER"]), createNewRestaurant);
-router.put("/:id", authMiddleware, roleMiddleware(["SHOPKEEPER"]), updateExistingRestaurant);
-router.patch("/:id/status", authMiddleware, roleMiddleware(["SHOPKEEPER"]), toggleStatus);
+router.post("/", authenticate, authorize(["SHOPKEEPER"]), createNewRestaurant);
+router.put("/:id", authenticate, authorize(["SHOPKEEPER"]), updateExistingRestaurant);
+router.patch("/:id/status", authenticate, authorize(["SHOPKEEPER"]), toggleStatus);
 
 // Menu management routes (SHOPKEEPER role only)
 router.post("/:id/menu", authMiddleware, roleMiddleware(["SHOPKEEPER"]), addNewMenuItem);
