@@ -111,11 +111,24 @@ export const webhook = async (req, res, next) => {
     }
 
     // 2️⃣ PARSE WEBHOOK DATA (NOW VERIFIED)
+    // 🔥 GAP 1 FIX: Handle malformed JSON gracefully
     let webhookData;
-    if (typeof req.body === "string") {
-      webhookData = JSON.parse(req.body);
-    } else {
-      webhookData = req.body;
+    try {
+      if (typeof req.body === "string") {
+        webhookData = JSON.parse(req.body);
+      } else {
+        webhookData = req.body;
+      }
+    } catch (parseErr) {
+      logger.error("Malformed JSON in webhook payload", {
+        rawBody: typeof req.body === "string" ? req.body.substring(0, 100) : JSON.stringify(req.body).substring(0, 100),
+        parseError: parseErr.message,
+      });
+      // Return 200 to acknowledge receipt (prevent Cashfree retries on parse errors)
+      return res.status(200).json({
+        received: true,
+        message: "invalid payload format",
+      });
     }
 
     // 3️⃣ PROCESS WEBHOOK

@@ -199,6 +199,23 @@ export const handlePaymentWebhook = async (webhookData) => {
         return;
       }
 
+      // 4️⃣.1 🔥 GAP 3 FIX: VALIDATE PAYMENT AMOUNT (CRITICAL SECURITY CHECK)
+      // Prevent amount manipulation attacks
+      const webhookAmount = webhookData.order_amount;
+      if (webhookAmount && Math.abs(webhookAmount - order.totalAmount) > 0.01) {
+        logger.error("CRITICAL: Payment amount mismatch detected", {
+          orderId,
+          userId: order.userId,
+          expected: order.totalAmount,
+          received: webhookAmount,
+          difference: Math.abs(webhookAmount - order.totalAmount),
+          cfPaymentId,
+          severity: "CRITICAL",
+          action: "Order NOT updated - amount mismatch",
+        });
+        return; // Stop processing - amount mismatch
+      }
+
       // 5️⃣ UPDATE BASED ON PAYMENT STATUS (CONDITIONAL)
       // ⚠️ Only update if payment status is still PENDING to prevent override
       if (paymentStatus === "SUCCESS") {
