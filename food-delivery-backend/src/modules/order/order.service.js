@@ -12,10 +12,14 @@ import AppError from "../../utils/AppError.js";
  */
 
 export const createOrder = async (userId) => {
-  // 1️⃣ FETCH CART ITEMS WITH MENU DETAILS
+  // 1️⃣ FETCH CART ITEMS WITH MENU DETAILS & RESTAURANT
   const cartItems = await prisma.cartItem.findMany({
     where: { userId },
-    include: { menuItem: true },
+    include: {
+      menuItem: {
+        include: { restaurant: true }, // Get restaurant info
+      },
+    },
   });
 
   // 2️⃣ VALIDATE CART NOT EMPTY
@@ -23,36 +27,61 @@ export const createOrder = async (userId) => {
     throw new AppError("Cart is empty", 400);
   }
 
-  // 3️⃣ CALCULATE TOTAL AMOUNT
-  const totalAmount = cartItems.reduce(
-    (sum, item) => sum + item.quantity * item.menuItem.price,
+  // 3️⃣ 🔥 VALIDATE SINGLE RESTAURANT (SWIGGY RULE)
+  // All items in cart must be from same restaurant
+  const restaurantIds = new Set(
+    cartItems.map((item) => item.menuItem.restaurantId)
+  );
+
+  if (restaurantIds.size > 1) {
+    throw new AppError(
+      "Cart items must be from the same restaurant. Please clear cart and add items from one restaurant only.",
+      400
+    );
+  }
+
+  // 4️⃣ CALCULATE TOTALS
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + item.quantity * parseFloat(item.menuItem.price),
     0
   );
 
-  // 4️⃣ CREATE ORDER WITH ITEMS
-  const order = await prisma.order.create({
-    data: {
-      userId,
-      totalAmount,
-      // Map cart items to order items
-      orderItems: {
-        create: cartItems.map((item) => ({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          price: parseFloat(item.menuItem.price), // Convert Decimal to number
-        })),
-      },
-    },
-    include: {
-      orderItems: {
-        include: { menuItem: true },
-      },
-      user: true,
-    },
-  });
+  // 5️⃣ ADD DELIVERY FEE (Fixed: 50 INR)
+  const DELIVERY_FEE = 50;
+  const totalAmount = subtotal + DELIVERY_FEE;
 
-  // 5️⃣ 🔥 CLEAR CART AFTER ORDER CREATED
-  await prisma.cartItem.deleteMany({ where: { userId } });
+  // 6️⃣ 🔐 USE TRANSACTION (bulletproof DB consistency)
+  // If anything fails, ENTIRE operation rolls back
+  const order = await prisma.$transaction(async (tx) => {
+    // CREATE ORDER
+    const newOrder = await tx.order.create({
+      data: {
+        userId,
+        totalAmount,
+        status: "PENDING",
+        paymentStatus: "PENDING",
+        // Map cart items to order items (use DB prices, not frontend)
+        orderItems: {
+          create: cartItems.map((item) => ({
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+            price: parseFloat(item.menuItem.price), // 🔐 ALWAYS from DB
+          })),
+        },
+      },
+      include: {
+        orderItems: {
+          include: { menuItem: true },
+        },
+        user: true,
+      },
+    });
+
+    // 🔥 CLEAR CART (inside transaction = atomic with order creation)
+    await tx.cartItem.deleteMany({ where: { userId } });
+
+    return newOrder;
+  });
 
   return order;
 };
