@@ -26,9 +26,9 @@ router.put("/:id", authenticate, authorize(["SHOPKEEPER"]), updateExistingRestau
 router.patch("/:id/status", authenticate, authorize(["SHOPKEEPER"]), toggleStatus);
 
 // Menu management routes (SHOPKEEPER role only)
-router.post("/:id/menu", authMiddleware, roleMiddleware(["SHOPKEEPER"]), addNewMenuItem);
-router.put("/:id/menu/:itemId", authMiddleware, roleMiddleware(["SHOPKEEPER"]), updateExistingMenuItem);
-router.patch("/:id/menu/:itemId/toggle", authMiddleware, roleMiddleware(["SHOPKEEPER"]), toggleMenuItemStatus);
-router.delete("/:id/menu/:itemId", authMiddleware, roleMiddleware(["SHOPKEEPER"]), deleteExistingMenuItem);
+router.post("/:id/menu", authenticate, authorize(["SHOPKEEPER"]), addNewMenuItem);
+router.put("/:id/menu/:itemId", authenticate, authorize(["SHOPKEEPER"]), updateExistingMenuItem);
+router.patch("/:id/menu/:itemId/toggle", authenticate, authorize(["SHOPKEEPER"]), toggleMenuItemStatus);
+router.delete("/:id/menu/:itemId", authenticate, authorize(["SHOPKEEPER"]), deleteExistingMenuItem);
 
 export default router;
