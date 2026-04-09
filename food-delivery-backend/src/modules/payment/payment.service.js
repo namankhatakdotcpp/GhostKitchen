@@ -136,22 +136,23 @@ export const handlePaymentWebhook = async (webhookData) => {
       throw new AppError("Invalid webhook data", 400);
     }
 
-    // 2️⃣ CHECK FOR DUPLICATE WEBHOOK (IDEMPOTENCY)
-    const existingWebhook = await prisma.paymentWebhook.findUnique({
-      where: { eventId },
-    });
-
-    if (existingWebhook) {
-      logger.info("Duplicate webhook ignored", {
-        orderId,
-        eventId,
-        previousCreatedAt: existingWebhook.createdAt,
-      });
-      return true; // Return success but don't reprocess
-    }
-
-    // 3️⃣ ATOMIC TRANSACTION - Record webhook + Update order
+    // 2️⃣ & 3️⃣ ATOMIC TRANSACTION - Check idempotency + Record webhook + Update order
+    // ⚠️ Idempotency check moved INSIDE transaction for row-level locking
     await prisma.$transaction(async (tx) => {
+      // Check for duplicate webhook (with transaction locking)
+      const existingWebhook = await tx.paymentWebhook.findUnique({
+        where: { eventId },
+      });
+
+      if (existingWebhook) {
+        logger.info("Duplicate webhook ignored", {
+          orderId,
+          eventId,
+          previousCreatedAt: existingWebhook.createdAt,
+        });
+        return; // Exit transaction, no duplicate processing
+      }
+
       // Record the webhook to prevent duplicates
       await tx.paymentWebhook.create({
         data: { eventId },
