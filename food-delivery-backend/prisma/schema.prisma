@@ -19,12 +19,18 @@ enum Role {
 }
 
 enum OrderStatus {
-  PLACED
+  PENDING
   CONFIRMED
   PREPARING
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 enum DiscountType {
@@ -43,9 +49,7 @@ model User {
   currentLat      Float?
   currentLng      Float?
   restaurants     Restaurant[]   @relation("RestaurantOwner")
-  customerOrders  Order[]        @relation("CustomerOrders")
-  deliveryOrders  Order[]        @relation("DeliveryOrders")
-  reviews         Review[]
+  orders          Order[]
   refreshTokens   RefreshToken[]
   cartItems       CartItem[]     @relation("UserCart")
   createdAt       DateTime       @default(now())
@@ -93,8 +97,6 @@ model Restaurant {
   deliveryRadius Float      @default(5)
   owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   menuItems      MenuItem[]
-  orders         Order[]
-  reviews        Review[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 }
@@ -112,6 +114,7 @@ model MenuItem {
   isBestseller Boolean    @default(false)
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   cartItems    CartItem[] @relation("MenuItemCart")
+  orderItems   OrderItem[] @relation("OrderItems")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -119,45 +122,45 @@ model MenuItem {
 }
 
 model Order {
-  id                String      @id @default(uuid())
-  customerId        String
-  restaurantId      String
-  agentId           String?
-  cfOrderId         String?     @unique
-  status            OrderStatus @default(PLACED)
-  items             Json
-  subtotal          Decimal     @db.Decimal(10, 2)
-  deliveryFee       Decimal     @db.Decimal(10, 2)
-  discount          Decimal     @default(0) @db.Decimal(10, 2)
-  total             Decimal     @db.Decimal(10, 2)
-  deliveryAddress   Json
-  placedAt          DateTime    @default(now())
-  estimatedDelivery DateTime?
-  deliveredAt       DateTime?
-  customer          User        @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Cascade)
-  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  agent             User?       @relation("DeliveryOrders", fields: [agentId], references: [id], onDelete: SetNull)
-  review            Review?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id            String        @id @default(cuid())
+  userId        String
+  totalAmount   Float
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  @@index([customerId, status])
-  @@index([restaurantId, status])
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+  review     Review?
+
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  menuItemId String
+  quantity   Int
+  price      Float
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation("OrderItems", fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
 
 model Review {
-  id           String     @id @default(uuid())
-  orderId      String     @unique
-  customerId   String
-  restaurantId String
-  rating       Int
-  comment      String?
-  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  customer     User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  createdAt    DateTime   @default(now())
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  rating     Int
+  comment    String?
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
 
-  @@index([restaurantId, rating])
+  @@index([orderId])
 }
 
 model Coupon {
