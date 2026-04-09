@@ -6,6 +6,7 @@ import authRoutes from "./modules/auth/auth.routes.js";
 import orderRoutes from "./modules/orders/orders.routes.js";
 import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
 import paymentRoutes from "./modules/payment/payment.routes.js";
+import { seedDatabase } from "../prisma/seed.js";
 
 const app = express();
 
@@ -46,6 +47,26 @@ app.get("/debug-db", async (req, res) => {
     res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// 🌱 Seed endpoint - seeds production database
+app.get("/seed", async (req, res) => {
+  try {
+    console.log('🌱 Starting production database seeding...');
+    await seedDatabase();
+    res.json({ 
+      success: true, 
+      message: "✅ Production DB seeded successfully 🚀",
+      status: "Database populated with restaurants and menu items"
+    });
+  } catch (error) {
+    console.error("❌ Seeding failed:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "❌ Seeding failed",
+      error: error.message 
+    });
   }
 });
 

@@ -286,11 +286,18 @@ async function seed() {
   console.log('📊 All images are from Unsplash (high quality)');
 }
 
-seed()
-  .catch((e) => {
-    console.error('❌ Seeding failed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+export async function seedDatabase() {
+  return seed();
+}
+
+// Only run if this file is executed directly
+if (process.argv[1].includes('seed.js')) {
+  seed()
+    .catch((e) => {
+      console.error('❌ Seeding failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
