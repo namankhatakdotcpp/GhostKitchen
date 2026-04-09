@@ -168,35 +168,58 @@ export const handlePaymentWebhook = async (webhookData) => {
         return;
       }
 
-      // 5️⃣ UPDATE BASED ON PAYMENT STATUS
+      // 5️⃣ UPDATE BASED ON PAYMENT STATUS (CONDITIONAL)
+      // ⚠️ Only update if payment status is still PENDING to prevent override
       if (paymentStatus === "SUCCESS") {
         // 🟢 PAYMENT SUCCESSFUL
-        await tx.order.update({
-          where: { id: orderId },
+        // Only update if still PENDING (prevent override of later status changes)
+        const updated = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            paymentStatus: "PENDING", // Only update if still PENDING
+          },
           data: {
             paymentStatus: "SUCCESS",
             status: "CONFIRMED", // Auto-move to CONFIRMED
           },
         });
 
-        logger.info("Order payment confirmed", {
-          orderId,
-          newStatus: "CONFIRMED",
-        });
+        if (updated.count > 0) {
+          logger.info("Order payment confirmed", {
+            orderId,
+            newStatus: "CONFIRMED",
+          });
+        } else {
+          logger.warn("Order payment status already changed", {
+            orderId,
+            currentStatus: order.paymentStatus,
+          });
+        }
       } else if (paymentStatus === "FAILED" || paymentStatus === "CANCELLED") {
         // 🔴 PAYMENT FAILED
-        await tx.order.update({
-          where: { id: orderId },
+        // Only update if still PENDING
+        const updated = await tx.order.updateMany({
+          where: {
+            id: orderId,
+            paymentStatus: "PENDING", // Only update if still PENDING
+          },
           data: {
             paymentStatus: "FAILED",
             status: "CANCELLED", // Auto-cancel if payment fails
           },
         });
 
-        logger.warn("Order payment failed", {
-          orderId,
-          paymentStatus,
-        });
+        if (updated.count > 0) {
+          logger.warn("Order payment failed", {
+            orderId,
+            paymentStatus,
+          });
+        } else {
+          logger.warn("Order payment already processed", {
+            orderId,
+            currentStatus: order.paymentStatus,
+          });
+        }
       } else {
         // ⚪ UNKNOWN STATUS
         logger.warn("Unknown payment status", {
