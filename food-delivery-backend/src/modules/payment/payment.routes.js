@@ -1,6 +1,6 @@
 import express from "express";
 import * as paymentController from "./payment.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -20,11 +20,11 @@ const router = express.Router();
  * POST /api/payments/create-session
  * Create payment session for existing order
  * 
- * Required: authMiddleware (user must own the order)
+ * Required: authenticate (user must own the order)
  */
 router.post(
   "/create-session",
-  authMiddleware,
+  authenticate,
   paymentController.createSession
 );
 
@@ -64,7 +64,7 @@ router.post("/webhook", express.raw({ type: "application/json" }), (req, res, ne
  */
 router.get(
   "/verify/:orderId",
-  authMiddleware,
+  authenticate,
   paymentController.verifyPayment
 );
 
@@ -72,12 +72,12 @@ router.get(
  * POST /api/payments/retry/:orderId
  * Retry payment for a failed order
  * 
- * Required: authMiddleware (user must own the order)
+ * Required: authenticate (user must own the order)
  * Returns new payment session
  */
 router.post(
   "/retry/:orderId",
-  authMiddleware,
+  authenticate,
   paymentController.retryPayment
 );
 

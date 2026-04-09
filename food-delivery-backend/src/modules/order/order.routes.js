@@ -1,6 +1,6 @@
 import express from "express";
 import * as orderController from "./order.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -8,9 +8,9 @@ const router = express.Router();
  * Order Routes
  * 
  * All routes are protected - requires authentication
- * Middleware: authMiddleware (applied to all routes)
+ * Middleware: authenticate (applied to all routes)
  */
-router.use(authMiddleware);
+router.use(authenticate);
 
 /**
  * POST /api/order/create

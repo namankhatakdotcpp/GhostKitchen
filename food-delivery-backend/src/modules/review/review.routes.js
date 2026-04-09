@@ -1,6 +1,6 @@
 import express from "express";
 import * as reviewController from "./review.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -33,7 +33,7 @@ const router = express.Router();
  *   }
  * }
  */
-router.post("/create", authMiddleware, reviewController.createReview);
+router.post("/create", authenticate, reviewController.createReview);
 
 /**
  * GET /api/reviews/restaurant/:restaurantId
@@ -81,12 +81,12 @@ router.get("/order/:orderId", reviewController.getReviewByOrderId);
  *   "comment": "Actually was okay"
  * }
  */
-router.put("/order/:orderId", authMiddleware, reviewController.updateReview);
+router.put("/order/:orderId", authenticate, reviewController.updateReview);
 
 /**
  * DELETE /api/reviews/order/:orderId
  * Delete review (only by reviewer)
  */
-router.delete("/order/:orderId", authMiddleware, reviewController.deleteReview);
+router.delete("/order/:orderId", authenticate, reviewController.deleteReview);
 
 export default router;

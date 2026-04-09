@@ -1,6 +1,6 @@
 import express from "express";
 import * as couponController from "./coupon.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -107,7 +107,7 @@ router.get("/:code", couponController.getCouponByCode);
  *   "expiresAt": "2025-06-30"
  * }
  */
-router.post("/admin/create", authMiddleware, couponController.createCoupon);
+router.post("/admin/create", authenticate, couponController.createCoupon);
 
 /**
  * PUT /api/coupons/admin/:code
@@ -119,12 +119,12 @@ router.post("/admin/create", authMiddleware, couponController.createCoupon);
  *   "expiresAt": "2025-07-31"
  * }
  */
-router.put("/admin/:code", authMiddleware, couponController.updateCoupon);
+router.put("/admin/:code", authenticate, couponController.updateCoupon);
 
 /**
  * DELETE /api/coupons/admin/:code
  * Delete coupon (admin only)
  */
-router.delete("/admin/:code", authMiddleware, couponController.deleteCoupon);
+router.delete("/admin/:code", authenticate, couponController.deleteCoupon);
 
 export default router;

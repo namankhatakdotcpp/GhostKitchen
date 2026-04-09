@@ -14,7 +14,7 @@
 
 import express from "express";
 import { register, login, me, refresh, logout, logoutAll } from "./auth.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 import { validate, registerSchema, loginSchema } from "./auth.schema.js";
 
 const router = express.Router();
@@ -24,10 +24,10 @@ router.post("/register", validate(registerSchema), register);
 router.post("/login", validate(loginSchema), login);
 
 // Protected routes
-router.get("/me", authMiddleware, me);
+router.get("/me", authenticate, me);
 router.post("/refresh", refresh);
-router.post("/logout", authMiddleware, logout);
-router.post("/logout-all", authMiddleware, logoutAll);
+router.post("/logout", authenticate, logout);
+router.post("/logout-all", authenticate, logoutAll);
 
 export default router;
 
