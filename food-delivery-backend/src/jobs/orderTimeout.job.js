@@ -24,8 +24,9 @@ export const startOrderTimeoutJob = () => {
 
       const timeoutTime = new Date(Date.now() - ORDER_TIMEOUT_MINUTES * 60 * 1000);
 
-      // Find unpaid orders that have expired
-      const expiredOrders = await prisma.order.findMany({
+      // Cancel all expired orders in a single atomic operation
+      // This is more efficient than finding IDs first then updating
+      const result = await prisma.order.updateMany({
         where: {
           status: "PENDING",
           paymentStatus: "PENDING",
@@ -33,30 +34,16 @@ export const startOrderTimeoutJob = () => {
             lt: timeoutTime,
           },
         },
-      });
-
-      if (expiredOrders.length === 0) {
-        logger.info("No expired orders found");
-        return;
-      }
-
-      logger.info("Found expired orders", {
-        count: expiredOrders.length,
-        orderIds: expiredOrders.map(o => o.id),
-      });
-
-      // Cancel all expired orders
-      const result = await prisma.order.updateMany({
-        where: {
-          id: {
-            in: expiredOrders.map(o => o.id),
-          },
-        },
         data: {
           status: "CANCELLED",
           paymentStatus: "FAILED", // Mark as failed since payment wasn't received
         },
       });
+
+      if (result.count === 0) {
+        logger.info("No expired orders found");
+        return;
+      }
 
       logger.info("Order timeout job completed", {
         cancelledCount: result.count,
