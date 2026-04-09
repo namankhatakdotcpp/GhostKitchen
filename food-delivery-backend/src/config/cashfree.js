@@ -27,17 +27,25 @@ if (!env.CASHFREE_APP_ID || !env.CASHFREE_SECRET_KEY) {
  * Environment:
  * - SANDBOX: For development/testing
  * - PRODUCTION: For live payments
+ * 
+ * Note: If credentials are missing, Cashfree is initialized but errors gracefully
  */
 export const cashfree = new Cashfree({
   apiVersion: "2025-01-01",
 });
 
-// Set credentials
-cashfree.XClientId = env.CASHFREE_APP_ID || "";
-cashfree.XClientSecret = env.CASHFREE_SECRET_KEY || "";
-cashfree.XEnvironment =
-  env.CASHFREE_ENV === "PRODUCTION"
-    ? Cashfree.Environment.PRODUCTION
-    : Cashfree.Environment.SANDBOX;
+// Set credentials only if they exist
+if (env.CASHFREE_APP_ID && env.CASHFREE_SECRET_KEY) {
+  cashfree.XClientId = env.CASHFREE_APP_ID;
+  cashfree.XClientSecret = env.CASHFREE_SECRET_KEY;
+  
+  // Set environment safely
+  if (Cashfree.Environment) {
+    cashfree.XEnvironment =
+      env.CASHFREE_ENV === "PRODUCTION"
+        ? Cashfree.Environment.PRODUCTION
+        : Cashfree.Environment.SANDBOX;
+  }
+}
 
 export default cashfree;
