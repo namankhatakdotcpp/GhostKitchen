@@ -24,8 +24,17 @@ import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
 import paymentRoutes from "./modules/payment/payment.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
+import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
 
 const app = express();
+
+/**
+ * REQUEST TRACING (FIRST MIDDLEWARE)
+ * 
+ * Assigns unique ID to each request
+ * Used for debugging production incidents
+ */
+app.use(requestTracingMiddleware);
 
 /**
  * CORS Configuration for cookies

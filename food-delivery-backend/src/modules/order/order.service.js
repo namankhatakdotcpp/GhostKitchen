@@ -1,5 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
+import { emitNewOrder, emitOrderUpdate, emitOrderCancelled } from "../../socket/socketEvents.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Order Service - Business Logic
@@ -83,6 +85,33 @@ export const createOrder = async (userId) => {
     return newOrder;
   });
 
+  // 📡 EMIT REAL-TIME EVENT (Socket.IO)
+  try {
+    const orderWithDetails = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        orderItems: {
+          include: { menuItem: true },
+        },
+        user: true,
+      },
+    });
+
+    // Get restaurantId from first order item
+    const restaurantId = order.orderItems[0]?.menuItem?.restaurantId;
+    const orderDataWithRestaurant = {
+      ...orderWithDetails,
+      restaurantId,
+    };
+
+    emitNewOrder(orderDataWithRestaurant);
+  } catch (error) {
+    logger.warn("Failed to emit order:new event", {
+      orderId: order.id,
+      error: error.message,
+    });
+  }
+
   return order;
 };
 
@@ -163,10 +192,44 @@ export const updateOrderStatus = async (orderId, status) => {
     where: { id: orderId },
     data: { status },
     include: {
-      orderItems: true,
+      orderItems: {
+        include: { menuItem: true },
+      },
       user: true,
     },
   });
+
+  // 📡 EMIT REAL-TIME EVENT (Socket.IO)
+  try {
+    const orderWithDetails = await prisma.order.findUnique({
+      where: { id: order.id },
+      include: {
+        orderItems: {
+          include: { menuItem: true },
+        },
+        user: true,
+      },
+    });
+
+    // Get restaurantId from first order item
+    const restaurantId = order.orderItems[0]?.menuItem?.restaurantId;
+    const orderDataWithRestaurant = {
+      ...orderWithDetails,
+      restaurantId,
+    };
+
+    emitOrderUpdate(orderDataWithRestaurant);
+
+    logger.info("Order status updated with real-time notification", {
+      orderId,
+      newStatus: status,
+    });
+  } catch (error) {
+    logger.warn("Failed to emit order:update event", {
+      orderId,
+      error: error.message,
+    });
+  }
 
   return order;
 };
@@ -227,10 +290,43 @@ export const cancelOrder = async (orderId, userId) => {
     where: { id: orderId },
     data: { status: "CANCELLED" },
     include: {
-      orderItems: true,
+      orderItems: {
+        include: { menuItem: true },
+      },
       user: true,
     },
   });
+
+  // 📡 EMIT REAL-TIME EVENT (Socket.IO)
+  try {
+    const orderWithDetails = await prisma.order.findUnique({
+      where: { id: updatedOrder.id },
+      include: {
+        orderItems: {
+          include: { menuItem: true },
+        },
+        user: true,
+      },
+    });
+
+    const restaurantId = updatedOrder.orderItems[0]?.menuItem?.restaurantId;
+    const orderDataWithRestaurant = {
+      ...orderWithDetails,
+      restaurantId,
+    };
+
+    emitOrderCancelled(orderDataWithRestaurant, "Cancelled by customer");
+
+    logger.info("Order cancelled with real-time notification", {
+      orderId,
+      userId,
+    });
+  } catch (error) {
+    logger.warn("Failed to emit order:cancelled event", {
+      orderId,
+      error: error.message,
+    });
+  }
 
   return updatedOrder;
 };

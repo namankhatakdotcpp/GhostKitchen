@@ -6,32 +6,38 @@ dotenv.config({ path: ".env" });
 
 import app from "./app.js";
 import { env } from "./config/env.js";
-import { createSocketServer } from "./socket/socket.server.js";
+import { initSocket } from "./socket/socketServer.js";
 import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
+import { logger } from "./utils/logger.js";
 
 const server = http.createServer(app);
 
-createSocketServer(server);
+// Initialize Socket.IO for real-time updates
+initSocket(server);
 
 // Start background jobs
 startOrderTimeoutJob();
 
-console.log("🚀 Starting GhostKitchen Backend...");
-console.log(`   Database: ${env.DATABASE_URL?.split("/").pop() || "unknown"}`);
-console.log(`   Cashfree: ${env.CASHFREE_ENV} environment`);
+logger.info("🚀 Starting GhostKitchen Backend...", {
+  database: env.DATABASE_URL?.split("/").pop() || "unknown",
+  cashfreeEnv: env.CASHFREE_ENV,
+  nodeEnv: env.NODE_ENV,
+});
 
 server.listen(env.PORT, () => {
-  console.log(`✓ Server running on http://localhost:${env.PORT}`);
-  console.log("✓ WebSocket server initialized");
-  console.log("✓ Background jobs started");
-  console.log("✓ Ready to accept requests");
+  logger.info("✓ Server running successfully", {
+    port: env.PORT,
+    websocket: "initialized",
+    jobs: "started",
+    status: "ready",
+  });
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("📋 SIGTERM received, shutting down gracefully");
+  logger.info("📋 SIGTERM received, shutting down gracefully");
   server.close(() => {
-    console.log("✓ Server closed");
+    logger.info("✓ Server closed");
     process.exit(0);
   });
 });

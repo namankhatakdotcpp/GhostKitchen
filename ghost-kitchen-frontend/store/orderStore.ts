@@ -58,6 +58,7 @@ interface OrderState {
   createOrder: () => Promise<Order>;
   updateOrderStatus: (orderId: string, status: string) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
+  updateOrder: (order: Order) => void; // Real-time updates from Socket.IO
   clearError: () => void;
   reset: () => void;
 }
@@ -247,6 +248,29 @@ export const useOrderStore = create<OrderState>((set, get) => ({
    */
   clearError: () => {
     set({ error: null });
+  },
+
+  /**
+   * UPDATE ORDER (REAL-TIME)
+   * Update order from Socket.IO event
+   * Merges new order data into existing order or adds new order
+   */
+  updateOrder: (updatedOrder: Order) => {
+    set((state) => {
+      const exists = state.orders.some((o) => o.id === updatedOrder.id);
+      
+      return {
+        orders: exists
+          ? state.orders.map((order) =>
+              order.id === updatedOrder.id ? updatedOrder : order
+            )
+          : [updatedOrder, ...state.orders],
+        selectedOrder:
+          state.selectedOrder?.id === updatedOrder.id
+            ? updatedOrder
+            : state.selectedOrder,
+      };
+    });
   },
 
   /**
