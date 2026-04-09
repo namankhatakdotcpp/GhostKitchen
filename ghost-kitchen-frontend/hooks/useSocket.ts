@@ -74,7 +74,7 @@ export function useSocketStatus() {
 
 export function useSocket() {
   const { user } = useAuthStore();
-  const { updateOrder } = useOrderStore();
+  const { updateOrder, fetchOrders } = useOrderStore();
 
   // Connect socket when user is authenticated
   useEffect(() => {
@@ -124,6 +124,63 @@ export function useSocket() {
       socket.off("order:cancelled:v1", handleOrderCancelled);
     };
   }, [updateOrder]);
+
+  // Fallback polling: Fetch orders every 10 seconds if Socket.IO is disconnected
+  // This ensures orders stay updated even if real-time connection fails
+  useEffect(() => {
+    if (!user) return;
+
+    let pollingInterval: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+
+      // Poll every 10 seconds when socket is disconnected
+      pollingInterval = setInterval(async () => {
+        try {
+          const socket = getSocket();
+
+          // Only poll if socket is not connected
+          if (!socket.connected) {
+            console.log("📡 Socket disconnected - using polling fallback to fetch orders");
+            await fetchOrders();
+          }
+        } catch (error) {
+          // Silent fail for polling - logging handled in store
+          console.debug("Fallback polling - fetch orders error:", error);
+        }
+      }, 10000); // 10 second polling interval
+    };
+
+    // Start polling immediately
+    startPolling();
+
+    // Monitor socket connection status to adjust polling
+    const socket = getSocket();
+    const handleConnect = () => {
+      console.log("✓ Socket connected - stopping polling fallback");
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    };
+
+    const handleDisconnect = () => {
+      console.log("✗ Socket disconnected - starting polling fallback");
+      startPolling();
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+    };
+  }, [user, fetchOrders]);
 }
 
 /**
