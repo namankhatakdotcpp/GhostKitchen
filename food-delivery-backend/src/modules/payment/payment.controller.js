@@ -70,13 +70,17 @@ export const createSession = async (req, res, next) => {
 export const webhook = async (req, res, next) => {
   try {
     // 1️⃣ VERIFY SIGNATURE (CRITICAL SECURITY CHECK)
-    const signature = req.headers["x-webhook-signature"];
+    // Cashfree can send signature in either header name
+    const signature =
+      req.headers["x-webhook-signature"] ||
+      req.headers["x-cf-signature"];
     const rawBody = req.rawBody || req.body; // Use stored raw body for signature verification
 
+    // Always return 200 to acknowledge receipt (prevent DOS from retries)
     if (!signature) {
       logger.warn("Webhook missing signature header");
-      return res.status(401).json({
-        success: false,
+      return res.status(200).json({
+        received: true,
         message: "Missing webhook signature",
       });
     }
@@ -99,9 +103,10 @@ export const webhook = async (req, res, next) => {
       logger.warn("Webhook signature verification failed", {
         provided: signature.substring(0, 10) + "...",
       });
-      return res.status(401).json({
-        success: false,
-        message: "Invalid webhook signature",
+      // Return 200 to acknowledge (don't let Cashfree keep retrying)
+      return res.status(200).json({
+        received: true,
+        message: "Signature verification failed",
       });
     }
 
@@ -116,25 +121,20 @@ export const webhook = async (req, res, next) => {
     // 3️⃣ PROCESS WEBHOOK
     const success = await paymentService.handlePaymentWebhook(webhookData);
 
-    if (success) {
-      res.json({
-        success: true,
-        message: "Webhook processed",
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: "Failed to process webhook",
-      });
-    }
+    // Always return 200 success (webhook was received and processed)
+    return res.status(200).json({
+      received: true,
+      processed: success,
+    });
   } catch (err) {
     logger.error("Webhook error", {
       error: err.message,
       stack: err.stack,
     });
-    res.status(500).json({
-      success: false,
-      message: "Webhook processing error",
+    // Even on error, return 200 to prevent Cashfree DOS retries
+    return res.status(200).json({
+      received: true,
+      error: err.message,
     });
   }
 };
