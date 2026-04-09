@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         customerId: "demo-customer",
         restaurantId: restaurant.id,
         restaurant,
-        items,
+        orderItems: items,
         status: "PLACED" as const,
         total: subtotal + restaurant.deliveryFee,
         deliveryFee: restaurant.deliveryFee,

@@ -137,7 +137,7 @@ export function OrderTracking({ orderId }: OrderTrackingProps) {
               className="flex justify-between items-center py-2 border-b border-gray-100"
             >
               <div>
-                <p className="font-medium">{item.menuItem.name}</p>
+                <p className="font-medium">{item.menuItem?.name || "Item"}</p>
                 <p className="text-gray-600 text-sm">Qty: {item.quantity}</p>
               </div>
               <p className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</p>

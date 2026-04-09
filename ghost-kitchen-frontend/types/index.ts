@@ -78,20 +78,26 @@ export interface DeliveryAgent {
 
 export interface Order {
   id: string;
-  customerId: string;
+  userId?: string;
+  customerId?: string;
   restaurantId: string;
-  restaurant: Restaurant;
-  items: OrderItem[];
+  restaurant?: Restaurant;
+  items?: OrderItem[];
+  orderItems: OrderItem[];
   status: OrderStatus;
-  total: number;
-  deliveryFee: number;
-  deliveryAddress: Address;
+  totalAmount?: number;
+  total?: number;
+  deliveryFee?: number;
+  paymentStatus?: "PENDING" | "SUCCESS" | "FAILED";
+  deliveryAddress?: Address;
   createdAt: string;
+  updatedAt?: string;
   deliveryAgent?: DeliveryAgent;
   subtotal?: number;
   discount?: number;
   estimatedDelivery?: string;
   deliveredAt?: string | null;
+  user?: User;
 }
 
 export interface FeaturedBanner {

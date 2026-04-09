@@ -624,7 +624,7 @@ export const trackedOrders: TrackedOrder[] = [
     customerId: "demo-customer",
     restaurantId: "ghost-biryani-house",
     restaurant: restaurants[0],
-    items: [
+    orderItems: [
       {
         menuItem: restaurantMenus["ghost-biryani-house"][1].items[0],
         quantity: 1,
@@ -668,7 +668,7 @@ export const trackedOrders: TrackedOrder[] = [
     customerId: "demo-customer",
     restaurantId: "midnight-pizza",
     restaurant: restaurants[1],
-    items: [
+    orderItems: [
       {
         menuItem: restaurantMenus["midnight-pizza"][1].items[0],
         quantity: 2,
@@ -695,7 +695,7 @@ export const trackedOrders: TrackedOrder[] = [
     customerId: "demo-customer",
     restaurantId: "idli-street",
     restaurant: restaurants[4],
-    items: [
+    orderItems: [
       {
         menuItem: restaurantMenus["idli-street"][1].items[1],
         quantity: 1,

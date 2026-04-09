@@ -11,16 +11,18 @@ import { useState } from "react";
 import StatusUpdater from "./StatusUpdater";
 import OrderDetailModal from "./OrderDetailModal";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { OrderItem } from "@/types/index";
 
 interface Order {
   id: string;
   userId: string;
   restaurantId: string;
-  totalAmount: number;
+  totalAmount?: number;
+  total?: number;
   status: string;
   paymentStatus: string;
   createdAt: string;
-  orderItems: any[];
+  orderItems: OrderItem[];
   user?: any;
   restaurant?: any;
 }
@@ -58,7 +60,9 @@ export default function OrdersTable({ orders, onRefresh }: OrdersTableProps) {
     if (sortBy === "date") {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     } else {
-      return b.totalAmount - a.totalAmount;
+      const amountA = a.totalAmount || a.total || 0;
+      const amountB = b.totalAmount || b.total || 0;
+      return amountB - amountA;
     }
   });
 
@@ -97,7 +101,7 @@ export default function OrdersTable({ orders, onRefresh }: OrdersTableProps) {
           <table className="w-full">
             <thead className="bg-slate-700/50 border-b border-slate-600">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-seminblod text-slate-200">Order ID</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">Order ID</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">Customer</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-slate-200">Restaurant</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-slate-200">Amount</th>
@@ -129,7 +133,7 @@ export default function OrdersTable({ orders, onRefresh }: OrdersTableProps) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <p className="text-sm font-mono font-semibold text-green-400">
-                      ₹{formatCurrency(order.totalAmount)}
+                      ₹{formatCurrency(order.totalAmount || order.total || 0)}
                     </p>
                   </td>
                   <td className="px-4 py-3">

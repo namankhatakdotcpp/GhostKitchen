@@ -37,6 +37,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   userId: string;
+  restaurantId: string;
   totalAmount: number;
   status: "PENDING" | "CONFIRMED" | "PREPARING" | "OUT_FOR_DELIVERY" | "DELIVERED" | "CANCELLED";
   paymentStatus: "PENDING" | "SUCCESS" | "FAILED";

@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 
 interface Review {
@@ -20,11 +20,7 @@ export default function ReviewsSection({ restaurantId }: ReviewsSectionProps) {
   const [totalReviews, setTotalReviews] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchReviews();
-  }, [restaurantId]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get(`/reviews/restaurant/${restaurantId}`);
@@ -36,7 +32,11 @@ export default function ReviewsSection({ restaurantId }: ReviewsSectionProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [restaurantId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
 
   if (loading) {
     return <div className="text-center py-8 text-gray-500">Loading reviews...</div>;

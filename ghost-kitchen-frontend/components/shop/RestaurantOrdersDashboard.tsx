@@ -109,12 +109,12 @@ export function RestaurantOrdersDashboard({
 
                         {/* Items Preview */}
                         <div className="text-xs text-gray-700 mb-2">
-                          {order.orderItems.slice(0, 2).map((item) => (
+                          {order.orderItems?.slice(0, 2).map((item) => (
                             <p key={item.id}>
-                              • {item.quantity}x {item.menuItem.name}
+                              • {item.quantity}x {item.menuItem?.name || "Item"}
                             </p>
                           ))}
-                          {order.orderItems.length > 2 && (
+                          {order.orderItems && order.orderItems.length > 2 && (
                             <p>• +{order.orderItems.length - 2} more</p>
                           )}
                         </div>
