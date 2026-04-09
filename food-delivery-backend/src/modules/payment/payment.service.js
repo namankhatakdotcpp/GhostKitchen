@@ -43,16 +43,27 @@ export const createPaymentSession = async (orderId, user) => {
   });
 
   if (!order) {
+    logger.warn("Order not found for payment", { orderId, userId: user.id });
     throw new AppError("Order not found", 404);
   }
 
   // 2️⃣ VERIFY ORDER BELONGS TO USER
   if (order.userId !== user.id) {
+    logger.error("Unauthorized payment session attempt", {
+      orderId,
+      requestedBy: user.id,
+      orderBelongsTo: order.userId,
+    });
     throw new AppError("Unauthorized to create payment for this order", 403);
   }
 
   // 3️⃣ VALIDATE ORDER STATUS
   if (order.paymentStatus !== "PENDING") {
+    logger.warn("Cannot create payment for non-pending order", {
+      orderId,
+      currentPaymentStatus: order.paymentStatus,
+      userId: user.id,
+    });
     throw new AppError(
       `Cannot create payment for order with status ${order.paymentStatus}`,
       400
@@ -82,7 +93,10 @@ export const createPaymentSession = async (orderId, user) => {
 
     logger.info("Payment session created", {
       orderId,
+      userId: user.id,
+      amount: order.totalAmount,
       paymentSessionId: response.payment_session_id,
+      itemCount: order.orderItems.length,
     });
 
     // 6️⃣ RETURN SESSION DATA
@@ -93,9 +107,12 @@ export const createPaymentSession = async (orderId, user) => {
       currency: response.order_currency,
     };
   } catch (error) {
-    logger.error("Cashfree API Error", {
+    logger.error("Cashfree API error creating payment session", {
       orderId,
-      error: error.message,
+      userId: user.id,
+      amount: order.totalAmount,
+      errorMessage: error.message,
+      errorCode: error.code,
     });
     throw new AppError(
       "Failed to create payment session. Please try again.",
@@ -122,17 +139,24 @@ export const handlePaymentWebhook = async (webhookData) => {
     // 1️⃣ EXTRACT PAYMENT DATA FROM WEBHOOK
     const orderId = webhookData.order_id;
     const paymentStatus = webhookData.payment?.payment_status;
+    const cfPaymentId = webhookData.cf_payment_id;
     // 🔑 IDEMPOTENCY KEY: Include status to distinguish different payment states
-    const eventId = `${webhookData.cf_payment_id}_${paymentStatus}` || webhookData.order_id;
+    const eventId = `${cfPaymentId}_${paymentStatus}` || webhookData.order_id;
 
-    logger.info("Webhook received", {
+    logger.info("Webhook received from Cashfree", {
       orderId,
       eventId,
       paymentStatus,
+      cfPaymentId,
+      timestamp: webhookData.payment?.payment_time,
     });
 
     if (!orderId || !paymentStatus) {
-      logger.warn("Invalid webhook data", { webhookData });
+      logger.warn("Invalid webhook data received", {
+        missingOrderId: !orderId,
+        missingPaymentStatus: !paymentStatus,
+        webhookKeys: Object.keys(webhookData),
+      });
       throw new AppError("Invalid webhook data", 400);
     }
 
@@ -145,10 +169,12 @@ export const handlePaymentWebhook = async (webhookData) => {
       });
 
       if (existingWebhook) {
-        logger.info("Duplicate webhook ignored", {
+        logger.info("Duplicate webhook detected and ignored", {
           orderId,
           eventId,
-          previousCreatedAt: existingWebhook.createdAt,
+          paymentStatus,
+          firstSeenAt: existingWebhook.createdAt,
+          duplicateDeliveredAt: new Date(),
         });
         return; // Exit transaction, no duplicate processing
       }
@@ -164,7 +190,12 @@ export const handlePaymentWebhook = async (webhookData) => {
       });
 
       if (!order) {
-        logger.warn("Webhook for non-existent order", { orderId, eventId });
+        logger.warn("Webhook received for non-existent order", {
+          orderId,
+          eventId,
+          paymentStatus,
+          cfPaymentId,
+        });
         return;
       }
 
@@ -185,14 +216,22 @@ export const handlePaymentWebhook = async (webhookData) => {
         });
 
         if (updated.count > 0) {
-          logger.info("Order payment confirmed", {
+          logger.info("Order payment confirmed successfully", {
             orderId,
-            newStatus: "CONFIRMED",
+            userId: order.userId,
+            amount: order.totalAmount,
+            previousStatus: order.paymentStatus,
+            newPaymentStatus: "SUCCESS",
+            newOrderStatus: "CONFIRMED",
+            cfPaymentId,
           });
         } else {
-          logger.warn("Order payment status already changed", {
+          logger.warn("Order payment status already changed (race condition detected)", {
             orderId,
-            currentStatus: order.paymentStatus,
+            userId: order.userId,
+            incomingPaymentStatus: paymentStatus,
+            currentPaymentStatus: order.paymentStatus,
+            cfPaymentId,
           });
         }
       } else if (paymentStatus === "FAILED" || paymentStatus === "CANCELLED") {
@@ -210,30 +249,43 @@ export const handlePaymentWebhook = async (webhookData) => {
         });
 
         if (updated.count > 0) {
-          logger.warn("Order payment failed", {
+          logger.warn("Order payment failed, auto-cancelled", {
             orderId,
+            userId: order.userId,
+            amount: order.totalAmount,
             paymentStatus,
+            newStatus: "CANCELLED",
+            cfPaymentId,
           });
         } else {
-          logger.warn("Order payment already processed", {
+          logger.warn("Order payment failed but already processed", {
             orderId,
-            currentStatus: order.paymentStatus,
+            userId: order.userId,
+            incomingPaymentStatus: paymentStatus,
+            currentPaymentStatus: order.paymentStatus,
+            cfPaymentId,
           });
         }
       } else {
         // ⚪ UNKNOWN STATUS
-        logger.warn("Unknown payment status", {
+        logger.warn("Unknown payment status received", {
           orderId,
+          userId: order.userId,
           paymentStatus,
+          cfPaymentId,
+          validStatuses: ["SUCCESS", "FAILED", "CANCELLED"],
         });
       }
     });
 
     return true;
   } catch (error) {
-    logger.error("Webhook processing error", {
-      error: error.message,
-      webhookData: JSON.stringify(webhookData).substring(0, 100),
+    logger.error("Payment webhook processing failed", {
+      orderId: webhookData?.order_id,
+      cfPaymentId: webhookData?.cf_payment_id,
+      paymentStatus: webhookData?.payment?.payment_status,
+      errorMessage: error.message,
+      errorStack: error.stack?.substring(0, 200),
     });
     throw error;
   }
@@ -251,15 +303,18 @@ export const handlePaymentWebhook = async (webhookData) => {
 export const verifyPaymentStatus = async (orderId) => {
   try {
     const response = await cashfree.PGOrderFetchPayments(orderId);
-    logger.info("Payment status verified", {
+    logger.info("Payment status verified with Cashfree", {
       orderId,
       status: response.payment_status,
+      cfPaymentId: response.cf_payment_id,
+      timestamp: new Date(),
     });
     return response;
   } catch (error) {
-    logger.error("Payment verification error", {
+    logger.error("Payment verification failed", {
       orderId,
-      error: error.message,
+      errorMessage: error.message,
+      timestamp: new Date(),
     });
     throw new AppError("Failed to verify payment status", 500);
   }
