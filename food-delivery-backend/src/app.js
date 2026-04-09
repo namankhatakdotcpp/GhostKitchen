@@ -99,30 +99,7 @@ app.use(generalLimiter);
  * - Audit trail for compliance
  */
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method.toUpperCase()} ${req.path}`);
-  next();
-});
-
-/**
- * Webhook Raw Body Handling
- * 
- * CRITICAL: Must come BEFORE JSON parser
- * Cashfree webhook signature verification requires the raw body
- * We store the raw body and also parse it for the controller
- */
-app.post("/api/payments/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
-  // Store raw body for signature verification
-  req.rawBody = req.body;
-  
-  // Parse the body
-  if (Buffer.isBuffer(req.body)) {
-    try {
-      req.body = JSON.parse(req.body.toString());
-    } catch (e) {
-      logger.error("Failed to parse webhook body", { error: e.message });
-    }
-  }
-  
+  logger.debug(`${req.method.toUpperCase()} ${req.path}`);
   next();
 });
 
@@ -161,7 +138,7 @@ app.get("/debug-db", async (req, res) => {
 // Seed endpoint
 app.get("/seed", async (req, res, next) => {
   try {
-    console.log("🌱 Starting production database seeding...");
+    logger.info("Starting production database seeding...");
     await seedDatabase();
     res.json({
       success: true,
@@ -169,7 +146,7 @@ app.get("/seed", async (req, res, next) => {
       status: "Database populated with restaurants and menu items",
     });
   } catch (error) {
-    console.error("❌ Seeding failed:", error);
+    logger.error("Seeding failed", { error: error.message });
     next(error);
   }
 });

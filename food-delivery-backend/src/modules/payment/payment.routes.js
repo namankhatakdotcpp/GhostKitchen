@@ -33,12 +33,28 @@ router.post(
  * Receive webhook from Cashfree after payment
  * 
  * 🔐 NOT protected - Cashfree servers need to call this
+ * 🔐 CRITICAL: Uses express.raw() to preserve body for signature verification
  * 
  * Webhook data includes:
  * - order_id: Order ID
  * - payment.payment_status: SUCCESS | FAILED | CANCELLED
  */
-router.post("/webhook", express.json(), paymentController.webhook);
+router.post("/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
+  // Store raw body for signature verification
+  req.rawBody = req.body;
+  
+  // Parse body if it's a buffer
+  if (Buffer.isBuffer(req.body)) {
+    try {
+      req.body = JSON.parse(req.body.toString());
+    } catch (e) {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+  }
+  
+  // Call the webhook controller
+  paymentController.webhook(req, res, next);
+});
 
 /**
  * GET /api/payments/verify/:orderId

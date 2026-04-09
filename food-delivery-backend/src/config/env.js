@@ -4,7 +4,7 @@ dotenv.config();
 
 // Validate required environment variables for production
 const requiredVars = ["DATABASE_URL", "JWT_SECRET"];
-const paymentVars = ["CASHFREE_APP_ID", "CASHFREE_SECRET_KEY"];
+const paymentVars = ["CASHFREE_APP_ID", "CASHFREE_SECRET_KEY", "CASHFREE_WEBHOOK_SECRET"];
 
 const isProduction = process.env.NODE_ENV === "production";
 const mustCheck = isProduction ? [...requiredVars, ...paymentVars] : requiredVars;
@@ -22,7 +22,7 @@ if (missingVars.length > 0) {
       `Production requires all variables. Missing: ${missingVars.join(", ")}`
     );
   }
-  
+
   console.warn("⚠️  Using fallback/default values (not recommended for production)");
 }
 
@@ -42,6 +42,7 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL || "postgresql://localhost:5432/food_delivery_db",
   CASHFREE_APP_ID: process.env.CASHFREE_APP_ID || "",
   CASHFREE_SECRET_KEY: process.env.CASHFREE_SECRET_KEY || "",
+  CASHFREE_WEBHOOK_SECRET: process.env.CASHFREE_WEBHOOK_SECRET || "",
   CASHFREE_ENV: process.env.CASHFREE_ENV || "TEST",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
   BACKEND_URL: process.env.BACKEND_URL || "http://localhost:5000",
@@ -52,5 +53,5 @@ console.log("✓ Environment configured:", {
   port: env.PORT,
   cashfreeMode: env.CASHFREE_ENV,
   dbConfigured: !!process.env.DATABASE_URL,
-  paymentsConfigured: !!(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY),
+  paymentsConfigured: !!(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY && process.env.CASHFREE_WEBHOOK_SECRET),
 });

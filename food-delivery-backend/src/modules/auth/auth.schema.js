@@ -90,12 +90,20 @@ export const changePasswordSchema = z.object({
   }),
 });
 
-// Types exported for TypeScript
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
-export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
-export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
-export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+/**
+ * Type Validators - Used by TypeScript consumers
+ * 
+ * These can be used to extract types from Zod schemas:
+ * @example
+ * const input: RegisterInput = { email: "test@example.com", ... };
+ * 
+ * For TypeScript files:
+ * import { registerSchema } from "./auth.schema.js";
+ * export type RegisterInput = z.infer<typeof registerSchema>;
+ */
+
+// Note: Type definitions should be in a .d.ts file or TypeScript consumer files
+// These JSDoc comments document the Zod schemas for reference
 
 // Validation middleware helper
 export const validate = (schema) => (req, res, next) => {

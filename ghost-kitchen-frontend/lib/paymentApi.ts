@@ -1,10 +1,29 @@
 import api from "@/lib/api";
-import { toast } from "react-hot-toast";
 
 /**
  * Payment API Client
  * Handles payment-related API calls
+ * 
+ * Note: Uses native alerts for error handling
+ * For better UX, integrate with a toast library (react-hot-toast, etc.)
  */
+
+// Helper to show notifications
+const showNotification = {
+  error: (message: string) => {
+    console.error("Payment Error:", message);
+    // Use browser alert as fallback
+    if (typeof window !== "undefined") {
+      alert(`❌ ${message}`);
+    }
+  },
+  success: (message: string) => {
+    console.log("Payment Success:", message);
+    if (typeof window !== "undefined") {
+      alert(`✅ ${message}`);
+    }
+  },
+};
 
 export interface PaymentSession {
   order_id: string;
@@ -24,7 +43,7 @@ export async function createPaymentSession(
     return response.data.data;
   } catch (error: any) {
     const message = error.error?.message || "Failed to create payment session";
-    toast.error(message);
+    showNotification.error(message);
     throw error;
   }
 }
@@ -50,11 +69,11 @@ export async function retryPayment(
 ): Promise<PaymentSession> {
   try {
     const response = await api.post(`/payments/retry/${orderId}`);
-    toast.success("Payment session created. Please complete the payment.");
+    showNotification.success("Payment session created. Please complete the payment.");
     return response.data.data;
   } catch (error: any) {
     const message = error.error?.message || "Failed to retry payment";
-    toast.error(message);
+    showNotification.error(message);
     throw error;
   }
 }
@@ -78,7 +97,7 @@ export function openCashfreePaymentUI(paymentSessionId: string) {
       },
       onFailure: (data: any) => {
         console.error("Payment failed:", data);
-        toast.error("Payment failed. Please try again.");
+        showNotification.error("Payment failed. Please try again.");
       },
       onClose: () => {
         console.log("Payment UI closed");
