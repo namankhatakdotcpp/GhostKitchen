@@ -22,6 +22,7 @@ import cartRoutes from "./modules/cart/cart.routes.js";
 import orderRoutes from "./modules/order/order.routes.js";
 import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
 import paymentRoutes from "./modules/payment/payment.routes.js";
+import adminRoutes from "./modules/admin/admin.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -166,6 +167,7 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/restaurants", restaurantRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 404 handler
 app.use((req, res) => {
