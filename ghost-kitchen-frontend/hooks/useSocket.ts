@@ -7,10 +7,70 @@
  * Handles cleanup on unmount
  */
 
-import { useEffect, useCallback } from "react";
-import { getSocket, connectSocket, disconnectSocket } from "@/lib/socket";
+import { useEffect, useCallback, useState } from "react";
+import { getSocket, connectSocket, disconnectSocket, getLastSocketError, isSocketConnected } from "@/lib/socket";
 import { useOrderStore } from "@/store/orderStore";
 import { useAuthStore } from "@/store/authStore";
+
+/**
+ * useSocketStatus Hook
+ * 
+ * Monitor socket connection status and errors
+ * Returns: { isConnected, lastError, isReconnecting }
+ */
+export function useSocketStatus() {
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    // Track connection status
+    const handleConnect = () => {
+      setIsConnected(true);
+      setIsReconnecting(false);
+      setLastError(null);
+    };
+
+    const handleDisconnect = () => {
+      setIsConnected(false);
+    };
+
+    const handleError = (error: any) => {
+      const errorMsg = typeof error === "string" ? error : error?.message || "Socket error occurred";
+      setLastError(errorMsg);
+    };
+
+    const handleConnectError = (error: any) => {
+      const errorMsg = typeof error === "string" ? error : error?.message || "Connection error";
+      setLastError(`Connection failed: ${errorMsg}`);
+    };
+
+    const handleReconnectAttempt = () => {
+      setIsReconnecting(true);
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("error", handleError);
+    socket.on("connect_error", handleConnectError);
+    socket.on("reconnect_attempt", handleReconnectAttempt);
+
+    // Set initial state
+    setIsConnected(socket.connected);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("error", handleError);
+      socket.off("connect_error", handleConnectError);
+      socket.off("reconnect_attempt", handleReconnectAttempt);
+    };
+  }, []);
+
+  return { isConnected, lastError, isReconnecting };
+}
 
 export function useSocket() {
   const { user } = useAuthStore();

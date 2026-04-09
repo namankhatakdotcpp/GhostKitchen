@@ -4,8 +4,13 @@ import { useAuthStore } from "@/store/authStore";
 let socket: Socket | null = null;
 
 /**
+ * Socket error tracking for diagnostics
+ */
+let lastSocketError: { message: string; timestamp: Date } | null = null;
+
+/**
  * Initialize Socket.IO connection
- * Handles authentication with JWT token
+ * Handles authentication with JWT token and comprehensive error handling
  */
 export function getSocket() {
   if (!socket) {
@@ -30,25 +35,75 @@ export function getSocket() {
       }
     );
 
-    // Handle connection events
+    // ===== SUCCESS EVENT HANDLERS =====
+
     socket.on("connect", () => {
-      console.log("✓ Socket.IO connected:", socket?.id);
+      console.log("✓ Socket.IO connected successfully:", socket?.id);
+      lastSocketError = null; // Clear error on successful connection
     });
 
-    socket.on("disconnect", () => {
-      console.log("✗ Socket.IO disconnected");
+    socket.on("disconnect", (reason: string) => {
+      console.log("✗ Socket.IO disconnected", { reason });
+      // 'io server namespace disconnect' is normal logout
+      // Other reasons indicate unexpected disconnection
+      if (reason !== "io server namespace disconnect") {
+        console.warn("Unexpected socket disconnection reason:", reason);
+      }
     });
+
+    // ===== ERROR EVENT HANDLERS =====
 
     socket.on("error", (error: any) => {
-      console.error("Socket.IO error:", error);
+      const errorMsg = typeof error === "string" ? error : error?.message || "Unknown socket error";
+      console.error("❌ Socket.IO error:", errorMsg, { timestamp: new Date() });
+      lastSocketError = {
+        message: errorMsg,
+        timestamp: new Date(),
+      };
     });
 
     socket.on("connect_error", (error: any) => {
-      console.error("Socket.IO connection error:", error?.message);
+      const errorMsg = typeof error === "string" ? error : error?.message || "Connection failed";
+      console.error("❌ Socket.IO connection error:", errorMsg, {
+        timestamp: new Date(),
+        description: "Failed to establish WebSocket connection - will retry with polling fallback",
+      });
+      lastSocketError = {
+        message: `Connection Error: ${errorMsg}`,
+        timestamp: new Date(),
+      };
+    });
+
+    // Handle reconnection attempts
+    socket.on("reconnect_attempt", () => {
+      console.log("🔄 Attempting to reconnect to Socket.IO...");
+    });
+
+    socket.on("reconnect_failed", () => {
+      const error = "Failed to reconnect after max attempts";
+      console.error("❌", error);
+      lastSocketError = {
+        message: error,
+        timestamp: new Date(),
+      };
     });
   }
 
   return socket;
+}
+
+/**
+ * Get last socket error for diagnostics
+ */
+export function getLastSocketError() {
+  return lastSocketError;
+}
+
+/**
+ * Check if socket is connected
+ */
+export function isSocketConnected() {
+  return socket?.connected ?? false;
 }
 
 /**
