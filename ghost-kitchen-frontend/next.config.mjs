@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Vercel Analytics & Web Vitals
+  // Enable in Vercel dashboard to see real user performance metrics
+  productionBrowserSourceMaps: false, // Disable in production for faster builds
+  
   images: {
     // For newer Next.js versions (using remotePatterns)
     remotePatterns: [

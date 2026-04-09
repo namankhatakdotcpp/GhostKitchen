@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Clock, CheckCircle, Truck, AlertCircle } from "lucide-react";
+import { Clock, CheckCircle, Truck, AlertCircle, Package } from "lucide-react";
+import toast from "react-hot-toast";
 import ReviewForm from "@/components/customer/ReviewForm";
 
 interface OrderItem {
@@ -41,6 +42,7 @@ export default function OrdersPage() {
       setOrders(response.data);
     } catch (error) {
       console.error("Failed to fetch orders:", error);
+      toast.error("Failed to fetch orders. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -74,8 +76,32 @@ export default function OrdersPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Loading your orders...</p>
+      <div className="min-h-screen bg-gray-50 py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
+          <p className="text-gray-600 mb-8">Track your deliveries and leave reviews</p>
+          
+          {/* Loading Skeleton */}
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="h-5 w-5 bg-gray-300 rounded-full"></div>
+                    <div className="flex-1">
+                      <div className="h-4 bg-gray-300 rounded w-32 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-48"></div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="h-4 bg-gray-300 rounded w-24 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-16"></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -87,13 +113,17 @@ export default function OrdersPage() {
         <p className="text-gray-600 mb-8">Track your deliveries and leave reviews</p>
 
         {orders.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-600 mb-4">No orders yet</p>
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No orders yet</h2>
+            <p className="text-gray-600 mb-6">
+              Start ordering delicious food from your favorite restaurants
+            </p>
             <a
               href="/restaurants"
-              className="inline-block px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+              className="inline-block px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium"
             >
-              Start Ordering
+              Browse Restaurants
             </a>
           </div>
         ) : (

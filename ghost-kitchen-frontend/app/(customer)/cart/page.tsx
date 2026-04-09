@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import { useCartStore } from "@/store/cartStore";
 import { useOrderStore } from "@/store/orderStore";
 import { useAuthStore } from "@/store/authStore";
+import { ShoppingCart } from "lucide-react";
 
 /**
  * Cart Page Component
@@ -63,11 +65,13 @@ export default function CartPage() {
    */
   const handleCheckout = async () => {
     if (!items.length) {
-      alert("Cart is empty!");
+      toast.error("Cart is empty!");
       return;
     }
 
     setIsCreatingOrder(true);
+    const loadingToast = toast.loading("Creating your order...");
+    
     try {
       const order = await createOrder();
       
@@ -76,12 +80,14 @@ export default function CartPage() {
         // (backend already cleared it, but clear store too)
         await clearCart();
         
+        toast.success("Order created successfully!", { id: loadingToast });
+        
         // Redirect to order tracking/payment page
         router.push(`/customer/orders/${order.id}`);
       }
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || "Failed to create order";
-      alert(`❌ ${errorMsg}`);
+      toast.error(errorMsg, { id: loadingToast });
     } finally {
       setIsCreatingOrder(false);
     }
@@ -94,18 +100,16 @@ export default function CartPage() {
         <div className="max-w-2xl mx-auto">
           <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
           
-          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-            <div className="mb-6">
-              <div className="text-6xl mb-4">🛒</div>
-              <h2 className="text-2xl font-semibold text-gray-700 mb-2">Your cart is empty</h2>
-              <p className="text-gray-500 mb-6">Add some delicious items to get started!</p>
-            </div>
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <ShoppingCart className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">Your cart is empty</h2>
+            <p className="text-gray-600 mb-6">Add some delicious items to get started!</p>
             
             <Link
-              href="/customer/search"
+              href="/restaurants"
               className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-lg transition-colors"
             >
-              Continue Shopping →
+              Browse Restaurants →
             </Link>
           </div>
         </div>
@@ -130,7 +134,22 @@ export default function CartPage() {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
               {cartLoading ? (
-                <p className="text-center text-gray-500 py-8">Loading cart...</p>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-4 pb-4 border-b border-gray-200 animate-pulse">
+                      <div className="w-20 h-20 bg-gray-300 rounded-lg"></div>
+                      <div className="flex-1">
+                        <div className="h-4 bg-gray-300 rounded w-32 mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-24 mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded w-48"></div>
+                      </div>
+                      <div className="w-20 text-right">
+                        <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                        <div className="h-8 bg-gray-300 rounded"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 items.map((item) => {
                   const price = typeof item.menuItem.price === "string"
