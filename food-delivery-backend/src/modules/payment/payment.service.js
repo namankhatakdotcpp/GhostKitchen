@@ -121,8 +121,9 @@ export const handlePaymentWebhook = async (webhookData) => {
   try {
     // 1️⃣ EXTRACT PAYMENT DATA FROM WEBHOOK
     const orderId = webhookData.order_id;
-    const eventId = webhookData.cf_payment_id || webhookData.order_id; // Use payment ID as event ID
     const paymentStatus = webhookData.payment?.payment_status;
+    // 🔑 IDEMPOTENCY KEY: Include status to distinguish different payment states
+    const eventId = `${webhookData.cf_payment_id}_${paymentStatus}` || webhookData.order_id;
 
     logger.info("Webhook received", {
       orderId,
