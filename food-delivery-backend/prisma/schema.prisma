@@ -33,21 +33,35 @@ enum DiscountType {
 }
 
 model User {
-  id             String       @id @default(uuid())
-  name           String
-  email          String       @unique
-  phone          String?
-  password       String
-  role           Role         @default(CUSTOMER)
-  isAvailable    Boolean      @default(false)
-  currentLat     Float?
-  currentLng     Float?
-  restaurants    Restaurant[] @relation("RestaurantOwner")
-  customerOrders Order[]      @relation("CustomerOrders")
-  deliveryOrders Order[]      @relation("DeliveryOrders")
-  reviews        Review[]
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id              String         @id @default(uuid())
+  name            String
+  email           String         @unique
+  phone           String?
+  password        String
+  role            Role           @default(CUSTOMER)
+  isAvailable     Boolean        @default(false)
+  currentLat      Float?
+  currentLng      Float?
+  restaurants     Restaurant[]   @relation("RestaurantOwner")
+  customerOrders  Order[]        @relation("CustomerOrders")
+  deliveryOrders  Order[]        @relation("DeliveryOrders")
+  reviews         Review[]
+  refreshTokens   RefreshToken[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([email])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
 }
 
 model Restaurant {
