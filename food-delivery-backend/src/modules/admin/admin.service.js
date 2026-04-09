@@ -11,7 +11,7 @@
 import { prisma } from "../../config/prisma.js";
 import { emitOrderUpdate, emitOrderCancelled } from "../../socket/socketEvents.js";
 import { logger } from "../../utils/logger.js";
-import { AppError } from "../../utils/AppError.js";
+import AppError from "../../utils/AppError.js";
 
 /**
  * Get all orders with optional filtering

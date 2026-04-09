@@ -15,7 +15,7 @@
 
 import { cacheIncrement } from "../utils/cache.js";
 import { logger } from "../utils/logger.js";
-import { AppError } from "../utils/AppError.js";
+import AppError from "../utils/AppError.js";
 
 /**
  * Create a rate limiter middleware
