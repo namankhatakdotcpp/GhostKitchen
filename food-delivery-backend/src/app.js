@@ -113,6 +113,22 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * 🔥 RAW BODY FOR WEBHOOK SIGNATURE VERIFICATION
+ * 
+ * IMPORTANT: Must come BEFORE express.json()
+ * Cashfree signature verification needs the raw request body,
+ * not the parsed JSON. The parsed body loses the original formatting.
+ * 
+ * This middleware captures the raw body for /api/payment/webhook
+ * while allowing normal JSON parsing for other routes.
+ */
+app.use("/api/payment/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
+  // Store raw body for signature verification
+  req.rawBody = req.body;
+  next();
+});
+
 // JSON and URL parsers for all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

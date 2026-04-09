@@ -4,10 +4,11 @@ dotenv.config();
 
 // Validate required environment variables for production
 const requiredVars = ["DATABASE_URL", "JWT_SECRET"];
-const paymentVars = ["CASHFREE_APP_ID", "CASHFREE_SECRET_KEY", "CASHFREE_WEBHOOK_SECRET"];
+const paymentVars = ["CASHFREE_APP_ID", "CASHFREE_SECRET_KEY", "CASHFREE_CLIENT_SECRET"];
 
 const isProduction = process.env.NODE_ENV === "production";
-const mustCheck = isProduction ? [...requiredVars, ...paymentVars] : requiredVars;
+// Only require DATABASE_URL and JWT_SECRET in production; payment vars are optional
+const mustCheck = requiredVars;
 
 const missingVars = mustCheck.filter((v) => !process.env[v]);
 
@@ -26,9 +27,9 @@ if (missingVars.length > 0) {
   console.warn("⚠️  Using fallback/default values (not recommended for production)");
 }
 
-// Check payment-specific warnings
+// Check payment-specific warnings (optional in production)
 const missingPaymentVars = paymentVars.filter((v) => !process.env[v]);
-if (missingPaymentVars.length > 0 && !isProduction) {
+if (missingPaymentVars.length > 0) {
   console.warn(
     `⚠️  Payment not configured: ${missingPaymentVars.join(", ")} missing`
   );
@@ -42,7 +43,7 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL || "postgresql://localhost:5432/food_delivery_db",
   CASHFREE_APP_ID: process.env.CASHFREE_APP_ID || "",
   CASHFREE_SECRET_KEY: process.env.CASHFREE_SECRET_KEY || "",
-  CASHFREE_WEBHOOK_SECRET: process.env.CASHFREE_WEBHOOK_SECRET || "",
+  CASHFREE_CLIENT_SECRET: process.env.CASHFREE_CLIENT_SECRET || "",
   CASHFREE_ENV: process.env.CASHFREE_ENV || "TEST",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
   BACKEND_URL: process.env.BACKEND_URL || "http://localhost:5000",

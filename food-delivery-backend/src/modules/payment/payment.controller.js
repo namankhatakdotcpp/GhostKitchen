@@ -96,7 +96,7 @@ export const webhook = async (req, res, next) => {
     const isValid = verifyCashfreeSignature(
       rawBodyString,
       signature,
-      env.CASHFREE_WEBHOOK_SECRET
+      env.CASHFREE_CLIENT_SECRET
     );
 
     if (!isValid) {
@@ -111,17 +111,25 @@ export const webhook = async (req, res, next) => {
     }
 
     // 2️⃣ PARSE WEBHOOK DATA (NOW VERIFIED)
-    // 🔥 GAP 1 FIX: Handle malformed JSON gracefully
+    // The raw body from app.js is a Buffer, so we need to convert it
     let webhookData;
     try {
-      if (typeof req.body === "string") {
-        webhookData = JSON.parse(req.body);
+      let bodyToParse = req.body;
+      
+      // If body is still a Buffer (from express.raw()), convert to string first
+      if (Buffer.isBuffer(bodyToParse)) {
+        bodyToParse = bodyToParse.toString();
+      }
+      
+      // Parse JSON if it's a string
+      if (typeof bodyToParse === "string") {
+        webhookData = JSON.parse(bodyToParse);
       } else {
-        webhookData = req.body;
+        webhookData = bodyToParse;
       }
     } catch (parseErr) {
       logger.error("Malformed JSON in webhook payload", {
-        rawBody: typeof req.body === "string" ? req.body.substring(0, 100) : JSON.stringify(req.body).substring(0, 100),
+        rawBody: typeof req.body === "string" ? req.body.substring(0, 100) : (Buffer.isBuffer(req.body) ? req.body.toString().substring(0, 100) : JSON.stringify(req.body).substring(0, 100)),
         parseError: parseErr.message,
       });
       // Return 200 to acknowledge receipt (prevent Cashfree retries on parse errors)
