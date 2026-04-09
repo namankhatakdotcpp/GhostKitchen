@@ -9,6 +9,11 @@ let socket: Socket | null = null;
  */
 export function getSocket() {
   if (!socket) {
+    // Get token from localStorage for authentication
+    const token = typeof window !== "undefined" 
+      ? localStorage.getItem("accessToken") 
+      : null;
+
     socket = io(
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000",
       {
@@ -20,6 +25,8 @@ export function getSocket() {
         transports: ["websocket", "polling"],
         // Auto-connect disabled - will connect on demand
         autoConnect: false,
+        // JWT Authentication
+        auth: token ? { token } : undefined,
       }
     );
 
@@ -35,6 +42,10 @@ export function getSocket() {
     socket.on("error", (error: any) => {
       console.error("Socket.IO error:", error);
     });
+
+    socket.on("connect_error", (error: any) => {
+      console.error("Socket.IO connection error:", error?.message);
+    });
   }
 
   return socket;
@@ -47,18 +58,18 @@ export function getSocket() {
 export function connectSocket(userId: string, token?: string) {
   const socket = getSocket();
 
-  // Set authentication header
-  socket.auth = token
-    ? { token }
-    : { token: localStorage.getItem("accessToken") };
+  // Update authentication token if provided
+  if (token) {
+    socket.auth = { token };
+  }
 
-  // Connect to server
+  // Reconnect to apply new token if needed
   if (!socket.connected) {
     socket.connect();
   }
 
-  // Join user's private room
-  socket.emit("join_user_room", userId);
+  // Note: User room (user:${userId}) is now automatically joined on server
+  // No need to emit join_user_room - server does it automatically during connection
 }
 
 /**

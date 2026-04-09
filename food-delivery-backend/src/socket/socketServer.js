@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import { logger } from "../utils/logger.js";
+import { verifyAccessToken } from "../utils/jwt.js";
 
 let io;
 
@@ -27,18 +28,69 @@ export const initSocket = (server) => {
   });
 
   /**
+   * JWT Authentication Middleware
+   * Verifies incoming socket connections with access token
+   * Prevents unauthorized access to real-time events
+   */
+  io.use((socket, next) => {
+    try {
+      // Token can come from auth.token (recommended) or as a query parameter
+      const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+      
+      if (!token) {
+        logger.warn("Socket connection rejected: No authentication token", {
+          socketId: socket.id,
+        });
+        return next(new Error("Authentication failed: No token provided"));
+      }
+
+      // Verify the token
+      const decoded = verifyAccessToken(token);
+      
+      // Attach user info to socket for use in event handlers
+      socket.user = {
+        id: decoded.id,
+        email: decoded.email,
+        role: decoded.role,
+      };
+
+      logger.debug("Socket authenticated", {
+        socketId: socket.id,
+        userId: decoded.id,
+        role: decoded.role,
+      });
+
+      next();
+    } catch (error) {
+      logger.warn("Socket connection rejected: Invalid or expired token", {
+        socketId: socket.id,
+        error: error.message,
+      });
+      next(new Error("Authentication failed: Invalid token"));
+    }
+  });
+
+  /**
    * Connection handler
    * Manages user and restaurant room joins
    */
   io.on("connection", (socket) => {
     logger.info("Socket connected", {
       socketId: socket.id,
+      userId: socket.user.id,
       timestamp: new Date(),
+    });
+
+    // Auto-join user to their personal room (no need for frontend emit)
+    socket.join(`user:${socket.user.id}`);
+    logger.debug(`Socket automatically joined user:${socket.user.id}`, {
+      socketId: socket.id,
     });
 
     /**
      * User joins their personal room
      * Format: user:{userId}
+     * Note: This handler kept as fallback for compatibility
      */
     socket.on("join_user_room", (userId) => {
       if (!userId) {
