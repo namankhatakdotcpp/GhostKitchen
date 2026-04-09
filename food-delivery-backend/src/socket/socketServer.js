@@ -1,11 +1,18 @@
 import { Server } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
 import { logger } from "../utils/logger.js";
 import { verifyAccessToken } from "../utils/jwt.js";
+import { redis } from "../config/redis.js";
 
 let io;
 
 /**
  * Initialize Socket.IO server
+ * 
+ * Enables horizontal scaling with Redis adapter:
+ * - Multiple backend instances share socket events
+ * - Pub/Sub through Redis
+ * - Scalable room management
  * 
  * @param {http.Server} server - HTTP server instance
  * @returns {Server} Socket.IO instance
@@ -26,6 +33,26 @@ export const initSocket = (server) => {
     pingInterval: 25000,
     pingTimeout: 20000,
   });
+
+  /**
+   * Redis Adapter for Horizontal Scaling
+   * 
+   * Enables:
+   * - Multiple backend instances (load balancer friendly)
+   * - Cross-instance socket communication
+   * - Shared room management via Redis Pub/Sub
+   * 
+   * WHY important:
+   * - Single instance can only handle ~10k concurrent connections
+   * - With Redis adapter, can scale to 100k+ globally
+   * - All instances share socket state (rooms, subscriptions)
+   */
+  const pubClient = redis;
+  const subClient = redis.duplicate();
+
+  io.adapter(createAdapter(pubClient, subClient));
+
+  logger.info("✓ Socket.IO Redis adapter configured (horizontal scaling enabled)");
 
   /**
    * JWT Authentication Middleware

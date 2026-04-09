@@ -22,15 +22,24 @@ export function getSocket() {
     socket = io(
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000",
       {
+        // ===== PRODUCTION (RENDER) SETTINGS =====
+        // Vercel frontend → Render backend requires credentials for cookies
         withCredentials: true,
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
+        
+        // WebSocket first (faster), polling fallback (more reliable on Render)
+        // IMPORTANT: Render uses dynamic ports, so polling is sometimes needed
         transports: ["websocket", "polling"],
-        // Auto-connect disabled - will connect on demand
+        
+        // Reconnection strategy for Render's variable network conditions
+        reconnection: true,
+        reconnectionDelay: 1000,      // Start waiting 1s between reconnects
+        reconnectionDelayMax: 5000,   // Cap at 5s between attempts
+        reconnectionAttempts: 5,      // Try 5 times before giving up
+        
+        // Auto-connect disabled - will connect on demand to save bandwidth
         autoConnect: false,
-        // JWT Authentication
+        
+        // JWT Authentication - token sent with handshake
         auth: token ? { token } : undefined,
       }
     );

@@ -24,15 +24,22 @@ import AppError from "../../utils/AppError.js";
  * 
  * Secure flag:
  * - Only sent over HTTPS in production
+ * - REQUIRED for cross-origin cookies on deployed apps
  *
  * SameSite:
- * - Prevents CSRF attacks
- * - Lax: Allows cookies for navigation, not for XHR
+ * - Production (cross-origin): "none" allows cross-domain cookies
+ * - Development: "lax" for same-origin testing
+ * - "none" REQUIRES secure: true
+ * 
+ * CRITICAL FOR RENDER + VERCEL:
+ * - Vercel (frontend) ≠ Render (backend) = cross-origin
+ * - Without sameSite="none", cookies WON'T be sent
+ * - Without secure=true, sameSite="none" is ignored
  */
 const COOKIE_CONFIG = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production", // HTTPS only in production
-  sameSite: "lax", // CSRF protection
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // CRITICAL: "none" for cross-origin
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: "/",
 };
@@ -132,11 +139,11 @@ export const logout = async (req, res, next) => {
 
     await logoutUser(req.user.userId, refreshToken);
 
-    // Clear refresh token cookie
+    // Clear refresh token cookie (must match COOKIE_CONFIG for proper clearing)
     res.clearCookie("refreshToken", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       path: "/",
     });
 

@@ -13,7 +13,7 @@
 import cors from "cors";
 import express from "express";
 import cookieParser from "cookie-parser";
-import rateLimit from "express-rate-limit";
+import compression from "compression";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { logger, httpLogger } from "./utils/logger.js";
@@ -23,9 +23,13 @@ import orderRoutes from "./modules/order/order.routes.js";
 import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
 import paymentRoutes from "./modules/payment/payment.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
+import reviewRoutes from "./modules/review/review.routes.js";
+import couponRoutes from "./modules/coupon/coupon.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
+import { generalLimiter, authLimiter, paymentLimiter } from "./middlewares/rateLimiter.js";
+import { redisHealthCheck } from "./config/redis.js";
 
 const app = express();
 
@@ -47,15 +51,17 @@ app.use(requestTracingMiddleware);
  * WHY specific origins in production:
  * - Prevents any origin from accessing cookies
  * - Security measure against CSRF
+ * 
+ * RENDER + VERCEL SETUP:
+ * - Frontend: Vercel (CORS_ORIGIN env var)
+ * - Backend: Render
+ * - Both have different domains → credentials: true required
  */
 const corsOptions = {
   origin: process.env.NODE_ENV === "production"
-    ? [
-        "https://ghostkitchen.vercel.app",
-        "https://www.ghostkitchen.vercel.app",
-      ]
+    ? (process.env.FRONTEND_URL || "").split(",").map(url => url.trim()).filter(Boolean)
     : ["http://localhost:3000", "http://localhost:3001"],
-  credentials: true, // Allow cookies
+  credentials: true, // Allow cookies (CRITICAL for cross-origin)
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -63,41 +69,35 @@ const corsOptions = {
     "X-Access-Token",
     "X-Refresh-Token",
   ],
-  maxAge: 86400, // 24  hours
+  maxAge: 86400, // 24 hours
 };
 
 app.use(cors(corsOptions));
 
 /**
- * Rate Limiting
+ * Rate Limiting (Redis-based)
  * 
- * WHY important:
- * - Prevents brute force attacks (password guessing)
- * - Prevents DDoS attacks (too many requests)
- * - Protects API costs (limits spam)
+ * Benefits over express-rate-limit:
+ * - Distributed across multiple instances (via Redis)
+ * - Automatic TTL expiration
+ * - Better performance
+ * - Consistent across replicas
  * 
  * Configuration:
- * - 15-minute window
- * - Max 100 requests per IP
- * - Auth endpoints stricter (20 requests in 15 min)
+ * - General: 100 requests per 15 minutes
+ * - Auth: 20 requests per 15 minutes
+ * - Payment: 5 requests per 1 minute
  */
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: "Too many requests from this IP, please try again later",
-  standardHeaders: true, // Return rate limit info in the RateLimit-* headers
-  legacyHeaders: false, // Disable the X-RateLimit-* headers
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // Stricter limit for auth routes (5 login/register attempts)
-  message: "Too many login attempts, please try again later",
-  skipSuccessfulRequests: true, // Don't count successful requests
-});
-
-// Apply general rate limiter to all routes
 app.use(generalLimiter);
+
+/**
+ * GZIP Compression (Production Performance)
+ * 
+ * Reduces response size by 70-80% for JSON/HTML
+ * Critical for Render deployment where bandwidth matters
+ * Automatically detected by browsers via Accept-Encoding
+ */
+app.use(compression({ level: 6 })); // level 6 = good balance between speed and compression
 
 /**
  * Request Logging
@@ -118,6 +118,20 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser()); // Parse cookies
 
+/**
+ * Cache Control Headers (Production Performance)
+ * 
+ * Reduces bandwidth and improves response times
+ * Different cache times for different endpoint types
+ */
+app.use((req, res, next) => {
+  // API responses: short cache (60 seconds)
+  if (req.path.startsWith("/api/")) {
+    res.set("Cache-Control", "public, max-age=60, must-revalidate");
+  }
+  next();
+});
+
 // Apply stricter rate limiter to auth routes
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
@@ -127,12 +141,24 @@ app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
 
-app.get("/health", (req, res) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    environment: env.NODE_ENV,
-  });
+app.get("/health", async (req, res) => {
+  try {
+    const redisStatus = await redisHealthCheck();
+    res.json({
+      status: "OK",
+      timestamp: new Date().toISOString(),
+      environment: env.NODE_ENV,
+      redis: redisStatus,
+    });
+  } catch (error) {
+    logger.error("Health check failed:", error);
+    res.status(503).json({
+      status: "UNHEALTHY",
+      timestamp: new Date().toISOString(),
+      environment: env.NODE_ENV,
+      error: error.message,
+    });
+  }
 });
 
 // Debug endpoint
@@ -162,11 +188,20 @@ app.get("/seed", async (req, res, next) => {
 });
 
 // API Routes
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
 app.use("/api/auth", authRoutes);
+
 app.use("/api/cart", cartRoutes);
 app.use("/api/restaurants", restaurantRoutes);
 app.use("/api/orders", orderRoutes);
+
+app.use("/api/payments/webhook", paymentLimiter); // Stricter for payment endpoint
+app.use("/api/payments", paymentLimiter);
 app.use("/api/payments", paymentRoutes);
+
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/coupons", couponRoutes);
 app.use("/api/admin", adminRoutes);
 
 // 404 handler
