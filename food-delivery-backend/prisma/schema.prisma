@@ -134,7 +134,11 @@ model Order {
   orderItems OrderItem[]
   review     Review?
 
+  // User-specific queries
   @@index([userId, status])
+  // Cron job query for expired orders: status=PENDING, paymentStatus=PENDING, createdAt < timeout
+  @@index([status, paymentStatus, createdAt])
+  // General timestamp queries
   @@index([createdAt])
 }
 
