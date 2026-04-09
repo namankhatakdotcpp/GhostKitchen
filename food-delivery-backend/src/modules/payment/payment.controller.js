@@ -179,6 +179,7 @@ export const verifyPayment = async (req, res, next) => {
 export const retryPayment = async (req, res, next) => {
   try {
     const { orderId } = req.params;
+    const userId = req.user.id;
 
     if (!orderId) {
       return res.status(400).json({
@@ -193,16 +194,34 @@ export const retryPayment = async (req, res, next) => {
     });
 
     if (!order) {
+      logger.warn("Retry payment attempted on non-existent order", {
+        orderId,
+        userId,
+        timestamp: new Date(),
+      });
       throw new AppError("Order not found", 404);
     }
 
-    // 2️⃣ VERIFY USER OWNS ORDER
-    if (order.userId !== req.user.id) {
+    // 2️⃣ VERIFY USER OWNS ORDER (CRITICAL: Prevent customers from retrying other users' orders)
+    if (order.userId !== userId) {
+      logger.error("Unauthorized payment retry attempt", {
+        orderId,
+        requestedBy: userId,
+        orderOwner: order.userId,
+        timestamp: new Date(),
+        severity: "CRITICAL",
+      });
       throw new AppError("Unauthorized to retry payment for this order", 403);
     }
 
     // 3️⃣ CHECK IF PAYMENT CAN BE RETRIED
     if (order.paymentStatus !== "FAILED") {
+      logger.warn("Retry payment attempted on non-failed order", {
+        orderId,
+        userId,
+        currentPaymentStatus: order.paymentStatus,
+        currentOrderStatus: order.status,
+      });
       return res.status(400).json({
         success: false,
         message: `Cannot retry payment. Current status: ${order.paymentStatus}`,
@@ -215,10 +234,13 @@ export const retryPayment = async (req, res, next) => {
       req.user
     );
 
-    logger.info("Payment retry initiated", {
+    logger.info("Payment retry initiated successfully", {
       orderId,
-      userId: req.user.id,
-      previousStatus: "FAILED",
+      userId,
+      amount: order.totalAmount,
+      previousPaymentStatus: "FAILED",
+      newSessionId: session.payment_session_id,
+      timestamp: new Date(),
     });
 
     res.json({
