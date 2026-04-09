@@ -4,10 +4,15 @@
  * Centralized event emission for order updates
  * Called from services (not controllers)
  * 
- * Events:
- * - order:new - New order created
- * - order:update - Order status changed
- * - order:cancelled - Order cancelled
+ * VERSIONED EVENTS:
+ * - order:new:v1 - New order created
+ * - order:update:v1 - Order status changed
+ * - order:cancelled:v1 - Order cancelled
+ * - order:notification:v1 - Live notifications
+ * 
+ * Events use semantic versioning (v1, v2, etc.) for backward compatibility.
+ * This allows future schema changes without breaking existing clients.
+ * Clients can listen to specific versions or implement version fallback logic.
  */
 
 import { emitToUserRoom, emitToRestaurantRoom, emitToDeliveryRoom } from "./socketServer.js";
@@ -15,9 +20,10 @@ import { logger } from "../utils/logger.js";
 
 /**
  * Emit when new order is created
+ * Event: order:new:v1
  * Broadcast to:
- * - Restaurant staff (order:new event)
- * - User (order:new event)
+ * - Restaurant staff
+ * - Customer
  */
 export const emitNewOrder = (order) => {
   try {
@@ -34,21 +40,21 @@ export const emitNewOrder = (order) => {
 
     // Notify restaurant about new order
     if (order.restaurantId) {
-      emitToRestaurantRoom(order.restaurantId, "order:new", orderData);
+      emitToRestaurantRoom(order.restaurantId, "order:new:v1", orderData);
     }
 
     // Notify customer about their order
     if (order.userId) {
-      emitToUserRoom(order.userId, "order:new", orderData);
+      emitToUserRoom(order.userId, "order:new:v1", orderData);
     }
 
-    logger.info("Emitted order:new event", {
+    logger.info("Emitted order:new:v1 event", {
       orderId: order.id,
       userId: order.userId,
       restaurantId: order.restaurantId,
     });
   } catch (error) {
-    logger.error("Failed to emit order:new event", {
+    logger.error("Failed to emit order:new:v1 event", {
       orderId: order.id,
       error: error.message,
     });
@@ -57,10 +63,11 @@ export const emitNewOrder = (order) => {
 
 /**
  * Emit when order status is updated
+ * Event: order:update:v1
  * Broadcast to:
- * - User (order:update event)
- * - Restaurant staff (order:update event)
- * - Delivery partner (order:update event)
+ * - Customer
+ * - Restaurant staff
+ * - Delivery partner
  */
 export const emitOrderUpdate = (order) => {
   try {
@@ -78,20 +85,20 @@ export const emitOrderUpdate = (order) => {
 
     // Notify customer about status change
     if (order.userId) {
-      emitToUserRoom(order.userId, "order:update", orderData);
+      emitToUserRoom(order.userId, "order:update:v1", orderData);
     }
 
     // Notify restaurant about status change
     if (order.restaurantId) {
-      emitToRestaurantRoom(order.restaurantId, "order:update", orderData);
+      emitToRestaurantRoom(order.restaurantId, "order:update:v1", orderData);
     }
 
     // Notify delivery partner if assigned
     if (order.deliveryUserId) {
-      emitToDeliveryRoom(order.deliveryUserId, "order:update", orderData);
+      emitToDeliveryRoom(order.deliveryUserId, "order:update:v1", orderData);
     }
 
-    logger.info("Emitted order:update event", {
+    logger.info("Emitted order:update:v1 event", {
       orderId: order.id,
       newStatus: order.status,
       userId: order.userId,
@@ -99,7 +106,7 @@ export const emitOrderUpdate = (order) => {
       deliveryUserId: order.deliveryUserId,
     });
   } catch (error) {
-    logger.error("Failed to emit order:update event", {
+    logger.error("Failed to emit order:update:v1 event", {
       orderId: order.id,
       error: error.message,
     });
@@ -108,6 +115,7 @@ export const emitOrderUpdate = (order) => {
 
 /**
  * Emit when order is cancelled
+ * Event: order:cancelled:v1
  * Broadcast to all related parties
  */
 export const emitOrderCancelled = (order, reason = "Unknown") => {
@@ -123,27 +131,27 @@ export const emitOrderCancelled = (order, reason = "Unknown") => {
 
     // Notify customer
     if (order.userId) {
-      emitToUserRoom(order.userId, "order:cancelled", orderData);
+      emitToUserRoom(order.userId, "order:cancelled:v1", orderData);
     }
 
     // Notify restaurant
     if (order.restaurantId) {
-      emitToRestaurantRoom(order.restaurantId, "order:cancelled", orderData);
+      emitToRestaurantRoom(order.restaurantId, "order:cancelled:v1", orderData);
     }
 
     // Notify delivery partner
     if (order.deliveryUserId) {
-      emitToDeliveryRoom(order.deliveryUserId, "order:cancelled", orderData);
+      emitToDeliveryRoom(order.deliveryUserId, "order:cancelled:v1", orderData);
     }
 
-    logger.warn("Emitted order:cancelled event", {
+    logger.warn("Emitted order:cancelled:v1 event", {
       orderId: order.id,
       userId: order.userId,
       restaurantId: order.restaurantId,
       reason,
     });
   } catch (error) {
-    logger.error("Failed to emit order:cancelled event", {
+    logger.error("Failed to emit order:cancelled:v1 event", {
       orderId: order.id,
       error: error.message,
     });
@@ -151,21 +159,22 @@ export const emitOrderCancelled = (order, reason = "Unknown") => {
 };
 
 /**
- * Emit typing indicator (for live notifications)
+ * Emit live notifications
+ * Event: order:notification:v1
  */
 export const emitTypingIndicator = (restaurantId, message) => {
   try {
-    emitToRestaurantRoom(restaurantId, "order:notification", {
+    emitToRestaurantRoom(restaurantId, "order:notification:v1", {
       type: "notification",
       message,
       timestamp: new Date(),
     });
 
-    logger.debug(`Emitted notification to restaurant:${restaurantId}`, {
+    logger.debug(`Emitted order:notification:v1 to restaurant:${restaurantId}`, {
       message,
     });
   } catch (error) {
-    logger.error("Failed to emit notification", {
+    logger.error("Failed to emit order:notification:v1", {
       restaurantId,
       error: error.message,
     });
