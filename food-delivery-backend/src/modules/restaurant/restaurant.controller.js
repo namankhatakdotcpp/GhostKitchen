@@ -83,9 +83,6 @@ export const getRestaurant = async (req, res) => {
     });
   }
 };
-    });
-  }
-};
 
 export const getMenu = async (req, res) => {
   try {
