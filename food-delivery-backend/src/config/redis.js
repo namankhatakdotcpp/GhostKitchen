@@ -1,86 +1,68 @@
-/**
- * Redis Configuration
- * 
- * Handles:
- * - Connection pooling
- * - Error handling
- * - Pub/Sub for Socket.IO distribution
- * - Generic caching layer
- * 
- * WHY Redis:
- * - Session storage (faster than DB)
- * - Pub/Sub for Socket.IO adapter (horizontal scaling)
- * - Cache layer (reduce DB queries)
- * - Queue backend (BullMQ)
- */
-
 import Redis from "ioredis";
 import { logger } from "../utils/logger.js";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+const isUpstash = REDIS_URL.includes("upstash");
+
+const tlsOptions = isUpstash ? { tls: { rejectUnauthorized: false } } : {};
 
 export const redis = new Redis(REDIS_URL, {
-  enableReadyCheck: false,
-  enableOfflineQueue: false,
+  ...tlsOptions,
+  enableOfflineQueue: true,
   maxRetriesPerRequest: null,
-  // Connection pooling
+  lazyConnect: true,
   retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-  // Reconnection behavior
-  reconnectOnError: (err) => {
-    const targetError = "READONLY";
-    if (err.message.includes(targetError)) {
-      return true;
+    if (times > 5) {
+      logger.warn("Redis retry limit reached. Falling back.");
+      return null;
     }
-    return false;
+    return Math.min(times * 100, 2000);
+  },
+  reconnectOnError: (err) => {
+    return err.message.includes("READONLY");
   },
 });
 
-// Event handlers
-redis.on("connect", () => {
-  logger.info("✓ Redis connected successfully");
-});
+redis.on("connect", () => logger.info("✓ Redis connected successfully"));
+redis.on("error", (err) => logger.error("❌ Redis connection error", { error: err.message }));
+redis.on("close", () => logger.warn("⚠ Redis connection closed"));
+redis.on("reconnecting", () => logger.debug("🔄 Redis attempting to reconnect"));
 
-redis.on("error", (err) => {
-  logger.error("❌ Redis connection error", {
-    error: err.message,
-    code: err.code,
-  });
-});
+let isRedisReady = false;
 
-redis.on("close", () => {
-  logger.warn("⚠ Redis connection closed");
-});
+export const connectRedis = async () => {
+  try {
+    await redis.connect();
+    await redis.ping();
+    isRedisReady = true;
+  } catch (error) {
+    logger.error("❌ Redis initialization failed. Running in fallback mode.", { error: error.message });
+    isRedisReady = false;
+  }
+};
 
-redis.on("reconnecting", () => {
-  logger.debug("🔄 Redis attempting to reconnect");
-});
+export const getRedis = () => {
+  return isRedisReady && redis.status === "ready" ? redis : null;
+};
 
-/**
- * Health check for Redis
- * Used in /health endpoint
- */
 export const redisHealthCheck = async () => {
+  if (!getRedis()) return { status: "unhealthy", message: "Redis not connected or fallback mode active" };
   try {
     await redis.ping();
-    return { status: "healthy", message: "Redis connected" };
+    return { status: "healthy", message: "Redis ready" };
   } catch (error) {
     return { status: "unhealthy", message: error.message };
   }
 };
 
-/**
- * Graceful shutdown
- * Called when server is shutting down
- */
 export const redisShutdown = async () => {
   try {
-    await redis.quit();
-    logger.info("✓ Redis connection closed gracefully");
+    if (redis.status === "ready") {
+      await redis.quit();
+      logger.info("✓ Redis closed gracefully");
+    }
   } catch (error) {
-    logger.error("Error closing Redis connection", { error: error.message });
+    logger.error("Error closing Redis", { error: error.message });
   }
 };
 
