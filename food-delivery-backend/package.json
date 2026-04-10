@@ -17,6 +17,7 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@socket.io/redis-adapter": "^8.2.1",
+    "@upstash/redis": "^1.37.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^4.11.4",
     "cashfree-pg": "^5.1.0",
