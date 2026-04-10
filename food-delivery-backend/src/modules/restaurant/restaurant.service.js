@@ -9,88 +9,20 @@ export const getRestaurants = async (
   page = 1,
   limit = 12
 ) => {
-  const where = {};
-
-  if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { cuisines: { has: search } },
-    ];
-  }
-
-  // City filtering via JSON is complex; skipping for now or implement raw SQL
-  // if (city) {
-  //   where.AND = [
-  //     { address: { path: ["city"], string_contains: city } },
-  //   ];
-  // }
-
-  if (minRating !== undefined) {
-    where.rating = { gte: parseFloat(minRating) };
-  }
-
-  const skip = (page - 1) * limit;
-
   try {
-    const cacheKey = "restaurants:all";
-    
-    // Try to get from cache
-    let cached = null;
-    try {
-      cached = await redis.get(cacheKey);
-      if (cached) {
-        console.log("⚡ CACHE HIT: restaurants:all");
-        return cached;
-      }
-    } catch (redisError) {
-      console.warn("[Cache] Redis read error:", redisError.message);
-      // Continue with DB query if cache fails
-    }
+    console.log("PARAMS:", { search, city, page, limit });
 
-    const [restaurants, total] = await Promise.all([
-      prisma.restaurant.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          owner: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.restaurant.count({ where }),
-    ]);
+    const restaurants = await prisma.restaurant.findMany({
+      take: limit,
+      skip: (page - 1) * limit,
+    });
 
-    const formatted = restaurants.map(r => ({
-      ...r,
-      name: r.name || r.title,
-      cuisines: r.cuisines || r.category || [],
-      rating: r.rating ?? 0,
-      image: r.imageUrl || r.image || null,
-      imageUrl: r.imageUrl || r.image || null,
-    }));
+    console.log("DB RESULT:", restaurants);
 
-    const pages = Math.ceil(total / limit);
-
-    const result = {
-      restaurants: formatted || [],
-      total: total || 0,
-      page,
-      pages,
+    return {
+      restaurants: restaurants || [],
+      pagination: { page, limit }
     };
-
-    // Cache only for default list (no filters)
-    if (!search && !city && !minRating && page === 1) {
-      try {
-        await redis.set(cacheKey, result, { ex: 120 });
-      } catch (redisError) {
-        console.warn("[Cache] Redis write error:", redisError.message);
-        // Still return data even if cache write fails
-      }
-    }
-
-    return result;
   } catch (error) {
     console.error("❌ getRestaurants DB error:", error.message);
     throw error;

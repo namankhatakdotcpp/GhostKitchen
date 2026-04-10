@@ -51,6 +51,7 @@ async function seed() {
     data: {
       id: uuidv4(),
       name: 'Pizzeria Delight',
+      slug: 'pizzeria-delight',
       ownerId: owner1.id,
       description: 'Authentic Italian pizzas with fresh ingredients',
       cuisines: ['Italian', 'Pizza'],
@@ -75,6 +76,7 @@ async function seed() {
     data: {
       id: uuidv4(),
       name: 'Burger Barn',
+      slug: 'burger-barn',
       ownerId: owner2.id,
       description: 'Juicy burgers and crispy fries',
       cuisines: ['American', 'Fast Food'],
@@ -99,6 +101,7 @@ async function seed() {
     data: {
       id: uuidv4(),
       name: 'Curry House',
+      slug: 'curry-house',
       ownerId: owner3.id,
       description: 'Authentic Indian cuisine with traditional recipes',
       cuisines: ['Indian', 'North Indian', 'South Indian'],

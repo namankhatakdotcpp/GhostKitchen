@@ -31,8 +31,10 @@ export default function RestaurantsPage() {
     try {
       setLoading(true);
       const response = await api.get("/restaurants");
-      setRestaurants(response.data);
-      setFilteredRestaurants(response.data);
+      const data = response.data?.data?.restaurants || response.data?.data || response.data;
+      const restaurantsList = Array.isArray(data) ? data : (data.restaurants || []);
+      setRestaurants(restaurantsList);
+      setFilteredRestaurants(restaurantsList);
     } catch (error) {
       console.error("Failed to fetch restaurants:", error);
     } finally {

@@ -1,5 +1,4 @@
 import axios, { AxiosError } from "axios";
-import { getSession } from "next-auth/react";
 
 import type { ApiErrorPayload } from "@/types";
 
@@ -8,7 +7,7 @@ type ApiErrorResponse = {
   code?: number;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+const API_BASE = "https://ghostkitchen.onrender.com/api";
 
 // Debug logging
 if (typeof window !== "undefined") {
@@ -21,6 +20,7 @@ export const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  withCredentials: true,
 });
 
 api.interceptors.request.use(async (config) => {
@@ -31,9 +31,12 @@ api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     console.log("📤 API Request:", url);
   }
-  const session = await getSession();
-  const accessToken = (session as { accessToken?: string } | null)
-    ?.accessToken;
+  
+  let accessToken;
+  if (typeof window !== "undefined") {
+    const { useAuthStore } = require("@/store/authStore");
+    accessToken = useAuthStore.getState().accessToken;
+  }
 
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;

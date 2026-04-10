@@ -59,9 +59,8 @@ app.use(requestTracingMiddleware);
  */
 const corsOptions = {
   origin: [
-    "https://ghost-kitchen-mw4mnfcmo-namans-projects-dfbad539.vercel.app", 
-    "http://localhost:3000", 
-    "http://localhost:3001"
+    "http://localhost:3000",
+    "https://ghost-kitchen-three.vercel.app"
   ],
   credentials: true, // Allow cookies (CRITICAL for cross-origin)
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -238,6 +237,15 @@ app.use((req, res) => {
 
 // Global error handler (MUST be last)
 app.use(globalErrorHandler);
+
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal Server Error"
+  });
+});
 
 export default app;
 

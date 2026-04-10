@@ -28,15 +28,12 @@ export const listRestaurants = async (req, res) => {
 
     const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit));
 
-    console.log(`✅ Found ${result.restaurants?.length || 0} restaurants`);
-    return res.status(200).json(result);
+    console.log(`✅ Found ${result?.restaurants?.length || 0} restaurants`);
+    return res.json({ success: true, data: result });
   } catch (error) {
-    console.error("❌ Error listing restaurants:", {
-      message: error?.message,
-      code: error?.code,
-      stack: error?.stack,
-    });
+    console.error("ERROR:", error);
     return res.status(500).json({
+      success: false,
       message: "Failed to fetch restaurants",
       error: process.env.NODE_ENV === "development" ? error?.message : undefined,
     });
