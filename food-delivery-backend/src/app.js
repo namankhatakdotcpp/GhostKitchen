@@ -58,9 +58,11 @@ app.use(requestTracingMiddleware);
  * - Both have different domains → credentials: true required
  */
 const corsOptions = {
-  origin: process.env.NODE_ENV === "production"
-    ? (process.env.FRONTEND_URL || "").split(",").map(url => url.trim()).filter(Boolean)
-    : ["http://localhost:3000", "http://localhost:3001"],
+  origin: [
+    "https://ghost-kitchen-mw4mnfcmo-namans-projects-dfbad539.vercel.app", 
+    "http://localhost:3000", 
+    "http://localhost:3001"
+  ],
   credentials: true, // Allow cookies (CRITICAL for cross-origin)
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: [
