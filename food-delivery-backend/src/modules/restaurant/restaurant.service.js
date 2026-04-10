@@ -33,8 +33,19 @@ export const getRestaurants = async (
 
   try {
     const cacheKey = "restaurants:all";
-    const cached = await redis.get(cacheKey);
-    if (cached) return cached;
+    
+    // Try to get from cache
+    let cached = null;
+    try {
+      cached = await redis.get(cacheKey);
+      if (cached) {
+        console.log("⚡ CACHE HIT: restaurants:all");
+        return cached;
+      }
+    } catch (redisError) {
+      console.warn("[Cache] Redis read error:", redisError.message);
+      // Continue with DB query if cache fails
+    }
 
     const [restaurants, total] = await Promise.all([
       prisma.restaurant.findMany({
@@ -69,8 +80,14 @@ export const getRestaurants = async (
       pages,
     };
 
+    // Cache only for default list (no filters)
     if (!search && !city && !minRating && page === 1) {
-      await redis.set(cacheKey, result, { ex: 120 });
+      try {
+        await redis.set(cacheKey, result, { ex: 120 });
+      } catch (redisError) {
+        console.warn("[Cache] Redis write error:", redisError.message);
+        // Still return data even if cache write fails
+      }
     }
 
     return result;
@@ -113,13 +130,23 @@ export const getRestaurantById = async (param) => {
 };
 
 export const getRestaurantWithCache = async (param) => {
-  const cacheKey = `restaurant:${param}`;
+  // Normalize cache key to prevent collision between ID and slug lookups
+  const normalizedKey = isNaN(Number(param))
+    ? `slug:${param}`
+    : `id:${param}`;
+  const cacheKey = `restaurant:${normalizedKey}`;
 
-  // 1. CHECK CACHE
-  const cached = await redis.get(cacheKey);
-  if (cached) {
-    console.log("⚡ CACHE HIT:", cacheKey);
-    return cached;
+  // 1. CHECK CACHE WITH ERROR HANDLING
+  let cached = null;
+  try {
+    cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("⚡ CACHE HIT:", cacheKey);
+      return cached;
+    }
+  } catch (redisError) {
+    console.warn("[Cache] Redis read failed:", redisError.message);
+    // Continue with DB query if cache fails
   }
 
   console.log("🐢 CACHE MISS:", cacheKey);
@@ -127,11 +154,6 @@ export const getRestaurantWithCache = async (param) => {
   const conditions = [];
 
   if (!isNaN(Number(param))) {
-    // Only push if UUID fallback works or it's genuinely a digit ID
-    // We kept string for id so we push it directly if it matches our general assumption
-    conditions.push({ id: param });
-  } else {
-    // Push anyway if param is a string UUID
     conditions.push({ id: param });
   }
 
@@ -161,9 +183,10 @@ export const getRestaurantWithCache = async (param) => {
   const formatted = {
     id: restaurant.id,
     name: restaurant.name,
+    slug: restaurant.slug,
     cuisines: restaurant.cuisines,
     rating: restaurant.rating ?? 0,
-    image: restaurant.imageUrl ?? null,
+    imageUrl: restaurant.imageUrl,
     menu: restaurant.menuItems ?? [],
     ownerId: restaurant.ownerId,
     address: restaurant.address,
@@ -171,10 +194,27 @@ export const getRestaurantWithCache = async (param) => {
     deliveryRadius: restaurant.deliveryRadius,
   };
 
-  // 2. STORE CACHE
-  await redis.set(cacheKey, formatted, { ex: 60 });
+  // 2. CACHE RESULT WITH ERROR HANDLING
+  try {
+    await redis.set(cacheKey, formatted, { ex: 60 });
+  } catch (redisError) {
+    console.warn("[Cache] Redis write failed:", redisError.message);
+    // Still return data even if cache write fails
+  }
 
   return formatted;
+};
+
+// CACHE INVALIDATION helper
+const invalidateRestaurantCache = async (id, slug) => {
+  try {
+    if (id) await redis.del(`restaurant:id:${id}`);
+    if (slug) await redis.del(`restaurant:slug:${slug}`);
+    await redis.del("restaurants:all");
+  } catch (redisError) {
+    console.warn("[Cache] Invalidation failed:", redisError.message);
+    // Don't crash if cache invalidation fails
+  }
 };
 
 export const getRestaurantMenu = async (id, isOwner = false) => {
@@ -238,6 +278,9 @@ export const createRestaurant = async (data, ownerId) => {
 };
 
 export const updateRestaurant = async (id, data) => {
+  // Fetch current restaurant to get slug
+  const current = await prisma.restaurant.findUnique({ where: { id }, select: { slug: true } });
+
   const updateData = {};
 
   if (data.name !== undefined) {
@@ -273,7 +316,7 @@ export const updateRestaurant = async (id, data) => {
     updateData.address = address;
   }
 
-  return prisma.restaurant.update({
+  const updated = await prisma.restaurant.update({
     where: { id },
     data: updateData,
     include: {
@@ -282,15 +325,22 @@ export const updateRestaurant = async (id, data) => {
       },
     },
   });
+
+  // Invalidate cache for both old and new slug
+  await invalidateRestaurantCache(id, current?.slug || updateData.slug);
+
+  return updated;
 };
 
 export const toggleRestaurantStatus = async (id) => {
   const restaurant = await prisma.restaurant.findUnique({
     where: { id },
-    select: { isOpen: true },
+    select: { isOpen: true, slug: true },
   });
 
-  return prisma.restaurant.update({
+  if (!restaurant) return null;
+
+  const updated = await prisma.restaurant.update({
     where: { id },
     data: { isOpen: !restaurant.isOpen },
     include: {
@@ -299,6 +349,11 @@ export const toggleRestaurantStatus = async (id) => {
       },
     },
   });
+
+  // Invalidate cache
+  await invalidateRestaurantCache(id, restaurant.slug);
+
+  return updated;
 };
 
 export const addMenuItem = async (restaurantId, data) => {
