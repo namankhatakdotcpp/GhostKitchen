@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import { redis } from "../../lib/redis.js";
 
 export const getRestaurants = async (
   search,
@@ -31,6 +32,10 @@ export const getRestaurants = async (
   const skip = (page - 1) * limit;
 
   try {
+    const cacheKey = "restaurants:all";
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached;
+
     const [restaurants, total] = await Promise.all([
       prisma.restaurant.findMany({
         where,
@@ -46,34 +51,130 @@ export const getRestaurants = async (
       prisma.restaurant.count({ where }),
     ]);
 
+    const formatted = restaurants.map(r => ({
+      ...r,
+      name: r.name || r.title,
+      cuisines: r.cuisines || r.category || [],
+      rating: r.rating ?? 0,
+      image: r.imageUrl || r.image || null,
+      imageUrl: r.imageUrl || r.image || null,
+    }));
+
     const pages = Math.ceil(total / limit);
 
-    return {
-      restaurants: restaurants || [],
+    const result = {
+      restaurants: formatted || [],
       total: total || 0,
       page,
       pages,
     };
+
+    if (!search && !city && !minRating && page === 1) {
+      await redis.set(cacheKey, result, { ex: 120 });
+    }
+
+    return result;
   } catch (error) {
     console.error("❌ getRestaurants DB error:", error.message);
     throw error;
   }
 };
 
-export const getRestaurantById = async (id) => {
-  return prisma.restaurant.findUnique({
-    where: { id },
+export const getRestaurantById = async (param) => {
+  // Build conditions array to avoid NaN issues
+  const conditions = [];
+
+  // Only add numeric ID condition if param is a valid number
+  if (!isNaN(Number(param)) && param !== "") {
+    conditions.push({ id: Number(param) });
+  }
+
+  // Always try slug lookup (more reliable)
+  conditions.push({ slug: param });
+
+  // If no conditions, return null
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  return await prisma.restaurant.findFirst({
+    where: {
+      OR: conditions,
+    },
     include: {
       owner: {
         select: { id: true, name: true, email: true, phone: true },
       },
-      reviews: {
-        select: { id: true, rating: true, comment: true, createdAt: true },
-        take: 10,
-        orderBy: { createdAt: "desc" },
+      menuItems: {
+        orderBy: { category: "asc" },
       },
     },
   });
+};
+
+export const getRestaurantWithCache = async (param) => {
+  const cacheKey = `restaurant:${param}`;
+
+  // 1. CHECK CACHE
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    console.log("⚡ CACHE HIT:", cacheKey);
+    return cached;
+  }
+
+  console.log("🐢 CACHE MISS:", cacheKey);
+
+  const conditions = [];
+
+  if (!isNaN(Number(param))) {
+    // Only push if UUID fallback works or it's genuinely a digit ID
+    // We kept string for id so we push it directly if it matches our general assumption
+    conditions.push({ id: param });
+  } else {
+    // Push anyway if param is a string UUID
+    conditions.push({ id: param });
+  }
+
+  conditions.push({ slug: param });
+
+  const restaurant = await prisma.restaurant.findFirst({
+    where: { OR: conditions },
+    include: {
+      menuItems: {
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          description: true,
+          category: true,
+          imageUrl: true,
+          isVeg: true,
+          isAvailable: true,
+          isBestseller: true,
+        },
+      },
+    },
+  });
+
+  if (!restaurant) return null;
+
+  const formatted = {
+    id: restaurant.id,
+    name: restaurant.name,
+    cuisines: restaurant.cuisines,
+    rating: restaurant.rating ?? 0,
+    image: restaurant.imageUrl ?? null,
+    menu: restaurant.menuItems ?? [],
+    ownerId: restaurant.ownerId,
+    address: restaurant.address,
+    isOpen: restaurant.isOpen,
+    deliveryRadius: restaurant.deliveryRadius,
+  };
+
+  // 2. STORE CACHE
+  await redis.set(cacheKey, formatted, { ex: 60 });
+
+  return formatted;
 };
 
 export const getRestaurantMenu = async (id, isOwner = false) => {
@@ -103,9 +204,19 @@ export const getRestaurantMenu = async (id, isOwner = false) => {
 };
 
 export const createRestaurant = async (data, ownerId) => {
+  // Generate slug from restaurant name
+  const slug = data.name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "") // Remove special characters
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .slice(0, 50); // Limit slug length
+
   return prisma.restaurant.create({
     data: {
       name: data.name,
+      slug,
       description: data.description || "",
       cuisines: data.cuisines,
       ownerId,
@@ -129,7 +240,19 @@ export const createRestaurant = async (data, ownerId) => {
 export const updateRestaurant = async (id, data) => {
   const updateData = {};
 
-  if (data.name !== undefined) updateData.name = data.name;
+  if (data.name !== undefined) {
+    updateData.name = data.name;
+    // Generate slug when name changes
+    const slug = data.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 50);
+    updateData.slug = slug;
+  }
+  
   if (data.description !== undefined) updateData.description = data.description;
   if (data.cuisines !== undefined) updateData.cuisines = data.cuisines;
   if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl;

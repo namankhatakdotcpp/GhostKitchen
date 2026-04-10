@@ -70,7 +70,7 @@ export function RestaurantMenuPage({
 
   const { data: restaurant, isLoading: restaurantLoading } = useQuery({
     queryKey: ['restaurant', restaurantId],
-    queryFn: () => api.get(`/restaurants/${restaurantId}`).then(r => r.data),
+    queryFn: () => api.get(`/restaurants/${restaurantId}`).then(r => r.data?.data ?? r.data),
   });
 
   const { data: menuByCategory = {}, isLoading: menuLoading } = useQuery({

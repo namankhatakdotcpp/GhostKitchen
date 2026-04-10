@@ -111,6 +111,12 @@ app.use(compression({ level: 6 })); // level 6 = good balance between speed and 
  * - Audit trail for compliance
  */
 app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    console.log(`${req.method} ${req.url} - ${Date.now() - start}ms`);
+  });
+
   logger.debug(`${req.method.toUpperCase()} ${req.path}`);
   next();
 });

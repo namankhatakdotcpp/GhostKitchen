@@ -11,7 +11,9 @@ import {
   deleteMenuItem,
   getMenuItemByIdAndRestaurant,
   getRestaurantByIdAndOwner,
+  getRestaurantWithCache,
 } from "./restaurant.service.js";
+import { redis } from "../../lib/redis.js";
 import {
   validateRestaurant,
   validateMenuItem,
@@ -43,30 +45,44 @@ export const listRestaurants = async (req, res) => {
 
 export const getRestaurant = async (req, res) => {
   try {
-    const { id } = req.params;
+    const param = req.params.id;
 
-    if (!id) {
-      return res.status(400).json({ message: "Restaurant ID is required" });
+    if (!param) {
+      return res.status(400).json({
+        success: false,
+        message: "Restaurant ID required",
+      });
     }
 
-    console.log("🔍 Fetching restaurant:", id);
-    const restaurant = await getRestaurantById(id);
-
-    if (!restaurant) {
-      console.warn("⚠️ Restaurant not found:", id);
-      return res.status(404).json({ message: "Restaurant not found" });
-    }
-
-    console.log("✅ Restaurant found:", restaurant.name);
-    return res.status(200).json(restaurant);
-  } catch (error) {
-    console.error("❌ Error fetching restaurant:", {
-      message: error?.message,
-      restaurantId: req.params.id,
+    console.log("[Restaurant API]", {
+      route: "/restaurants/:id",
+      param,
+      time: new Date().toISOString(),
     });
+
+    const data = await getRestaurantWithCache(param);
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Restaurant not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data,
+    });
+
+  } catch (err) {
+    console.error("[Restaurant API ERROR]", err);
+
     return res.status(500).json({
-      message: "Failed to fetch restaurant",
-      error: process.env.NODE_ENV === "development" ? error?.message : undefined,
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
     });
   }
 };
@@ -135,6 +151,8 @@ export const createNewRestaurant = async (req, res) => {
       req.user.userId
     );
 
+    await redis.del("restaurants:all");
+
     return res.status(201).json({ message: "Restaurant created successfully", restaurant });
   } catch (error) {
     console.error("Error creating restaurant:", error);
@@ -161,6 +179,9 @@ export const updateExistingRestaurant = async (req, res) => {
 
     const updated = await updateRestaurant(id, updateData);
 
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
+
     return res.status(200).json({ message: "Restaurant updated successfully", restaurant: updated });
   } catch (error) {
     console.error("Error updating restaurant:", error);
@@ -179,6 +200,9 @@ export const toggleStatus = async (req, res) => {
     }
 
     const updated = await toggleRestaurantStatus(id);
+
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
 
     return res.status(200).json({ message: "Restaurant status updated", restaurant: updated });
   } catch (error) {
@@ -214,6 +238,9 @@ export const addNewMenuItem = async (req, res) => {
       isBestseller,
     });
 
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
+
     return res.status(201).json({ message: "Menu item added successfully", menuItem });
   } catch (error) {
     console.error("Error adding menu item:", error);
@@ -246,6 +273,9 @@ export const updateExistingMenuItem = async (req, res) => {
 
     const updated = await updateMenuItem(id, itemId, updateData);
 
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
+
     return res.status(200).json({ message: "Menu item updated successfully", menuItem: updated });
   } catch (error) {
     console.error("Error updating menu item:", error);
@@ -271,6 +301,9 @@ export const toggleMenuItemStatus = async (req, res) => {
 
     const updated = await toggleMenuItemAvailability(itemId);
 
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
+
     return res.status(200).json({ message: "Menu item availability toggled", menuItem: updated });
   } catch (error) {
     console.error("Error toggling menu item availability:", error);
@@ -295,6 +328,9 @@ export const deleteExistingMenuItem = async (req, res) => {
     }
 
     await deleteMenuItem(itemId);
+
+    await redis.del(`restaurant:${id}`);
+    await redis.del("restaurants:all");
 
     return res.status(200).json({ message: "Menu item deleted successfully" });
   } catch (error) {

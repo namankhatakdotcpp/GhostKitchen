@@ -13,6 +13,14 @@ const nextConfig = {
       },
       {
         protocol: "https",
+        hostname: "example.com",
+      },
+      {
+        protocol: "https",
+        hostname: "ghostkitchen.onrender.com",
+      },
+      {
+        protocol: "https",
         hostname: "**.onrender.com",
       },
       {

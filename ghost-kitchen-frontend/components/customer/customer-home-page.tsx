@@ -80,9 +80,8 @@ export function CustomerHomePage() {
           limit: 12,
         }
       }).then(r => {
-        console.log("🔥 API RESPONSE - Full Response:", r);
-        console.log("🔥 API RESPONSE - r.data:", r.data);
-        return r.data;
+        console.log("Restaurant API response:", r.data);
+        return r.data?.data ?? r.data;
       }),
     getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
     initialPageParam: 1,
@@ -325,13 +324,13 @@ export function CustomerHomePage() {
                 deliveryFee={restaurant?.address?.deliveryFee || 0}
                 deliveryTime={restaurant?.address?.deliveryTime || 30}
                 id={restaurant?.id || "unknown"}
-                imageUrl={restaurant?.imageUrl || "/fallback.jpg"}
+                imageUrl={restaurant?.image || restaurant?.imageUrl || "/fallback.jpg"}
                 index={index}
                 isNew={false}
                 isVeg={false}
                 key={restaurant?.id || index}
                 minOrder={restaurant?.address?.minOrder || 0}
-                name={restaurant?.name || "Unknown Restaurant"}
+                name={restaurant?.name || restaurant?.title || "Unknown Restaurant"}
                 rating={restaurant?.rating || 0}
               />
             ))
