@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import RoleSwitcher from "@/components/ui/role-switcher";
 import { useCartStore } from "@/store/cartStore";
 import { useUserStore } from "@/store/userStore";
 
@@ -106,6 +107,7 @@ export function CustomerNavbar() {
         </button>
 
         <div className="flex items-center gap-2 md:gap-3">
+          <RoleSwitcher />
           <Link href="/cart">
             <motion.div
               animate={
