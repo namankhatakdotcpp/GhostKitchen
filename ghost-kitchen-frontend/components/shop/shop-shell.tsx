@@ -3,14 +3,16 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ShoppingBag, UtensilsCrossed } from "lucide-react";
+import { BarChart3, Settings, ShoppingBag, UtensilsCrossed } from "lucide-react";
 
+import RoleSwitcher from "@/components/ui/role-switcher";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/shop/orders", label: "Orders", icon: ShoppingBag },
   { href: "/shop/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/shop/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/shop/settings", label: "Settings", icon: Settings },
 ];
 
 type ShopShellProps = {
@@ -23,13 +25,13 @@ export function ShopShell({ children }: ShopShellProps) {
   return (
     <div className="min-h-screen bg-white">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-16 flex-col border-r border-border bg-white md:flex">
-        <Link
-          className="flex h-16 items-center justify-center border-b border-border text-lg font-extrabold tracking-[-0.04em]"
-          href="/shop/orders"
-        >
-          <span className="text-text-primary">g</span>
-          <span className="text-brand">k</span>
-        </Link>
+        <div className="flex h-16 flex-col items-center justify-center gap-1 border-b border-border">
+          <Link className="text-lg font-extrabold tracking-[-0.04em]" href="/shop/orders">
+            <span className="text-text-primary">g</span>
+            <span className="text-brand">k</span>
+          </Link>
+          <RoleSwitcher />
+        </div>
         <nav className="flex flex-1 flex-col items-center gap-2 py-4">
           {navItems.map((item) => {
             const Icon = item.icon;
