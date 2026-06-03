@@ -1,189 +1,207 @@
 "use client";
 
-import { useEffect } from "react";
-import { Link2, PhoneCall } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { CheckSquare, MapPin, PhoneCall, Square } from "lucide-react";
+import toast from "react-hot-toast";
 
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { getSocket } from "@/lib/socket";
 import { useDeliveryStore } from "@/store/deliveryStore";
+import { useUserStore } from "@/store/userStore";
 
-function MapCard({
-  title,
-  address,
-  type,
-}: {
-  title: string;
-  address: string;
-  type: "pickup" | "dropoff";
+// Open a Google Maps directions URL. Falls back gracefully if no API key.
+function mapsLink(originLat?: number, originLng?: number, destLat?: number, destLng?: number, destAddress?: string) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+  if (apiKey && destLat && destLng && originLat && originLng) {
+    return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${originLat},${originLng}&destination=${destLat},${destLng}&mode=driving`;
+  }
+  // Fallback deep link
+  const dest = destLat && destLng ? `${destLat},${destLng}` : encodeURIComponent(destAddress ?? "");
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+}
+
+function MapCard({ title, address, destLat, destLng, originLat, originLng }: {
+  title: string; address: string;
+  destLat?: number; destLng?: number;
+  originLat?: number; originLng?: number;
 }) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
+  const embedUrl = apiKey && destLat && destLng && originLat && originLng
+    ? `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${originLat},${originLng}&destination=${destLat},${destLng}&mode=driving`
+    : null;
+  const openUrl = mapsLink(originLat, originLng, destLat, destLng, address);
+
   return (
     <div className="rounded-[24px] border border-border bg-white p-5 shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-        {title}
-      </p>
+      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">{title}</p>
       <p className="mt-3 text-xl font-bold text-text-primary">{address}</p>
-      <div className="mt-4 flex h-48 items-center justify-center rounded-[20px] border border-dashed border-border bg-[#FAFAFA]">
-        <div className="text-center">
-          <Link2 className="mx-auto h-6 w-6 text-brand" />
-          <p className="mt-3 text-sm font-semibold text-text-primary">
-            {type === "pickup" ? "Pickup map" : "Customer map"}
-          </p>
-          <p className="mt-1 text-sm text-text-secondary">
-            Google Maps embed placeholder
-          </p>
+      {embedUrl ? (
+        <div className="mt-4 h-48 overflow-hidden rounded-[18px] border border-border">
+          <iframe src={embedUrl} className="h-full w-full" style={{ border: 0 }} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
         </div>
-      </div>
+      ) : (
+        <div className="mt-4 flex h-48 items-center justify-center rounded-[18px] border border-dashed border-border bg-[#FAFAFA]">
+          <div className="text-center">
+            <MapPin className="mx-auto h-6 w-6 text-brand" />
+            <p className="mt-2 text-sm text-text-secondary">Map preview not available</p>
+          </div>
+        </div>
+      )}
+      <a href={openUrl} target="_blank" rel="noopener noreferrer"
+        className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-brand py-2.5 text-sm font-semibold text-brand hover:bg-brand-light transition">
+        <MapPin className="h-4 w-4" /> Open in Google Maps
+      </a>
     </div>
   );
 }
 
 export function DeliveryActivePage() {
-  const { agentId, activeAssignment, activeStep, advanceStep, completeDelivery } =
-    useDeliveryStore();
+  const router = useRouter();
+  const { agentId, activeAssignment, activeStep, advanceStep, completeDelivery } = useDeliveryStore();
+  const { user } = useUserStore();
+  const resolvedAgentId = user?.id ?? agentId;
 
+  const [currentLat, setCurrentLat] = useState<number | undefined>();
+  const [currentLng, setCurrentLng] = useState<number | undefined>();
+
+  // Step-2 items checklist
+  const allItems: string[] = activeAssignment?.itemsSummary ?? [];
+  const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
+  const allChecked = allItems.length > 0 && checkedItems.size === allItems.length;
+
+  // watchPosition for continuous GPS
   useEffect(() => {
-    if (!activeAssignment) {
-      return;
-    }
-
+    if (!activeAssignment || !navigator.geolocation) return;
     const socket = getSocket();
 
-    function emitLocation() {
-      if (!navigator.geolocation) {
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          socket.emit("agent:location", {
-            agentId,
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          });
-        },
-        () => undefined,
-        {
-          enableHighAccuracy: true,
-          maximumAge: 5000,
-          timeout: 10000,
-        },
-      );
-    }
-
-    emitLocation();
-    const intervalId = window.setInterval(emitLocation, 10000);
-
-    return () => window.clearInterval(intervalId);
-  }, [activeAssignment, agentId]);
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setCurrentLat(lat);
+        setCurrentLng(lng);
+        socket.emit("agent:location", { agentId: resolvedAgentId, lat, lng });
+      },
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [activeAssignment, resolvedAgentId]);
 
   if (!activeAssignment) {
     return (
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6">
-        <div className="rounded-[28px] border border-border bg-white p-6 text-center shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
+        <div className="rounded-[28px] border border-border bg-white p-6 text-center">
           <h1 className="text-2xl font-bold text-text-primary">No active delivery</h1>
-          <p className="mt-2 text-sm text-text-secondary">
-            Accept an incoming order to start navigation.
-          </p>
+          <p className="mt-2 text-sm text-text-secondary">Accept an incoming order to start navigation.</p>
         </div>
       </div>
     );
   }
 
-  function handleStatusTap(step: 1 | 2 | 3) {
-    if (!activeAssignment) return;
-
+  async function handleStep(step: 1 | 2 | 3) {
     const socket = getSocket();
-    const statusByStep = {
-      1: "CONFIRMED",
-      2: "OUT_FOR_DELIVERY",
-      3: "DELIVERED",
-    } as const;
+    const statusByStep = { 1: "CONFIRMED", 2: "OUT_FOR_DELIVERY", 3: "DELIVERED" } as const;
+    const newStatus = statusByStep[step];
 
-    socket.emit("order:status", {
-      orderId: activeAssignment.orderId,
-      status: statusByStep[step],
-      agentId,
-    });
+    socket.emit("order:status", { orderId: activeAssignment!.orderId, status: newStatus, agentId: resolvedAgentId });
 
     if (step === 3) {
+      try {
+        await api.patch(`/orders/${activeAssignment!.orderId}/status`, { status: "DELIVERED" });
+      } catch { /* socket handles it */ }
       completeDelivery();
+      toast.success("Delivery complete! Earnings added 🎉");
+      router.push("/delivery/home");
       return;
     }
-
     advanceStep();
   }
 
+  const a = activeAssignment;
+
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 pb-32">
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-6 pb-32">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-          Active delivery
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-text-primary">
-          Order #{activeAssignment.orderId}
-        </h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">Active delivery</p>
+        <h1 className="mt-2 text-3xl font-bold text-text-primary">Order #{a.orderId.slice(-6).toUpperCase()}</h1>
       </div>
 
-      <div className="mt-6 flex flex-col gap-4">
+      {/* STEP 1: Navigate to restaurant */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${activeStep >= 1 ? "bg-brand text-white" : "bg-border text-text-muted"}`}>1</span>
+          <p className="text-sm font-bold text-text-primary">Go to pickup — {a.restaurantName}</p>
+        </div>
         <MapCard
-          address={activeAssignment.pickupAddress}
-          title="Step 1: Go to Ghost Biryani House"
-          type="pickup"
+          title="Pickup location"
+          address={a.pickupAddress}
+          destLat={a.pickupLat}
+          destLng={a.pickupLng}
+          originLat={currentLat}
+          originLng={currentLng}
         />
-        <Button
-          className="h-16 rounded-[20px] text-lg"
-          disabled={activeStep !== 1}
-          onClick={() => handleStatusTap(1)}
-        >
-          I&apos;ve reached restaurant
+        <Button className="h-14 w-full rounded-[18px] text-base" disabled={activeStep !== 1} onClick={() => handleStep(1)}>
+          I&apos;ve reached the restaurant ✓
         </Button>
+      </section>
 
-        <div className="rounded-[24px] border border-border bg-white p-5 shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-            Step 2: Pick up order
-          </p>
-          <div className="mt-4 space-y-2 text-sm text-text-primary">
-            {activeAssignment.itemsSummary.map((item) => (
-              <div key={item}>{item}</div>
+      {/* STEP 2: Pick up items */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${activeStep >= 2 ? "bg-brand text-white" : "bg-border text-text-muted"}`}>2</span>
+          <p className="text-sm font-bold text-text-primary">Pick up order</p>
+        </div>
+        <div className="rounded-[20px] border border-border bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">Order #{a.orderId.slice(-6).toUpperCase()}</p>
+          <p className="mt-1 mb-3 text-sm text-text-secondary">Verify all items before picking up</p>
+          <div className="space-y-2">
+            {allItems.map((item, i) => (
+              <button key={i} type="button" onClick={() => {
+                const next = new Set(checkedItems);
+                next.has(i) ? next.delete(i) : next.add(i);
+                setCheckedItems(next);
+              }} className="flex w-full items-center gap-3 text-left">
+                {checkedItems.has(i) ? <CheckSquare className="h-5 w-5 shrink-0 text-brand" /> : <Square className="h-5 w-5 shrink-0 text-border" />}
+                <span className={`text-sm ${checkedItems.has(i) ? "line-through text-text-muted" : "text-text-primary"}`}>{item}</span>
+              </button>
             ))}
           </div>
         </div>
-        <Button
-          className="h-16 rounded-[20px] text-lg"
-          disabled={activeStep !== 2}
-          onClick={() => handleStatusTap(2)}
-        >
-          Order picked up
+        <Button className="h-14 w-full rounded-[18px] text-base" disabled={activeStep !== 2 || !allChecked} onClick={() => handleStep(2)}>
+          {allChecked ? "Order picked up, heading to customer →" : `Check all ${allItems.length} items first`}
         </Button>
+      </section>
 
+      {/* STEP 3: Navigate to customer */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${activeStep >= 3 ? "bg-brand text-white" : "bg-border text-text-muted"}`}>3</span>
+          <p className="text-sm font-bold text-text-primary">Deliver to {a.customerName?.split(" ")[0] ?? "customer"}</p>
+        </div>
         <MapCard
-          address={activeAssignment.dropoffAddress}
-          title="Step 3: Go to customer"
-          type="dropoff"
+          title="Delivery address"
+          address={a.dropoffAddress}
+          destLat={a.dropoffLat}
+          destLng={a.dropoffLng}
+          originLat={a.pickupLat}
+          originLng={a.pickupLng}
         />
-        <Button
-          className="h-16 rounded-[20px] text-lg"
-          disabled={activeStep !== 3}
-          onClick={() => handleStatusTap(3)}
-        >
-          Order delivered
+        <Button className="h-14 w-full rounded-[18px] bg-success text-base hover:bg-success/90" disabled={activeStep !== 3} onClick={() => handleStep(3)}>
+          Order delivered 🎉
         </Button>
-      </div>
+      </section>
 
-      <div className="fixed inset-x-0 bottom-20 z-30 mx-auto flex w-[calc(100%-2rem)] max-w-md gap-3">
-        <a
-          className="flex h-14 flex-1 items-center justify-center gap-2 rounded-[18px] bg-[#1C1C1C] text-base font-bold text-white"
-          href={`tel:${activeAssignment.restaurantPhone}`}
-        >
-          <PhoneCall className="h-5 w-5" />
-          Call Restaurant
+      {/* Floating call buttons */}
+      <div className="fixed inset-x-4 bottom-20 z-30 mx-auto flex max-w-md gap-3">
+        <a className="flex h-13 flex-1 items-center justify-center gap-2 rounded-[16px] bg-[#1C1C1C] text-sm font-bold text-white py-3"
+          href={`tel:${a.restaurantPhone}`}>
+          <PhoneCall className="h-4 w-4" /> Restaurant
         </a>
-        <a
-          className="flex h-14 flex-1 items-center justify-center gap-2 rounded-[18px] bg-brand text-base font-bold text-white"
-          href={`tel:${activeAssignment.customerPhone}`}
-        >
-          <PhoneCall className="h-5 w-5" />
-          Call Customer
+        <a className="flex h-13 flex-1 items-center justify-center gap-2 rounded-[16px] bg-brand text-sm font-bold text-white py-3"
+          href={`tel:${a.customerPhone}`}>
+          <PhoneCall className="h-4 w-4" /> Customer
         </a>
       </div>
     </div>

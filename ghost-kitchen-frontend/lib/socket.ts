@@ -152,6 +152,28 @@ export function disconnectSocket() {
 }
 
 /**
+ * Update socket room memberships when the active role changes.
+ * Call this after every successful role switch.
+ */
+export function joinRoleRooms(role: string, userId: string, restaurantId?: string | null) {
+  const s = getSocket();
+  if (!s.connected) s.connect();
+
+  // Leave all role-specific rooms first
+  s.emit("leave-room", `agent-${userId}`);
+  if (restaurantId) s.emit("leave-room", `shop-${restaurantId}`);
+
+  if (role === "DELIVERY") {
+    s.emit("join-room", `agent-${userId}`);
+    s.emit("join_delivery_room", userId);
+  } else if (role === "RESTAURANT" && restaurantId) {
+    s.emit("join-room", `shop-${restaurantId}`);
+    s.emit("join_restaurant_room", restaurantId);
+  }
+  // CUSTOMER: just stays in user room (joined automatically on connect)
+}
+
+/**
  * Join restaurant room (for shopkeepers)
  */
 export function joinRestaurantRoom(restaurantId: string) {

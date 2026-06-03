@@ -2,107 +2,129 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { Button } from "@/components/ui/button";
-import { getDeliveryEarningsData } from "@/lib/opsData";
-import type { DeliveryPaymentHistoryRow } from "@/types";
+import api from "@/lib/api";
 
-const ranges = ["Today", "This week", "This month"] as const;
+type Period = "today" | "week" | "month";
+
+const TABS: { id: Period; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This Week" },
+  { id: "month", label: "This Month" },
+];
 
 export function DeliveryEarningsPage() {
-  const [range, setRange] = useState<(typeof ranges)[number]>("Today");
+  const [period, setPeriod] = useState<Period>("today");
 
   const query = useQuery({
-    queryKey: ["delivery-earnings", range],
-    queryFn: () => getDeliveryEarningsData(range),
+    queryKey: ["delivery-earnings", period],
+    queryFn: () => api.get(`/delivery/earnings?period=${period}`).then(r => r.data),
   });
 
+  const d = query.data;
+
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md px-4 py-6 pb-32">
+    <div className="mx-auto w-full max-w-md px-4 py-6 pb-32">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">
-          Earnings
-        </p>
-        <h1 className="mt-2 text-3xl font-bold text-text-primary">Payouts</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-text-muted">Earnings</p>
+        <h1 className="mt-2 text-3xl font-bold text-text-primary">Your earnings</h1>
       </div>
 
-      <div className="mt-6 flex gap-2">
-        {ranges.map((option) => (
-          <button
-            className={`rounded-pill border px-3 py-2 text-sm font-semibold ${
-              range === option
-                ? "border-brand bg-brand-light text-brand"
-                : "border-border bg-white text-text-secondary"
-            }`}
-            key={option}
-            onClick={() => setRange(option)}
-            type="button"
-          >
-            {option}
+      <div className="mt-5 flex gap-2">
+        {TABS.map(t => (
+          <button key={t.id} type="button" onClick={() => setPeriod(t.id)}
+            className={`rounded-pill border px-4 py-2 text-sm font-semibold transition ${period === t.id ? "border-brand bg-brand-light text-brand" : "border-border bg-white text-text-secondary"}`}>
+            {t.label}
           </button>
         ))}
       </div>
 
       {query.isLoading ? (
-        <div className="mt-6 bone-loader h-[320px] rounded-[24px]" />
-      ) : query.isError || !query.data ? (
-        <div className="mt-6 rounded-[24px] border border-border bg-white p-6 text-center">
-          Could not load earnings.
+        <div className="mt-6 space-y-4">
+          {[1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse rounded-[22px] bg-gray-100" />)}
         </div>
       ) : (
         <>
-          <div className="mt-6 rounded-[28px] border border-border bg-white p-5 shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
-            <p className="text-sm text-text-secondary">Total earnings</p>
-            <p className="mt-2 text-4xl font-bold text-text-primary">
-              ₹{query.data.summary.totalEarnings}
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-[20px] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Deliveries</p>
-                <p className="mt-2 text-2xl font-bold text-text-primary">
-                  {query.data.summary.deliveryCount}
-                </p>
+          {/* Hero */}
+          <div className="mt-6 rounded-[28px] border border-border bg-white p-6 shadow-[0_20px_40px_rgba(28,28,28,0.05)]">
+            <p className="text-sm text-text-secondary">Total earned</p>
+            <p className="mt-1 text-5xl font-bold text-text-primary">₹{d?.total ?? 0}</p>
+            <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border pt-5">
+              <div>
+                <p className="text-xl font-bold text-text-primary">{d?.deliveries ?? 0}</p>
+                <p className="text-xs text-text-secondary">Deliveries</p>
               </div>
-              <div className="rounded-[20px] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Avg / delivery</p>
-                <p className="mt-2 text-2xl font-bold text-text-primary">
-                  ₹{query.data.summary.avgPerDelivery}
-                </p>
+              <div className="border-x border-border text-center">
+                <p className="text-xl font-bold text-text-primary">₹{d?.avgPerDelivery ?? 0}</p>
+                <p className="text-xs text-text-secondary">Avg / trip</p>
               </div>
-              <div className="rounded-[20px] bg-[#FAFAFA] p-4 col-span-2">
-                <p className="text-xs uppercase tracking-[0.18em] text-text-muted">Tips</p>
-                <p className="mt-2 text-2xl font-bold text-success">₹{query.data.summary.tips}</p>
+              <div className="text-right">
+                <p className="text-xl font-bold text-text-primary">0h</p>
+                <p className="text-xs text-text-secondary">Online</p>
               </div>
             </div>
           </div>
 
-          <Button className="mt-5 h-16 w-full rounded-[20px] text-lg">
-            Request Payout
-          </Button>
+          {/* Bar chart */}
+          {(d?.dailyBreakdown?.length ?? 0) > 0 && (
+            <div className="mt-5 rounded-[28px] border border-border bg-white p-5 shadow-[0_20px_40px_rgba(28,28,28,0.05)]">
+              <p className="mb-4 text-sm font-semibold text-text-primary">Daily breakdown</p>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={d.dailyBreakdown} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(v: number) => [`₹${v}`, "Earnings"]}
+                    contentStyle={{ borderRadius: "12px", border: "1px solid #E8E8E8", fontSize: "12px" }}
+                  />
+                  <Bar dataKey="earnings" fill="#FF5200" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-          <div className="mt-6 rounded-[24px] border border-border bg-white p-4 shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
-            <p className="text-sm font-semibold text-text-primary">Payment history</p>
-            <div className="mt-4 space-y-3">
-              {query.data.history.map((row: DeliveryPaymentHistoryRow) => (
-                <div
-                  className="rounded-[18px] border border-border px-4 py-4"
-                  key={row.id}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-bold text-text-primary">{row.orderId}</p>
-                      <p className="mt-1 text-xs text-text-secondary">{row.date}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-text-primary">₹{row.total}</p>
-                      <p className="mt-1 text-xs text-text-secondary">
-                        Base ₹{row.basePay} • Tip ₹{row.tip}
-                      </p>
-                    </div>
+          {/* History */}
+          {(d?.recentOrders?.length ?? 0) > 0 && (
+            <div className="mt-5 overflow-hidden rounded-[28px] border border-border bg-white shadow-[0_20px_40px_rgba(28,28,28,0.05)]">
+              <div className="border-b border-border px-5 py-4">
+                <p className="text-sm font-semibold text-text-primary">Recent deliveries</p>
+              </div>
+              {d.recentOrders.map((row: any) => (
+                <div key={row.id} className="flex items-center justify-between border-b border-border px-5 py-4 last:border-0">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">#{row.orderId.slice(-6).toUpperCase()}</p>
+                    <p className="text-xs text-text-secondary">
+                      {row.date ? new Date(row.date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "—"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-text-primary">₹{row.total}</p>
+                    <p className="text-xs text-text-secondary">Base ₹{row.basePay}</p>
                   </div>
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Payout */}
+          <div className="mt-5 rounded-[28px] border border-border bg-white p-5 shadow-[0_20px_40px_rgba(28,28,28,0.05)]">
+            <p className="text-sm font-semibold text-text-primary">Payout</p>
+            <div className="mt-3 flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-text-primary">₹{d?.total ?? 0}</p>
+                <p className="text-xs text-text-secondary">Available to withdraw</p>
+              </div>
+              <button
+                disabled={(d?.total ?? 0) < 200}
+                className="rounded-xl bg-brand px-5 py-3 text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-400 transition"
+                type="button">
+                Request payout
+              </button>
+            </div>
+            {(d?.total ?? 0) < 200 && (
+              <p className="mt-2 text-xs text-text-muted">Minimum ₹200 required to request a payout</p>
+            )}
           </div>
         </>
       )}

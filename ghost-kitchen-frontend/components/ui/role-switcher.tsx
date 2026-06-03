@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import api from "@/lib/api";
+import { joinRoleRooms } from "@/lib/socket";
 import { useUserStore, type AppRole } from "@/store/userStore";
 
 const ROLE_CONFIG: Record<AppRole, {
@@ -58,6 +59,7 @@ export default function RoleSwitcher() {
     try {
       const res = await api.post("/role/switch", { role });
       setUser({ ...user!, activeRole: role });
+      joinRoleRooms(role, user!.id, user!.restaurantId);
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("auth-storage");
         if (stored) {

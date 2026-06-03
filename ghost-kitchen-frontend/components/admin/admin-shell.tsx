@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import RoleSwitcher from "@/components/ui/role-switcher";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -39,14 +40,17 @@ export function AdminShell({ children }: AdminShellProps) {
     <div className="min-h-screen bg-surface">
       <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-border bg-white">
         <div className="border-b border-border px-5 py-5">
-          <div className="flex items-center gap-3">
-            <Link className="text-2xl font-extrabold tracking-[-0.04em]" href="/admin/dashboard">
-              <span className="text-text-primary">ghost</span>
-              <span className="text-brand">kitchen</span>
-            </Link>
-            <span className="rounded-pill bg-danger px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
-              Admin
-            </span>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Link className="text-2xl font-extrabold tracking-[-0.04em]" href="/admin/dashboard">
+                <span className="text-text-primary">ghost</span>
+                <span className="text-brand">kitchen</span>
+              </Link>
+              <span className="rounded-pill bg-danger px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
+                Admin
+              </span>
+            </div>
+            <RoleSwitcher />
           </div>
         </div>
 

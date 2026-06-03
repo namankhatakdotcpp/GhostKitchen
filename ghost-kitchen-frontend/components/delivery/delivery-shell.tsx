@@ -14,10 +14,11 @@ import {
   X,
 } from "lucide-react";
 
-import { getDeliveryAssignmentSeed } from "@/lib/opsData";
 import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import { useDeliveryStore } from "@/store/deliveryStore";
+import { useUserStore } from "@/store/userStore";
+import RoleSwitcher from "@/components/ui/role-switcher";
 import type { DeliveryAssignment } from "@/types";
 
 const navItems = [
@@ -103,29 +104,37 @@ function IncomingAssignmentModal() {
             <div className="mt-8 rounded-[28px] bg-white/6 p-5 backdrop-blur">
               <div className="grid gap-4">
                 <div className="rounded-[20px] bg-white px-4 py-4 text-[#0F1115]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Pickup
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Pickup</p>
                   <p className="mt-2 text-lg font-bold">{incomingAssignment.restaurantName}</p>
                   <p className="mt-1 text-sm text-text-secondary">{incomingAssignment.pickupAddress}</p>
+                  {incomingAssignment.pickupLat && incomingAssignment.pickupLng && (
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${incomingAssignment.pickupLat},${incomingAssignment.pickupLng}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 underline">
+                      📍 Get directions
+                    </a>
+                  )}
                 </div>
                 <div className="rounded-[20px] bg-white px-4 py-4 text-[#0F1115]">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Dropoff
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Dropoff</p>
                   <p className="mt-2 text-lg font-bold">{incomingAssignment.customerName}</p>
                   <p className="mt-1 text-sm text-text-secondary">{incomingAssignment.dropoffAddress}</p>
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div className="rounded-[20px] border border-white/10 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/60">Distance</p>
-                  <p className="mt-2 text-2xl font-bold">{incomingAssignment.distanceKm.toFixed(1)} km</p>
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                <div className="rounded-[20px] border border-white/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Distance</p>
+                  <p className="mt-1.5 text-xl font-bold">{incomingAssignment.distanceKm.toFixed(1)} km</p>
                 </div>
-                <div className="rounded-[20px] border border-white/10 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/60">Earnings</p>
-                  <p className="mt-2 text-2xl font-bold text-success">₹{incomingAssignment.estimatedEarnings}</p>
+                <div className="rounded-[20px] border border-white/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Base pay</p>
+                  <p className="mt-1.5 text-xl font-bold">₹40</p>
+                </div>
+                <div className="rounded-[20px] border border-success/30 bg-success/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-success/80">You earn</p>
+                  <p className="mt-1.5 text-xl font-bold text-success">₹{incomingAssignment.estimatedEarnings}</p>
                 </div>
               </div>
             </div>
@@ -167,27 +176,22 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
     activeAssignment,
     receiveAssignment,
   } = useDeliveryStore();
+  const { user } = useUserStore();
+  const resolvedAgentId = user?.id ?? agentId;
 
   useEffect(() => {
     const socket = getSocket();
-    const room = `agent-${agentId}`;
+    const room = `agent-${resolvedAgentId}`;
 
     function handleConnect() {
       socket.emit("join-room", room);
     }
 
-    function handleOrderAssigned(payload: {
-      order?: DeliveryAssignment;
-      pickup?: string;
-      dropoff?: string;
-      earnings?: number;
-    }) {
-      if (payload.order) {
-        receiveAssignment(payload.order);
-        return;
+    function handleOrderAssigned(payload: any) {
+      const order = payload.order ?? payload;
+      if (order && order.orderId) {
+        receiveAssignment(order as DeliveryAssignment);
       }
-
-      void getDeliveryAssignmentSeed().then(receiveAssignment);
     }
 
     socket.on("connect", handleConnect);
@@ -200,22 +204,28 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
       socket.off("order:assigned", handleOrderAssigned);
       socket.disconnect();
     };
-  }, [agentId, receiveAssignment]);
+  }, [resolvedAgentId, receiveAssignment]);
 
   useEffect(() => {
     const socket = getSocket();
 
     if (!isOnline) {
-      socket.emit("agent:offline", { agentId });
+      socket.emit("agent:offline", { agentId: resolvedAgentId });
       return;
     }
 
-    socket.emit("agent:online", { agentId });
-  }, [agentId, isOnline]);
+    socket.emit("agent:online", { agentId: resolvedAgentId });
+  }, [resolvedAgentId, isOnline]);
 
   return (
     <div className="min-h-screen bg-surface">
       <IncomingAssignmentModal />
+      <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-white/95 px-4 backdrop-blur">
+        <span className="text-base font-extrabold tracking-tight">
+          <span className="text-text-primary">ghost</span><span className="text-brand">kitchen</span>
+        </span>
+        <RoleSwitcher />
+      </header>
       <main className="pb-24">{children}</main>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/96 px-3 py-2 backdrop-blur">
