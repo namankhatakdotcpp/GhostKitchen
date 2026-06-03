@@ -59,7 +59,8 @@ export const useAuthStore = create<AuthStore>()(
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          set({ error: err.response?.data?.message ?? "Registration failed", isLoading: false });
+          const msg = err.response?.data?.message || err.response?.data?.error || "Registration failed"
+          set({ error: msg, isLoading: false });
           throw err;
         }
       },
@@ -71,7 +72,8 @@ export const useAuthStore = create<AuthStore>()(
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          set({ error: err.response?.data?.message ?? "Login failed", isLoading: false });
+          const msg = err.response?.data?.message || err.response?.data?.error || "Login failed"
+          set({ error: msg, isLoading: false });
           throw err;
         }
       },
