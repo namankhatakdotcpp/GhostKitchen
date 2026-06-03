@@ -2,106 +2,42 @@ import { io, type Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
-/**
- * Socket error tracking for diagnostics
- */
 let lastSocketError: { message: string; timestamp: Date } | null = null;
-
-/**
- * Initialize Socket.IO connection
- * Handles authentication with JWT token and comprehensive error handling
- */
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    // authStore persists under key "auth-storage" as JSON { state: { accessToken, ... } }
-    const stored = localStorage.getItem("auth-storage");
-    if (!stored) return null;
-    const parsed = JSON.parse(stored);
-    return parsed?.state?.accessToken ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export function getSocket() {
   if (!socket) {
-    const token = getAccessToken();
-
     socket = io(
-      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000",
+      process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5000",
       {
-        // ===== PRODUCTION (RENDER) SETTINGS =====
-        // Vercel frontend → Render backend requires credentials for cookies
+        // The access_token cookie is sent automatically with the WebSocket
+        // handshake because withCredentials:true is set below.
+        // No token needs to be read from localStorage or injected manually.
         withCredentials: true,
-        
-        // WebSocket first (faster), polling fallback (more reliable on Render)
-        // IMPORTANT: Render uses dynamic ports, so polling is sometimes needed
+
         transports: ["websocket", "polling"],
-        
-        // Reconnection strategy for Render's variable network conditions
         reconnection: true,
-        reconnectionDelay: 1000,      // Start waiting 1s between reconnects
-        reconnectionDelayMax: 5000,   // Cap at 5s between attempts
-        reconnectionAttempts: 5,      // Try 5 times before giving up
-        
-        // Auto-connect disabled - will connect on demand to save bandwidth
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
         autoConnect: false,
-        
-        // JWT Authentication - token sent with handshake
-        auth: token ? { token } : undefined,
       }
     );
 
-    // ===== SUCCESS EVENT HANDLERS =====
-
     socket.on("connect", () => {
-      console.log("✓ Socket.IO connected successfully:", socket?.id);
-      lastSocketError = null; // Clear error on successful connection
+      console.log("✓ Socket.IO connected:", socket?.id);
+      lastSocketError = null;
     });
 
     socket.on("disconnect", (reason: string) => {
-      console.log("✗ Socket.IO disconnected", { reason });
-      // 'io server namespace disconnect' is normal logout
-      // Other reasons indicate unexpected disconnection
       if (reason !== "io server namespace disconnect") {
-        console.warn("Unexpected socket disconnection reason:", reason);
+        console.warn("Socket disconnected:", reason);
       }
     });
 
-    // ===== ERROR EVENT HANDLERS =====
-
-    socket.on("error", (error: any) => {
-      const errorMsg = typeof error === "string" ? error : error?.message || "Unknown socket error";
-      console.error("❌ Socket.IO error:", errorMsg, { timestamp: new Date() });
+    socket.on("connect_error", (error: Error) => {
+      console.error("Socket connection error:", error.message);
       lastSocketError = {
-        message: errorMsg,
-        timestamp: new Date(),
-      };
-    });
-
-    socket.on("connect_error", (error: any) => {
-      const errorMsg = typeof error === "string" ? error : error?.message || "Connection failed";
-      console.error("❌ Socket.IO connection error:", errorMsg, {
-        timestamp: new Date(),
-        description: "Failed to establish WebSocket connection - will retry with polling fallback",
-      });
-      lastSocketError = {
-        message: `Connection Error: ${errorMsg}`,
-        timestamp: new Date(),
-      };
-    });
-
-    // Handle reconnection attempts
-    socket.on("reconnect_attempt", () => {
-      console.log("🔄 Attempting to reconnect to Socket.IO...");
-    });
-
-    socket.on("reconnect_failed", () => {
-      const error = "Failed to reconnect after max attempts";
-      console.error("❌", error);
-      lastSocketError = {
-        message: error,
+        message: error.message,
         timestamp: new Date(),
       };
     });
@@ -110,56 +46,27 @@ export function getSocket() {
   return socket;
 }
 
-/**
- * Get last socket error for diagnostics
- */
-export function getLastSocketError() {
-  return lastSocketError;
-}
-
-/**
- * Check if socket is connected
- */
 export function isSocketConnected() {
   return socket?.connected ?? false;
 }
 
-/**
- * Connect socket with user authentication
- * Should be called after login
- */
-export function connectSocket(userId: string, token?: string) {
+export function getLastSocketError() {
+  return lastSocketError;
+}
+
+export function connectSocket(_userId?: string) {
   const s = getSocket();
-
-  const authToken = token ?? getAccessToken();
-  if (authToken) {
-    s.auth = { token: authToken };
-  }
-
-  if (!s.connected) {
-    s.connect();
-  }
+  if (!s.connected) s.connect();
 }
 
-/**
- * Disconnect socket
- * Should be called on logout
- */
 export function disconnectSocket() {
-  if (socket && socket.connected) {
-    socket.disconnect();
-  }
+  if (socket?.connected) socket.disconnect();
 }
 
-/**
- * Update socket room memberships when the active role changes.
- * Call this after every successful role switch.
- */
 export function joinRoleRooms(role: string, userId: string, restaurantId?: string | null) {
   const s = getSocket();
   if (!s.connected) s.connect();
 
-  // Leave all role-specific rooms first
   s.emit("leave-room", `agent-${userId}`);
   if (restaurantId) s.emit("leave-room", `shop-${restaurantId}`);
 
@@ -170,27 +77,16 @@ export function joinRoleRooms(role: string, userId: string, restaurantId?: strin
     s.emit("join-room", `shop-${restaurantId}`);
     s.emit("join_restaurant_room", restaurantId);
   }
-  // CUSTOMER: just stays in user room (joined automatically on connect)
 }
 
-/**
- * Join restaurant room (for shopkeepers)
- */
 export function joinRestaurantRoom(restaurantId: string) {
-  const socket = getSocket();
-  if (!socket.connected) {
-    socket.connect();
-  }
-  socket.emit("join_restaurant_room", restaurantId);
+  const s = getSocket();
+  if (!s.connected) s.connect();
+  s.emit("join_restaurant_room", restaurantId);
 }
 
-/**
- * Join delivery room (for delivery partners)
- */
 export function joinDeliveryRoom(deliveryUserId: string) {
-  const socket = getSocket();
-  if (!socket.connected) {
-    socket.connect();
-  }
-  socket.emit("join_delivery_room", deliveryUserId);
+  const s = getSocket();
+  if (!s.connected) s.connect();
+  s.emit("join_delivery_room", deliveryUserId);
 }

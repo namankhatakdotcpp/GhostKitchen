@@ -39,7 +39,7 @@ export const ProtectedRoute = ({
     }
 
     // Check role if required
-    if (requiredRole && user && !requiredRole.includes(user.role)) {
+    if (requiredRole && user && !requiredRole.includes(user.activeRole)) {
       router.push("/unauthorized");
     }
   }, [isAuthenticated, isLoading, user, requiredRole, router]);

@@ -1,21 +1,34 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
-import type { UserRole } from "@/types";
+// Minimal type extension — session carries identity, not tokens
+declare module "next-auth" {
+  interface User {
+    id: string;
+    roles: string[];
+    activeRole: string;
+    secondRole?: string | null;
+    restaurantId?: string | null;
+  }
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      roles: string[];
+      activeRole: string;
+      secondRole?: string | null;
+      restaurantId?: string | null;
+    };
+  }
+}
 
-type AuthToken = {
-  role?: UserRole;
-  accessToken?: string;
-  id?: string;
-};
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: {
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/login",
-  },
+  session: { strategy: "jwt" },
+  pages: { signIn: "/login" },
+
   providers: [
     Credentials({
       name: "Credentials",
@@ -24,11 +37,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+        if (!credentials?.email || !credentials?.password) return null;
 
         try {
+          // Tokens are set as HttpOnly cookies by the server — we only need
+          // the user object to populate the NextAuth session.
           const res = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
             {
@@ -38,26 +51,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 email: credentials.email,
                 password: credentials.password,
               }),
+              // credentials:"include" not needed for server-side fetch in NextAuth
             }
           );
 
-          if (!res.ok) {
-            return null;
-          }
+          if (!res.ok) return null;
 
           const data = await res.json();
-          // Backend returns { success, data: { user, tokens: { accessToken, refreshToken } } }
           const user = data.data?.user ?? data.user;
-          const accessToken = data.data?.tokens?.accessToken ?? data.token;
-
-          if (!user || !accessToken) return null;
+          if (!user?.id) return null;
 
           return {
             id: user.id,
             name: user.name,
             email: user.email,
-            role: user.role,
-            accessToken,
+            roles: user.roles ?? ["CUSTOMER"],
+            activeRole: user.activeRole ?? "CUSTOMER",
+            secondRole: user.secondRole ?? null,
+            restaurantId: user.restaurantId ?? null,
           };
         } catch {
           return null;
@@ -65,26 +76,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
+
   callbacks: {
     async jwt({ token, user }) {
-      const nextToken = token as typeof token & AuthToken;
-
       if (user) {
-        nextToken.id = user.id as string;
-        nextToken.role = user.role as UserRole;
-        nextToken.accessToken = user.accessToken as string;
+        token.id = user.id;
+        (token as any).roles = user.roles;
+        (token as any).activeRole = user.activeRole;
+        (token as any).secondRole = user.secondRole ?? null;
+        (token as any).restaurantId = user.restaurantId ?? null;
       }
-
-      return nextToken;
+      return token;
     },
     async session({ session, token }) {
-      const nextToken = token as typeof token & AuthToken;
-
-      session.user.id = nextToken.id as string;
-      session.user.role = nextToken.role as UserRole;
-      (session as typeof session & { accessToken?: string }).accessToken =
-        nextToken.accessToken as string;
-
+      const t = token as Record<string, unknown>;
+      session.user.id = t.id as string;
+      session.user.roles = t.roles as string[];
+      session.user.activeRole = t.activeRole as string;
+      session.user.secondRole = (t.secondRole as string) ?? null;
       return session;
     },
   },
