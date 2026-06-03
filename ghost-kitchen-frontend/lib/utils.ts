@@ -5,6 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Paise → rupees (display) */
+export const toRupees = (paise: number) => paise / 100;
+
+/** Rupees → paise (API storage) */
+export const toPaise = (rupees: number) => Math.round(rupees * 100);
+
 /**
  * Format currency amount
  * Input: 1500 -> Output: "1,500"
