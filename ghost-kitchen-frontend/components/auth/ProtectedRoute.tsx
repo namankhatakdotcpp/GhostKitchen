@@ -1,15 +1,3 @@
-/**
- * Protected Route Wrapper
- * 
- * Checks authentication status and redirects to login if needed
- * Shows loading state while verifying auth
- * 
- * Usage:
- * <ProtectedRoute>
- *   <YourComponent />
- * </ProtectedRoute>
- */
-
 "use client";
 
 import { ReactNode, useEffect } from "react";
@@ -21,48 +9,34 @@ interface ProtectedRouteProps {
   requiredRole?: string[];
 }
 
-export const ProtectedRoute = ({
-  children,
-  requiredRole,
-}: ProtectedRouteProps) => {
+export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const router = useRouter();
-  const { isAuthenticated, user, isLoading } = useAuthStore();
+  const { isAuthenticated, hasHydrated, user } = useAuthStore();
 
   useEffect(() => {
-    // Skip check if still loading
-    if (isLoading) return;
+    // Wait for Zustand to rehydrate from localStorage before checking auth
+    if (!hasHydrated) return;
 
-    // Redirect to login if not authenticated — use replace so back button skips this page
     if (!isAuthenticated) {
-      const returnUrl = encodeURIComponent(window.location.pathname)
-      router.replace(`/login?returnUrl=${returnUrl}`)
+      const returnUrl = encodeURIComponent(window.location.pathname);
+      router.replace(`/login?returnUrl=${returnUrl}`);
       return;
     }
 
-    // Check role if required
     if (requiredRole && user && !requiredRole.includes(user.activeRole)) {
-      router.push("/unauthorized");
+      router.replace("/unauthorized");
     }
-  }, [isAuthenticated, isLoading, user, requiredRole, router]);
+  }, [isAuthenticated, hasHydrated, user, requiredRole, router]);
 
-  // Show loading state
-  if (isLoading) {
+  // Show spinner until Zustand has rehydrated from localStorage
+  if (!hasHydrated || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-orange-500" />
       </div>
     );
   }
 
-  // Don't render if not authenticated
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  // Render protected content
   return <>{children}</>;
 };
 

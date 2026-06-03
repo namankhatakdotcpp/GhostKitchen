@@ -33,8 +33,10 @@ interface AuthStore {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  hasHydrated: boolean;
   error: string | null;
 
+  setHasHydrated: (v: boolean) => void;
   clearError: () => void;
   register: (data: { email: string; password: string; name: string; phone?: string }) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -48,7 +50,10 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       isAuthenticated: false,
       isLoading: false,
+      hasHydrated: false,
       error: null,
+
+      setHasHydrated: (v) => set({ hasHydrated: v }),
 
       clearError: () => set({ error: null }),
 
@@ -100,8 +105,10 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: "gk-auth",
-      // Only persist the user object — never tokens
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
