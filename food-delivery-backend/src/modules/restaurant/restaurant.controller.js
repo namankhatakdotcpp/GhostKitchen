@@ -57,7 +57,7 @@ export const listRestaurants = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch restaurants",
-      error: process.env.NODE_ENV === "development" ? error?.message : undefined,
+      error: error?.message,
     });
   }
 };
