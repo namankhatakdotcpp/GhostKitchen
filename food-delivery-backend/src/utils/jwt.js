@@ -1,57 +1,54 @@
-/**
- * JWT Token Management
- * 
- * WHY two tokens:
- * - Access Token: Short-lived (15 minutes), used for API calls
- * - Refresh Token: Long-lived (7 days), used to get new access tokens
- * 
- * Benefits:
- * - If access token is leaked, exposure is minimal (15 min)
- * - If refresh token is leaked, user can logout from all devices
- * - Refresh token can be stored in HTTP-only cookies (CSRF protected)
- * - Access token can be stored in memory or localStorage
- */
-
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { env } from "../config/env.js";
 
-/**
- * Generate Access Token
- * @param {Object} payload - Data to encode in token
- * @returns {string} Signed JWT access token
- */
-export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: "15m", // Short-lived
-    algorithm: "HS256",
-  });
+// ── Token generators ──────────────────────────────────────────────────────────
+
+export const generateAccessToken = (payload) =>
+  jwt.sign(payload, env.JWT_SECRET, { expiresIn: "15m", algorithm: "HS256" });
+
+export const generateRefreshToken = (payload) =>
+  // Refresh tokens carry only userId — minimal surface area
+  jwt.sign(
+    { userId: payload.userId },
+    env.JWT_REFRESH_SECRET,
+    { expiresIn: "7d", algorithm: "HS256" }
+  );
+
+export const generateTokenPair = (payload) => ({
+  accessToken: generateAccessToken(payload),
+  refreshToken: generateRefreshToken(payload),
+});
+
+// ── Token verifiers ───────────────────────────────────────────────────────────
+
+export const verifyAccessToken = (token) => {
+  try {
+    return jwt.verify(token, env.JWT_SECRET, { algorithms: ["HS256"] });
+  } catch (error) {
+    if (error.name === "TokenExpiredError") throw new Error("Access token expired");
+    throw new Error("Invalid access token");
+  }
 };
 
-/**
- * Generate Refresh Token
- * @param {Object} payload - Data to encode in token
- * @returns {string} Signed JWT refresh token
- */
-export const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: "7d", // Long-lived
-    algorithm: "HS256",
-  });
+export const verifyRefreshToken = (token) => {
+  try {
+    return jwt.verify(token, env.JWT_REFRESH_SECRET, { algorithms: ["HS256"] });
+  } catch (error) {
+    if (error.name === "TokenExpiredError") throw new Error("Refresh token expired");
+    throw new Error("Invalid refresh token");
+  }
 };
 
-/**
- * Generate both tokens (utility)
- * @param {Object} payload - Data to encode in tokens
- * @returns {Object} Object with accessToken and refreshToken
- */
-export const generateTokenPair = (payload) => {
-  return {
-    accessToken: generateAccessToken(payload),
-    refreshToken: generateRefreshToken(payload),
-  };
-};
+// ── Token hashing ─────────────────────────────────────────────────────────────
+// Store SHA-256 hash in DB — never the raw token.
+// If the database is breached, raw tokens cannot be replayed.
 
-// Convenience: build token payload from a User DB record
+export const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+// ── Payload builder ───────────────────────────────────────────────────────────
+
 export const buildTokenPayload = (user) => ({
   userId: user.id,
   roles: user.roles ?? ["CUSTOMER"],
@@ -60,55 +57,6 @@ export const buildTokenPayload = (user) => ({
   restaurantId: user.restaurantId ?? null,
 });
 
-/**
- * Verify Access Token
- * @param {string} token - JWT to verify
- * @returns {Object} Decoded token payload
- */
-export const verifyAccessToken = (token) => {
-  try {
-    return jwt.verify(token, env.JWT_SECRET, {
-      algorithms: ["HS256"],
-    });
-  } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      throw new Error("Access token expired");
-    }
-    throw new Error("Invalid access token");
-  }
-};
-
-/**
- * Verify Refresh Token
- * @param {string} token - JWT to verify
- * @returns {Object} Decoded token payload
- */
-export const verifyRefreshToken = (token) => {
-  try {
-    return jwt.verify(token, env.JWT_SECRET, {
-      algorithms: ["HS256"],
-    });
-  } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      throw new Error("Refresh token expired");
-    }
-    throw new Error("Invalid refresh token");
-  }
-};
-
-/**
- * Legacy function for backward compatibility
- * @deprecated Use generateAccessToken instead
- */
-export const generateToken = (payload) => {
-  return generateAccessToken(payload);
-};
-
-/**
- * Legacy function for backward compatibility
- * @deprecated Use verifyAccessToken instead
- */
-export const verifyToken = (token) => {
-  return verifyAccessToken(token);
-};
-
+// ── Legacy aliases (keep existing callers working) ────────────────────────────
+export const generateToken = generateAccessToken;
+export const verifyToken = verifyAccessToken;

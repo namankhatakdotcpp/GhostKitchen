@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import type {
   AdminAlert,
   AdminDashboardData,
@@ -356,24 +357,91 @@ const deliveryEarningsByRange: Record<
   },
 };
 
-export async function getAdminDashboardData() {
-  await wait();
-  return {
-    metrics,
-    recentOrders,
-    topRestaurants,
-    alerts,
-  } satisfies AdminDashboardData;
+export async function getAdminDashboardData(): Promise<AdminDashboardData> {
+  try {
+    const { data } = await api.get('/admin/stats')
+    const stats = data.data ?? data
+
+    const builtMetrics: AdminMetric[] = [
+      { id: 'orders', label: 'Total Orders Today', value: String(stats.ordersToday ?? 0), change: '', trend: 'flat', icon: 'ShoppingBag' },
+      { id: 'revenue', label: 'Total Revenue Today', value: `₹${(stats.revenueToday ?? 0).toLocaleString('en-IN')}`, change: '', trend: 'up', icon: 'Wallet' },
+      { id: 'restaurants', label: 'Active Restaurants', value: String(stats.activeRestaurants ?? 0), change: '', trend: 'flat', icon: 'Store' },
+      { id: 'agents', label: 'Available Delivery Agents', value: String(stats.availableAgents ?? 0), change: '', trend: 'flat', icon: 'Bike' },
+    ]
+
+    const builtRecentOrders: AdminOrderRow[] = (stats.recentOrders ?? []).map((o: { id: string; customerName: string; restaurantName: string; total: number; status: string }) => ({
+      id: o.id,
+      customer: o.customerName,
+      restaurant: o.restaurantName,
+      amount: Math.round(o.total / 100),
+      status: o.status as AdminOrderRow['status'],
+      time: '',
+      placedAt: new Date().toISOString(),
+      items: [],
+      deliveryAddress: '',
+    }))
+
+    const pendingAlerts: AdminAlert[] = stats.pendingOrders > 0 ? [{
+      id: 'pending',
+      title: `${stats.pendingOrders} orders pending > 15 min`,
+      description: 'These orders were placed more than 15 minutes ago and have not been confirmed.',
+      severity: 'danger' as const,
+      actionLabel: 'View orders',
+    }] : []
+
+    return { metrics: builtMetrics, recentOrders: builtRecentOrders, topRestaurants: [], alerts: pendingAlerts }
+  } catch {
+    // Fallback to mock data if API is unavailable
+    await wait();
+    return { metrics, recentOrders, topRestaurants, alerts } satisfies AdminDashboardData;
+  }
 }
 
-export async function getAdminRestaurantsData() {
-  await wait();
-  return restaurantsTable;
+export async function getAdminRestaurantsData(): Promise<RestaurantManagementRow[]> {
+  try {
+    const { data } = await api.get('/admin/restaurants', { params: { limit: 100 } })
+    const list = data.restaurants ?? data.data ?? []
+    return list.map((r: { id: string; name: string; owner: { name: string }; cuisines: string[]; rating: number; _count: { orders: number }; isOpen: boolean }) => ({
+      id: r.id,
+      name: r.name,
+      owner: r.owner?.name ?? '',
+      cuisine: (r.cuisines ?? []).join(', '),
+      rating: r.rating ?? 0,
+      orders: r._count?.orders ?? 0,
+      status: r.isOpen ? 'Active' : 'Suspended',
+    })) satisfies RestaurantManagementRow[]
+  } catch {
+    await wait();
+    return restaurantsTable;
+  }
 }
 
-export async function getAdminUsersData() {
-  await wait();
-  return usersTable;
+export async function getAdminUsersData(): Promise<UserManagementRow[]> {
+  try {
+    const { data } = await api.get('/admin/users', { params: { limit: 100 } })
+    const list = data.users ?? data.data ?? []
+    return list.map((u: { id: string; name: string; email: string; phone: string; roles: string[]; createdAt: string }) => {
+      const roleMap: Record<string, UserManagementRow['role']> = {
+        CUSTOMER: 'Customer',
+        RESTAURANT: 'Restaurant Owner',
+        DELIVERY: 'Delivery Agent',
+        ADMIN: 'Admin',
+      }
+      const primaryRole = u.roles?.[0] ?? 'CUSTOMER'
+      return {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone ?? '',
+        role: roleMap[primaryRole] ?? 'Customer',
+        orders: 0,
+        joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN') : '',
+      }
+    }) satisfies UserManagementRow[]
+  } catch {
+    await wait();
+    return usersTable;
+  }
 }
 
 export async function getShopOrdersBoardData() {

@@ -1,63 +1,47 @@
-import { cacheIncrement } from "../utils/cache.js";
-import { logger } from "../utils/logger.js";
-import AppError from "../utils/AppError.js";
+import rateLimit from "express-rate-limit";
 
-const memoryStore = new Map();
+// ── Auth endpoints — tightest limit ──────────────────────────────────────────
+// Prevents brute-force on login/register/refresh
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15 minutes
+  max: 10,
+  message: { error: "Too many attempts. Try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+});
 
-export const createRateLimiter = (options = {}) => {
-  const {
-    windowMs = 15 * 60 * 1000,
-    max = 100,
-    message = "Too many requests, please try again later",
-    keyGenerator = (req) => req.ip || "unknown-ip",
-  } = options;
+// ── Role switching — prevents enumeration attacks ─────────────────────────────
+export const roleSwitchLimiter = rateLimit({
+  windowMs: 60 * 1000,         // 1 minute
+  max: 5,
+  message: { error: "Too many role switches." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-  const ttl = Math.ceil(windowMs / 1000);
+// ── Payment endpoints — strict ────────────────────────────────────────────────
+export const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: "Too many payment requests." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-  return async (req, res, next) => {
-    try {
-      const key = `ratelimit:${keyGenerator(req)}`;
-      let count = 0;
+// ── General API — generous global fallback ────────────────────────────────────
+export const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  message: { error: "Too many requests." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-      try {
-        count = await cacheIncrement(key, 1, ttl);
-        if (count === 0 || count === null) throw new Error("Redis unavailable");
-      } catch (redisError) {
-        const now = Date.now();
-        const record = memoryStore.get(key) || { count: 0, expiresAt: now + windowMs };
-        
-        if (now > record.expiresAt) {
-          record.count = 0;
-          record.expiresAt = now + windowMs;
-        }
-        
-        record.count += 1;
-        memoryStore.set(key, record);
-        count = record.count;
-        
-        if (Math.random() < 0.01) {
-          for (const [k, v] of memoryStore.entries()) {
-            if (Date.now() > v.expiresAt) memoryStore.delete(k);
-          }
-        }
-      }
-
-      res.setHeader("X-RateLimit-Limit", max);
-      res.setHeader("X-RateLimit-Remaining", Math.max(0, max - count));
-
-      if (count > max) {
-        logger.warn("Rate limit exceeded", { ip: req.ip, key, count });
-        return next(new AppError(message, 429, { retryAfter: ttl }));
-      }
-      next();
-    } catch (error) {
-      logger.error("Rate limiter global error", { error: error.message });
-      next();
-    }
-  };
-};
-
-export const generalLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 100, message: "Too many API requests, please try again later" });
-export const authLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, message: "Too many login attempts, please try again later" });
-export const strictLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, message: "Too many requests to this resource, please try again later" });
-export const paymentLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 5, message: "Too many payment attempts, please wait before trying again" });
+// ── Browse/search — most generous (read-only public data) ────────────────────
+export const browseLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});

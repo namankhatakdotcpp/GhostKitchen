@@ -67,12 +67,14 @@ model User {
   updatedAt       DateTime       @updatedAt
 
   @@index([email])
+  @@index([activeRole])
+  @@index([isAvailable])
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  token     String   @unique
+  tokenHash String   @unique
   expiresAt DateTime
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -116,6 +118,8 @@ model Restaurant {
   updatedAt      DateTime   @updatedAt
 
   @@index([slug])
+  @@index([isOpen])
+  @@index([rating])
 }
 
 model MenuItem {
@@ -135,7 +139,9 @@ model MenuItem {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
+  @@index([restaurantId])
   @@index([restaurantId, category])
+  @@index([restaurantId, isAvailable])
 }
 
 model Order {
@@ -161,7 +167,12 @@ model Order {
   agent      User?      @relation("AgentOrders", fields: [agentId], references: [id])
   review     Review?
 
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([agentId])
+  @@index([status])
   @@index([customerId, status])
+  @@index([restaurantId, status])
   @@index([createdAt])
 }
 
@@ -202,6 +213,9 @@ model Payment {
   couponCode      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
 }
 
 model PaymentWebhook {
@@ -210,4 +224,20 @@ model PaymentWebhook {
   createdAt DateTime @default(now())
 
   @@index([eventId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  meta       Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }

@@ -1,22 +1,11 @@
-/**
- * Express Application Setup
- * 
- * Middleware order is critical:
- * 1. CORS (before auth)
- * 2. Rate limiting (early)
- * 3. Request logging
- * 4. JSON/Cookie parsers (before routes)
- * 5. Routes
- * 6. Error handling (last)
- */
-
 import cors from "cors";
 import express from "express";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import compression from "compression";
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
-import { logger, httpLogger } from "./utils/logger.js";
+import { logger } from "./utils/logger.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import cartRoutes from "./modules/cart/cart.routes.js";
 import orderRoutes from "./modules/orders/orders.routes.js";
@@ -30,226 +19,149 @@ import deliveryRoutes from "./modules/delivery/delivery.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
-import { generalLimiter, authLimiter, paymentLimiter } from "./middlewares/rateLimiter.js";
+import {
+  generalLimiter, authLimiter, paymentLimiter,
+  roleSwitchLimiter, browseLimiter,
+} from "./middlewares/rateLimiter.js";
+import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { redisHealthCheck } from "./config/redis.js";
 
 const app = express();
 
-/**
- * REQUEST TRACING (FIRST MIDDLEWARE)
- * 
- * Assigns unique ID to each request
- * Used for debugging production incidents
- */
+// ── 1. Security headers (FIRST — before anything touches the response) ─────
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "https://sdk.cashfree.com",
+        "https://checkout.cashfree.com",
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: [
+        "'self'",
+        env.FRONTEND_URL,
+        "wss:",
+        "https://sdk.cashfree.com",
+      ],
+      frameSrc: ["https://checkout.cashfree.com"],
+      objectSrc: ["'none'"],
+      // Only send upgrade-insecure-requests header in production
+      upgradeInsecureRequests: env.NODE_ENV === "production" ? [] : null,
+    },
+  },
+  // Required for Cashfree iframe to load cross-origin
+  crossOriginEmbedderPolicy: false,
+  hsts: {
+    maxAge: 31536000,      // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+}));
+
+// ── 2. Request tracing ────────────────────────────────────────────────────────
 app.use(requestTracingMiddleware);
 
-/**
- * CORS Configuration for cookies
- * 
- * WHY credentials: true:
- * - Allows cookies to be sent/received from frontend
- * - Must match origin headers to work
- * 
- * WHY specific origins in production:
- * - Prevents any origin from accessing cookies
- * - Security measure against CSRF
- * 
- * RENDER + VERCEL SETUP:
- * - Frontend: Vercel (CORS_ORIGIN env var)
- * - Backend: Render
- * - Both have different domains → credentials: true required
- */
-const corsOptions = {
-  origin: [
-    "http://localhost:3000",
-    "https://ghost-kitchen-three.vercel.app"
-  ],
-  credentials: true, // Allow cookies (CRITICAL for cross-origin)
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Access-Token",
-    "X-Refresh-Token",
-  ],
-  maxAge: 86400, // 24 hours
-};
+// ── 3. CORS — explicit allowlist, no wildcards ────────────────────────────────
+const allowedOrigins = env.ALLOWED_ORIGINS
+  ? env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000"];
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (curl, server-to-server, health checks)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin '${origin}' not allowed`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "X-Request-ID"],
+  exposedHeaders: ["X-Request-ID"],
+  maxAge: 600,  // 10 minutes preflight cache
+}));
 
-/**
- * Rate Limiting (Redis-based)
- * 
- * Benefits over express-rate-limit:
- * - Distributed across multiple instances (via Redis)
- * - Automatic TTL expiration
- * - Better performance
- * - Consistent across replicas
- * 
- * Configuration:
- * - General: 100 requests per 15 minutes
- * - Auth: 20 requests per 15 minutes
- * - Payment: 5 requests per 1 minute
- */
-app.use(generalLimiter);
+// ── 4. Compression ────────────────────────────────────────────────────────────
+app.use(compression({ level: 6 }));
 
-/**
- * GZIP Compression (Production Performance)
- * 
- * Reduces response size by 70-80% for JSON/HTML
- * Critical for Render deployment where bandwidth matters
- * Automatically detected by browsers via Accept-Encoding
- */
-app.use(compression({ level: 6 })); // level 6 = good balance between speed and compression
-
-/**
- * Request Logging
- * 
- * WHY important:
- * - Debug issues (see what requests are coming in)
- * - Monitor API usage
- * - Detect suspicious activity
- * - Audit trail for compliance
- */
-app.use((req, res, next) => {
-  const start = Date.now();
-
-  res.on("finish", () => {
-    console.log(`${req.method} ${req.url} - ${Date.now() - start}ms`);
-  });
-
-  logger.debug(`${req.method.toUpperCase()} ${req.path}`);
-  next();
-});
-
-/**
- * 🔥 RAW BODY FOR WEBHOOK SIGNATURE VERIFICATION
- * 
- * IMPORTANT: Must come BEFORE express.json()
- * Cashfree signature verification needs the raw request body,
- * not the parsed JSON. The parsed body loses the original formatting.
- * 
- * This middleware captures the raw body for /api/payment/webhook
- * while allowing normal JSON parsing for other routes.
- */
-app.use("/api/payment/webhook", express.raw({ type: "application/json" }), (req, res, next) => {
-  // Store raw body for signature verification
+// ── 5. Raw body for webhook signature verification (before express.json) ─────
+app.use("/api/payment/webhook", express.raw({ type: "application/json" }), (req, _res, next) => {
   req.rawBody = req.body;
   next();
 });
 
-// JSON and URL parsers for all other routes
+// ── 6. Body parsers + cookies ─────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser()); // Parse cookies
+app.use(cookieParser());
 
-/**
- * Cache Control Headers (Production Performance)
- * 
- * Reduces bandwidth and improves response times
- * Different cache times for different endpoint types
- */
+// ── 7. XSS sanitisation on every request body ────────────────────────────────
+app.use(sanitizeBody);
+
+// ── 8. Request logging ────────────────────────────────────────────────────────
 app.use((req, res, next) => {
-  // API responses: short cache (60 seconds)
+  const start = Date.now();
+  res.on("finish", () => logger.debug(`${req.method} ${req.url} ${res.statusCode} — ${Date.now() - start}ms`));
+  next();
+});
+
+// ── 9. Short-circuit cache headers for API routes ────────────────────────────
+app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
-    res.set("Cache-Control", "public, max-age=60, must-revalidate");
+    res.set("Cache-Control", "no-store");
   }
   next();
 });
 
-// Apply stricter rate limiter to auth routes
+// ── 10. Tiered rate limiters ──────────────────────────────────────────────────
+app.use("/api", generalLimiter);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/refresh", authLimiter);
+app.use("/api/role/switch", roleSwitchLimiter);
+app.use("/api/payments", paymentLimiter);
+app.use("/api/restaurants", browseLimiter);
 
-// Health checks
-app.get("/", (req, res) => {
-  res.send("API is running 🚀");
-});
+// ── 11. Health / diagnostic endpoints ────────────────────────────────────────
+app.get("/", (_req, res) => res.json({ status: "GhostKitchen API running" }));
 
-app.get("/health", async (req, res) => {
+app.get("/health", async (_req, res) => {
   try {
     const redisStatus = await redisHealthCheck();
-    res.json({
-      status: "OK",
-      timestamp: new Date().toISOString(),
-      environment: env.NODE_ENV,
-      redis: redisStatus,
-    });
+    res.json({ status: "OK", timestamp: new Date().toISOString(), environment: env.NODE_ENV, redis: redisStatus });
   } catch (error) {
-    logger.error("Health check failed:", error);
-    res.status(503).json({
-      status: "UNHEALTHY",
-      timestamp: new Date().toISOString(),
-      environment: env.NODE_ENV,
-      error: error.message,
-    });
+    res.status(503).json({ status: "UNHEALTHY", error: error.message });
   }
 });
 
-// Debug endpoint
-app.get("/debug-db", async (req, res) => {
-  try {
-    const data = await prisma.restaurant.findMany();
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Seed endpoint
+// Seed endpoint — protected by ALLOW_SEED env gate in seed.js
 app.get("/seed", async (req, res, next) => {
   try {
-    logger.info("Starting production database seeding...");
     await seedDatabase();
-    res.json({
-      success: true,
-      message: "✅ Production DB seeded successfully 🚀",
-      status: "Database populated with restaurants and menu items",
-    });
+    res.json({ success: true, message: "DB seeded" });
   } catch (error) {
-    logger.error("Seeding failed", { error: error.message });
     next(error);
   }
 });
 
-// API Routes
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/register", authLimiter);
+// ── 12. API routes ────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
-
 app.use("/api/cart", cartRoutes);
 app.use("/api/restaurants", restaurantRoutes);
 app.use("/api/orders", orderRoutes);
-
-app.use("/api/payments/webhook", paymentLimiter); // Stricter for payment endpoint
-app.use("/api/payments", paymentLimiter);
 app.use("/api/payments", paymentRoutes);
-
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/role", roleRoutes);
 app.use("/api/delivery", deliveryRoutes);
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: "Route not found",
-  });
-});
+// ── 13. 404 ───────────────────────────────────────────────────────────────────
+app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
 
-// Global error handler (MUST be last)
+// ── 14. Global error handler (last) ──────────────────────────────────────────
 app.use(globalErrorHandler);
 
-app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR:", err);
-
-  res.status(500).json({
-    success: false,
-    message: err.message || "Internal Server Error"
-  });
-});
-
 export default app;
-

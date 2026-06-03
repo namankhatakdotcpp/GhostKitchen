@@ -49,15 +49,6 @@ export default function RiderOnboarding() {
       if (user) {
         setUser({ ...user, roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" });
       }
-      if (typeof window !== "undefined" && token) {
-        try {
-          const stored = localStorage.getItem("auth-storage");
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed?.state) { parsed.state.accessToken = token; localStorage.setItem("auth-storage", JSON.stringify(parsed)); }
-          }
-        } catch { /* ignore */ }
-      }
       setSuccess(true);
       setTimeout(() => router.push("/delivery/home"), 2000);
     } catch (err: any) {

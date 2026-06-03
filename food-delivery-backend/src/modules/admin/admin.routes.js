@@ -15,6 +15,8 @@ import {
   cancelOrder,
   getAdminStats,
   assignDeliveryPartner,
+  getUsers,
+  getRestaurants,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -39,6 +41,8 @@ router.get("/stats", getAdminStats);
  * - restaurantId: Filter by restaurant
  * - userId: Filter by customer
  */
+router.get("/users", getUsers);
+router.get("/restaurants", getRestaurants);
 router.get("/orders", getAllOrders);
 
 /**

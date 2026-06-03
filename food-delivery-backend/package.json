@@ -6,11 +6,19 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:prod": "npx prisma migrate deploy && node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node prisma/seed.js",
-    "db:reset": "prisma migrate reset",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:migrate:dev": "npx prisma migrate dev",
+    "db:push": "npx prisma db push",
+    "db:studio": "npx prisma studio",
+    "db:reset": "npx prisma migrate reset",
+    "db:status": "npx prisma migrate status",
     "worker": "node src/workers/order.worker.js",
-    "worker:watch": "nodemon src/workers/order.worker.js"
+    "worker:watch": "nodemon src/workers/order.worker.js",
+    "db:seed": "node prisma/seed.js",
+    "postinstall": "prisma generate"
   },
   "author": "",
   "license": "ISC",
@@ -33,6 +41,7 @@
     "socket.io": "^4.8.1",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
+    "xss": "^1.0.15",
     "zod": "^4.3.6",
     "zustand": "^5.0.9"
   },

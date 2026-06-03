@@ -1,272 +1,108 @@
+"use client";
+
 /**
- * Auth Store (Zustand)
- * 
- * WHY Zustand:
- * - Lightweight (~2KB)
- * - No unnecessary re-renders
- * - Simple API
- * - Great for auth state
- * 
- * Stores:
- * - User info
- * - Access token
- * - Refresh token
- * - Loading states
- * - Error messaging
+ * Auth Store
+ *
+ * Tokens live in HttpOnly cookies managed by the server — never in JS memory
+ * or localStorage.  This store only tracks the user object and loading state
+ * so the UI can render the correct chrome without touching token logic.
  */
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
 
-const axiosInstance = axios.create({
-  baseURL: API_URL,
-  withCredentials: true, // Send cookies with requests
-});
+// Dedicated axios instance that always sends cookies
+const axiosInstance = axios.create({ baseURL: API_URL, withCredentials: true });
 
-// Type definitions for store
 interface User {
   id: string;
   email: string;
   name: string;
-  phone?: string;
-  role: string;
-  avatar?: string;
-  address?: string;
+  phone?: string | null;
+  roles: string[];
+  activeRole: string;
+  secondRole?: string | null;
+  restaurantId?: string | null;
 }
 
 interface AuthStore {
-  // State
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
 
-  // Methods
   clearError: () => void;
-  register: (data: { email: string; password: string; name: string; phone?: string; role?: string }) => Promise<any>;
-  login: (email: string, password: string) => Promise<any>;
+  register: (data: { email: string; password: string; name: string; phone?: string }) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  refreshAccessToken: () => Promise<string>;
-  getCurrentUser: () => Promise<any>;
-  updateProfile: (data: any) => Promise<any>;
-  setUser?: (user: User | null) => void;
+  getCurrentUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
-      // State
+    (set) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
 
-      // Clear error
       clearError: () => set({ error: null }),
 
-      /**
-       * Register new user
-       */
       register: async (data) => {
         set({ isLoading: true, error: null });
         try {
           const response = await axiosInstance.post("/auth/register", data);
-          const { user, tokens } = response.data.data;
-
-          set({
-            user,
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            isAuthenticated: true,
-            isLoading: false,
-          });
-
-          return response.data;
-        } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.message || "Registration failed";
-          set({
-            error: errorMessage,
-            isLoading: false,
-          });
-          throw error;
+          const user = response.data.data?.user ?? response.data.user;
+          set({ user, isAuthenticated: true, isLoading: false });
+        } catch (err: any) {
+          set({ error: err.response?.data?.message ?? "Registration failed", isLoading: false });
+          throw err;
         }
       },
 
-      /**
-       * Login user
-       */
       login: async (email, password) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await axiosInstance.post("/auth/login", {
-            email,
-            password,
-          });
-          const { user, tokens } = response.data.data;
-
-          set({
-            user,
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            isAuthenticated: true,
-            isLoading: false,
-          });
-
-          return response.data;
-        } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.message || "Login failed";
-          set({
-            error: errorMessage,
-            isLoading: false,
-          });
-          throw error;
+          const response = await axiosInstance.post("/auth/login", { email, password });
+          const user = response.data.data?.user ?? response.data.user;
+          set({ user, isAuthenticated: true, isLoading: false });
+        } catch (err: any) {
+          set({ error: err.response?.data?.message ?? "Login failed", isLoading: false });
+          throw err;
         }
       },
 
-      /**
-       * Refresh access token
-       * Called when access token expires
-       */
-      refreshAccessToken: async () => {
-        try {
-          const state = get();
-          if (!state.refreshToken) {
-            throw new Error("No refresh token available");
-          }
-
-          const response = await axiosInstance.post("/auth/refresh", {
-            refreshToken: state.refreshToken,
-          });
-
-          const { accessToken } = response.data.data;
-          set({ accessToken });
-
-          return accessToken;
-        } catch (error: any) {
-          // If refresh fails, logout
-          get().logout();
-          throw error;
-        }
-      },
-
-      /**
-       * Logout user
-       */
       logout: async () => {
         try {
-          const state = get();
-          if (state.accessToken) {
-            // Call logout endpoint to invalidate refresh token
-            await axiosInstance.post("/auth/logout", {
-              refreshToken: state.refreshToken,
-            });
-          }
-        } catch (error: any) {
-          console.error("Logout error:", error);
-        } finally {
-          // Clear state regardless of API error
-          set({
-            user: null,
-            accessToken: null,
-            refreshToken: null,
-            isAuthenticated: false,
-            error: null,
-          });
-          // Clear localStorage
-          localStorage.removeItem("auth-storage");
+          await axiosInstance.post("/auth/logout");
+        } catch {
+          // Server-side cookie clearing still happened; clear local state regardless
         }
+        set({ user: null, isAuthenticated: false, error: null });
       },
 
-      /**
-       * Get current user from API
-       */
       getCurrentUser: async () => {
         set({ isLoading: true });
         try {
           const response = await axiosInstance.get("/auth/me");
-          const user = response.data.data.user;
-          set({ user, isLoading: false });
-          return user;
-        } catch (error: any) {
-          set({ isLoading: false, isAuthenticated: false });
-          throw error;
-        }
-      },
-
-      /**
-       * Update user profile
-       */
-      updateProfile: async (data) => {
-        set({ isLoading: true, error: null });
-        try {
-          const response = await axiosInstance.put("/auth/profile", data);
-          const user = response.data.data.user;
-          set({ user, isLoading: false });
-          return response.data;
-        } catch (error: any) {
-          const errorMessage =
-            error.response?.data?.message || "Update failed";
-          set({
-            error: errorMessage,
-            isLoading: false,
-          });
-          throw error;
+          const user = response.data.data?.user ?? response.data.user;
+          set({ user, isAuthenticated: true, isLoading: false });
+        } catch {
+          set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
     }),
     {
-      name: "auth-storage", // localStorage key name
-      partialize: (state) => ({
-        // Only persist these fields
-        user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
-      }),
-    },
+      name: "gk-auth",
+      // Only persist the user object — never tokens
+      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+    }
   )
 );
 
-// Set up axios interceptor for token refresh
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-
-    // If access token expired and we haven't retried yet
-    if (
-      error.response?.status === 401 &&
-      error.response?.data?.message?.includes("expired") &&
-      !originalRequest._retry
-    ) {
-      originalRequest._retry = true;
-
-      try {
-        // Refresh token
-        const newAccessToken = await useAuthStore.getState().refreshAccessToken();
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        return axiosInstance(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed, logout user
-        useAuthStore.getState().logout();
-        return Promise.reject(refreshError);
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
-
-// Export configured axios for use in other parts of the app
+// Export the instance so cart/other stores can reuse it
 export default axiosInstance;

@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
+import { parse as parseCookies } from "cookie";
 import { logger } from "../utils/logger.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 import { getRedis } from "../config/redis.js";
@@ -40,30 +41,68 @@ export const initSocket = async (server) => {
 
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-      if (!token) {
-        logger.warn("Socket connection rejected: No authentication token", { socketId: socket.id });
-        return next(new Error("Authentication failed: No token provided"));
+      // Primary: read access_token from the HttpOnly cookie sent with the handshake.
+      // Socket.IO sends cookies automatically when withCredentials:true is set.
+      let token = null;
+
+      const cookieHeader = socket.handshake.headers?.cookie;
+      if (cookieHeader) {
+        const cookies = parseCookies(cookieHeader);
+        token = cookies.access_token ?? null;
       }
+
+      // Fallback: auth object (useful for native mobile / non-browser clients)
+      if (!token) {
+        token = socket.handshake.auth?.token ?? null;
+      }
+
+      if (!token) {
+        // Allow unauthenticated connections for public browsing
+        socket.data.user = null
+        return next()
+      }
+
       const decoded = verifyAccessToken(token);
-      // JWT payload stores the user id as `userId` (not `id`)
-      socket.user = { id: decoded.userId, email: decoded.email, role: decoded.role };
-      logger.debug("Socket authenticated", { socketId: socket.id, userId: decoded.userId });
+      socket.user = {
+        id: decoded.userId,
+        email: decoded.email,
+        roles: decoded.roles ?? ["CUSTOMER"],
+        role: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
+        restaurantId: decoded.restaurantId ?? null,
+      };
+      socket.data.user = socket.user
+      logger.debug("Socket authenticated via cookie", { socketId: socket.id, userId: decoded.userId });
       next();
     } catch (error) {
-      logger.warn("Socket connection rejected: Invalid or expired token", { socketId: socket.id, error: error.message });
-      next(new Error("Authentication failed: Invalid token"));
+      // Expired token — don't reject, just mark as unauthenticated so client can refresh and reconnect
+      socket.data.user = null
+      next()
     }
   });
 
   io.on("connection", (socket) => {
     const user = socket.user;
-    logger.info("Socket connected", { socketId: socket.id, userId: user.id, role: user.role });
+    logger.info("Socket connected", { socketId: socket.id, userId: user?.id, role: user?.role });
 
-    // Auto-join rooms based on role
-    socket.join(`user:${user.id}`);
-    if (user.role === "ADMIN") socket.join("admin");
-    if (user.role === "DELIVERY") socket.join(`agent-${user.id}`);
+    // Rate limit socket events — prevent event flooding
+    const eventCounts = new Map()
+    socket.use(([event], next) => {
+      const key = `${socket.id}:${event}`
+      const count = (eventCounts.get(key) || 0) + 1
+      eventCounts.set(key, count)
+      setTimeout(() => eventCounts.delete(key), 1000)
+      if (count > 20) {
+        return next(new Error('Event rate limit exceeded'))
+      }
+      next()
+    })
+
+    // Auto-join rooms based on role (skip for unauthenticated connections)
+    if (user) {
+      socket.join(`user:${user.id}`);
+      if (user.role === "ADMIN") socket.join("admin");
+      if (user.role === "DELIVERY") socket.join(`agent-${user.id}`);
+    }
 
     socket.on("join_user_room", (userId) => {
       if (!userId) return;

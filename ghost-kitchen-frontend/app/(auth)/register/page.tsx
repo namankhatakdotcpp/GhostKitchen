@@ -117,7 +117,6 @@ export default function RegisterPage() {
         email: formData.email,
         password: formData.password,
         phone: formData.phone || undefined,
-        role: formData.role,
       });
       // Redirect to dashboard on success
       router.push("/");

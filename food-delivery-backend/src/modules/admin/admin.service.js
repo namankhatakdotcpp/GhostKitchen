@@ -1,7 +1,11 @@
 import { prisma } from "../../config/prisma.js";
 import { logger } from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
-import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
+import { getIO } from "../../socket/socketServer.js";
+
+function emitOrderStatusUpdated(data) {
+  try { getIO().to('admin').emit('order_status_updated', data) } catch {}
+}
 
 const ORDER_INCLUDE = {
   customer: { select: { id: true, email: true, name: true, phone: true } },
@@ -91,27 +95,82 @@ export const getAdminStats = async () => {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
 
-    const [totalOrders, todayOrders, completedOrders, cancelledOrders, revenueAgg] = await Promise.all([
-      prisma.order.count(),
-      prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
-      prisma.order.count({ where: { status: "DELIVERED" } }),
-      prisma.order.count({ where: { status: "CANCELLED" } }),
-      prisma.order.aggregate({ _sum: { total: true } }),
-    ]);
+    const [ordersToday, revenueAgg, activeRestaurants, availableAgents, pendingOrders, recentOrders] =
+      await prisma.$transaction([
+        prisma.order.count({ where: { placedAt: { gte: today, lt: tomorrow } } }),
+        prisma.order.aggregate({ _sum: { total: true }, where: { status: 'DELIVERED', placedAt: { gte: today, lt: tomorrow } } }),
+        prisma.restaurant.count({ where: { isOpen: true } }),
+        prisma.user.count({ where: { isAvailable: true, roles: { has: 'DELIVERY' } } }),
+        prisma.order.count({ where: { status: 'PLACED', placedAt: { lt: fifteenMinsAgo } } }),
+        prisma.order.findMany({
+          take: 10,
+          orderBy: { placedAt: 'desc' },
+          include: {
+            customer: { select: { name: true } },
+            restaurant: { select: { name: true } },
+          },
+        }),
+      ])
 
     return {
-      totalOrders,
-      todayOrders,
-      completedOrders,
-      cancelledOrders,
-      totalRevenue: revenueAgg._sum.total || 0,
-      successRate: totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(2) : 0,
+      ordersToday,
+      revenueToday: (revenueAgg._sum.total || 0) / 100,
+      activeRestaurants,
+      availableAgents,
+      pendingOrders,
+      recentOrders: recentOrders.map(o => ({
+        id: o.id,
+        customerName: o.customer.name,
+        restaurantName: o.restaurant.name,
+        total: o.total,
+        status: o.status,
+      })),
     };
   } catch (error) {
     logger.error("Failed to generate statistics", { error: error.message });
     throw new AppError("Failed to generate statistics", 500);
   }
+};
+
+export const getUsers = async ({ page = 1, limit = 20, role, search } = {}) => {
+  const where = {}
+  if (role) where.roles = { has: role }
+  if (search) where.OR = [
+    { name: { contains: search, mode: 'insensitive' } },
+    { email: { contains: search, mode: 'insensitive' } },
+  ]
+  const [users, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, createdAt: true },
+    }),
+    prisma.user.count({ where }),
+  ])
+  return { users, total, page: Number(page), limit: Number(limit) }
+};
+
+export const getRestaurants = async ({ page = 1, limit = 20, search } = {}) => {
+  const where = {}
+  if (search) where.name = { contains: search, mode: 'insensitive' }
+  const [restaurants, total] = await prisma.$transaction([
+    prisma.restaurant.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        owner: { select: { name: true, email: true } },
+        _count: { select: { orders: true } },
+      },
+    }),
+    prisma.restaurant.count({ where }),
+  ])
+  return { restaurants, total, page: Number(page), limit: Number(limit) }
 };
 
 export const assignDeliveryPartner = async (orderId, agentId) => {

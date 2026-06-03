@@ -1,60 +1,44 @@
-/**
- * Authentication Middleware
- * 
- * Verifies JWT access token from multiple sources:
- * 1. Authorization header (Bearer scheme)
- * 2. Custom header (X-Access-Token)
- * 3. Cookies (from HTTP-only cookies)
- * 
- * Attaches decoded user info to req.user
- */
-
 import { verifyAccessToken } from "../utils/jwt.js";
-import AppError from "../utils/AppError.js";
 import { roleMiddleware } from "./role.middleware.js";
 
 export const authenticate = (req, res, next) => {
   try {
-    // Get token from multiple sources
-    let token = null;
+    // 1. HttpOnly cookie (primary — browser requests)
+    let token = req.cookies?.access_token;
 
-    // 1. Authorization header (Bearer <token>)
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.slice(7); // Remove "Bearer " prefix
-    }
-
-    // 2. Custom header
+    // 2. Authorization header fallback (API clients / mobile / server-to-server)
     if (!token) {
-      token = req.headers["x-access-token"];
-    }
-
-    // 3. Cookie (if client sends token in cookie)
-    if (!token && req.cookies) {
-      token = req.cookies.accessToken;
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) token = authHeader.slice(7);
     }
 
     if (!token) {
-      throw new AppError("No token provided", 401);
+      return res.status(401).json({ message: "No token provided" });
     }
 
-    const decoded = verifyAccessToken(token);
-    // Support both legacy (single role) and new multi-role tokens
+    let decoded;
+    try {
+      decoded = verifyAccessToken(token);
+    } catch (err) {
+      if (err.message.includes("expired")) {
+        // Structured code so the frontend interceptor can catch and auto-refresh
+        return res.status(401).json({ message: "Token expired", code: "TOKEN_EXPIRED" });
+      }
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
     req.user = {
       userId: decoded.userId,
       roles: decoded.roles ?? [decoded.role ?? "CUSTOMER"],
       activeRole: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
-      role: decoded.activeRole ?? decoded.role ?? "CUSTOMER", // backwards compat
+      role: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
       secondRole: decoded.secondRole ?? null,
       restaurantId: decoded.restaurantId ?? null,
     };
+
     next();
   } catch (error) {
-    if (error.message.includes("expired")) {
-      next(new AppError("Token expired, please refresh", 401));
-    } else {
-      next(new AppError("Invalid token", 401));
-    }
+    return res.status(401).json({ message: "Authentication failed" });
   }
 };
 

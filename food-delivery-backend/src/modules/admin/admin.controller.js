@@ -123,6 +123,20 @@ export const getAdminStats = async (req, res, next) => {
   }
 };
 
+export const getUsers = async (req, res, next) => {
+  try {
+    const result = await adminService.getUsers(req.query)
+    res.json({ success: true, ...result })
+  } catch (error) { next(error) }
+};
+
+export const getRestaurants = async (req, res, next) => {
+  try {
+    const result = await adminService.getRestaurants(req.query)
+    res.json({ success: true, ...result })
+  } catch (error) { next(error) }
+};
+
 /**
  * POST /admin/orders/:id/assign-delivery
  * Assign delivery partner to order

@@ -58,20 +58,9 @@ export default function RoleSwitcher() {
     setSwitching(true);
     try {
       const res = await api.post("/role/switch", { role });
+      // Server sets new access_token cookie with updated roles — no localStorage write needed
       setUser({ ...user!, activeRole: role });
       joinRoleRooms(role, user!.id, user!.restaurantId);
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem("auth-storage");
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            if (parsed?.state) {
-              parsed.state.accessToken = res.data.token;
-              localStorage.setItem("auth-storage", JSON.stringify(parsed));
-            }
-          } catch { /* ignore */ }
-        }
-      }
       setOpen(false);
       router.push(ROLE_CONFIG[role].href);
     } catch (err) {

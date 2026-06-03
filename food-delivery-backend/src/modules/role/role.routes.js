@@ -1,21 +1,26 @@
 import express from "express";
 import { authenticate } from "../../middlewares/auth.middleware.js";
+import { setAuthCookies } from "../auth/auth.controller.js";
 import {
   switchRole, registerRestaurant, addRestaurant, registerRider,
   getMyRestaurants, updateMyRestaurant,
 } from "./role.service.js";
 import { prisma } from "../../config/prisma.js";
-import AppError from "../../utils/AppError.js";
+import { auditLog } from "../../utils/audit.js";
 
 const router = express.Router();
 
 // POST /api/role/switch
+// Issues a new access_token cookie with updated activeRole
 router.post("/switch", authenticate, async (req, res, next) => {
   try {
     const { role } = req.body;
     if (!role) return res.status(400).json({ message: "role is required" });
+    const prevRole = req.user.activeRole
     const result = await switchRole(req.user.userId, role);
-    res.json(result);
+    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
+    await auditLog({ userId: req.user.userId, action: 'ROLE_SWITCHED', meta: { from: prevRole, to: role }, req })
+    res.json({ activeRole: result.activeRole, user: result.user });
   } catch (e) { next(e); }
 });
 
@@ -23,11 +28,13 @@ router.post("/switch", authenticate, async (req, res, next) => {
 router.post("/register-restaurant", authenticate, async (req, res, next) => {
   try {
     const result = await registerRestaurant(req.user.userId, req.body);
-    res.status(201).json(result);
+    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
+    await auditLog({ userId: req.user.userId, action: 'RESTAURANT_REGISTERED', entityType: 'Restaurant', entityId: result.restaurant.id, meta: { name: result.restaurant.name }, req })
+    res.status(201).json({ restaurant: result.restaurant, user: result.user });
   } catch (e) { next(e); }
 });
 
-// POST /api/role/add-restaurant (already a RESTAURANT, adding another city)
+// POST /api/role/add-restaurant (already a RESTAURANT owner, adding another city)
 router.post("/add-restaurant", authenticate, async (req, res, next) => {
   try {
     const restaurant = await addRestaurant(req.user.userId, req.body);
@@ -39,7 +46,8 @@ router.post("/add-restaurant", authenticate, async (req, res, next) => {
 router.post("/register-rider", authenticate, async (req, res, next) => {
   try {
     const result = await registerRider(req.user.userId, req.body);
-    res.status(201).json(result);
+    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
+    res.status(201).json({ user: result.user });
   } catch (e) { next(e); }
 });
 
@@ -51,7 +59,7 @@ router.get("/my-restaurants", authenticate, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/role/my-restaurant (active one)
+// GET /api/role/my-restaurant (active one from restaurantId in token)
 router.get("/my-restaurant", authenticate, async (req, res, next) => {
   try {
     const restaurantId = req.user.restaurantId;

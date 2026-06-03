@@ -359,29 +359,4 @@ export interface DeliveryPaymentHistoryRow {
   total: number;
 }
 
-declare module "next-auth" {
-  interface User {
-    id: string;
-    role: string;
-    accessToken: string;
-  }
-  interface Session {
-    accessToken: string;
-    user: {
-      id: string;
-      role: string;
-      email: string;
-      name: string | null;
-      image: string | null;
-    };
-  }
-}
-
-// JWT augmentation commented out as next-auth/jwt may not be available
-// declare module "next-auth/jwt" {
-//   interface JWT {
-//     id: string;
-//     role: string;
-//     accessToken: string;
-//   }
-// }
+// NextAuth module augmentations are declared in auth.ts
