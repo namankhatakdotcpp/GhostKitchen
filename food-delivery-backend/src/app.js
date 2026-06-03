@@ -25,6 +25,8 @@ import paymentRoutes from "./modules/payment/payment.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import reviewRoutes from "./modules/review/review.routes.js";
 import couponRoutes from "./modules/coupon/coupon.routes.js";
+import roleRoutes from "./modules/role/role.routes.js";
+import deliveryRoutes from "./modules/delivery/delivery.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -226,6 +228,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/role", roleRoutes);
+app.use("/api/delivery", deliveryRoutes);
 
 // 404 handler
 app.use((req, res) => {
