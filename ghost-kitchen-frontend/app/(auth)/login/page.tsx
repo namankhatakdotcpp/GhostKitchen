@@ -15,6 +15,7 @@ import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
+import { getRoleDashboard } from "@/lib/roleRedirect";
 import { z } from "zod";
 
 // Validation schema
@@ -69,8 +70,12 @@ function LoginForm() {
     try {
       clearError();
       await login(formData.email, formData.password);
-      const returnUrl = searchParams.get("returnUrl") || "/";
-      router.replace(decodeURIComponent(returnUrl));
+      const returnUrl = searchParams.get("returnUrl");
+      const user = useAuthStore.getState().user;
+      const destination = returnUrl
+        ? decodeURIComponent(returnUrl)
+        : getRoleDashboard(user?.activeRole ?? "CUSTOMER");
+      router.replace(destination);
     } catch (err: any) {
       setSubmitError(err.response?.data?.message || "Login failed");
     }

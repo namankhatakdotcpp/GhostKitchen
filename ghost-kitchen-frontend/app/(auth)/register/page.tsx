@@ -69,7 +69,7 @@ export default function RegisterPage() {
     try {
       clearError();
       await register({ name: formData.name, email: formData.email, password: formData.password, phone: formData.phone || undefined });
-      router.replace("/");
+      router.replace("/"); // New accounts are always CUSTOMER → home
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string; error?: string } } };
       setSubmitError(axiosErr.response?.data?.message || axiosErr.response?.data?.error || "Registration failed. Please try again.");
