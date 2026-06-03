@@ -34,12 +34,10 @@ import { logger } from "../../utils/logger.js";
  */
 export const createPaymentSession = async (orderId, user) => {
   // 1️⃣ FETCH ORDER WITH DETAILS
+  // New schema: Order has customerId (not userId) and total (not totalAmount)
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: {
-      user: true,
-      orderItems: true,
-    },
+    include: { customer: true },
   });
 
   if (!order) {
@@ -47,33 +45,18 @@ export const createPaymentSession = async (orderId, user) => {
     throw new AppError("Order not found", 404);
   }
 
-  // 2️⃣ VERIFY ORDER BELONGS TO USER
-  if (order.userId !== user.id) {
+  if (order.customerId !== user.id) {
     logger.error("Unauthorized payment session attempt", {
       orderId,
       requestedBy: user.id,
-      orderBelongsTo: order.userId,
+      orderBelongsTo: order.customerId,
     });
     throw new AppError("Unauthorized to create payment for this order", 403);
   }
 
-  // 3️⃣ VALIDATE ORDER STATUS
-  if (order.paymentStatus !== "PENDING") {
-    logger.warn("Cannot create payment for non-pending order", {
-      orderId,
-      currentPaymentStatus: order.paymentStatus,
-      userId: user.id,
-    });
-    throw new AppError(
-      `Cannot create payment for order with status ${order.paymentStatus}`,
-      400
-    );
-  }
-
-  // 4️⃣ CREATE CASHFREE ORDER REQUEST
   const request = {
     order_id: orderId,
-    order_amount: order.totalAmount,
+    order_amount: (order.total / 100).toFixed(2),
     order_currency: "INR",
     customer_details: {
       customer_id: user.id,
@@ -87,19 +70,16 @@ export const createPaymentSession = async (orderId, user) => {
     order_note: `Order #${orderId.slice(0, 8).toUpperCase()}`,
   };
 
-  // 5️⃣ CREATE SESSION WITH CASHFREE
   try {
     const response = await cashfree.PGCreateOrder(request);
 
     logger.info("Payment session created", {
       orderId,
       userId: user.id,
-      amount: order.totalAmount,
+      amount: order.total,
       paymentSessionId: response.payment_session_id,
-      itemCount: order.orderItems.length,
     });
 
-    // 6️⃣ RETURN SESSION DATA
     return {
       order_id: response.order_id,
       payment_session_id: response.payment_session_id,
@@ -110,14 +90,10 @@ export const createPaymentSession = async (orderId, user) => {
     logger.error("Cashfree API error creating payment session", {
       orderId,
       userId: user.id,
-      amount: order.totalAmount,
+      amount: order.total,
       errorMessage: error.message,
-      errorCode: error.code,
     });
-    throw new AppError(
-      "Failed to create payment session. Please try again.",
-      500
-    );
+    throw new AppError("Failed to create payment session. Please try again.", 500);
   }
 };
 
@@ -202,13 +178,13 @@ export const handlePaymentWebhook = async (webhookData) => {
       // 4️⃣.1 🔥 GAP 3 FIX: VALIDATE PAYMENT AMOUNT (CRITICAL SECURITY CHECK)
       // Prevent amount manipulation attacks
       const webhookAmount = webhookData.order_amount;
-      if (webhookAmount && Math.abs(webhookAmount - order.totalAmount) > 0.01) {
+      if (webhookAmount && Math.abs(webhookAmount - order.total) > 0.01) {
         logger.error("CRITICAL: Payment amount mismatch detected", {
           orderId,
-          userId: order.userId,
-          expected: order.totalAmount,
+          userId: order.customerId,
+          expected: order.total,
           received: webhookAmount,
-          difference: Math.abs(webhookAmount - order.totalAmount),
+          difference: Math.abs(webhookAmount - order.total),
           cfPaymentId,
           severity: "CRITICAL",
           action: "Order NOT updated - amount mismatch",
@@ -235,8 +211,8 @@ export const handlePaymentWebhook = async (webhookData) => {
         if (updated.count > 0) {
           logger.info("Order payment confirmed successfully", {
             orderId,
-            userId: order.userId,
-            amount: order.totalAmount,
+            userId: order.customerId,
+            amount: order.total,
             previousStatus: order.paymentStatus,
             newPaymentStatus: "SUCCESS",
             newOrderStatus: "CONFIRMED",
@@ -245,7 +221,7 @@ export const handlePaymentWebhook = async (webhookData) => {
         } else {
           logger.warn("Order payment status already changed (race condition detected)", {
             orderId,
-            userId: order.userId,
+            userId: order.customerId,
             incomingPaymentStatus: paymentStatus,
             currentPaymentStatus: order.paymentStatus,
             cfPaymentId,
@@ -268,8 +244,8 @@ export const handlePaymentWebhook = async (webhookData) => {
         if (updated.count > 0) {
           logger.warn("Order payment failed, auto-cancelled", {
             orderId,
-            userId: order.userId,
-            amount: order.totalAmount,
+            userId: order.customerId,
+            amount: order.total,
             paymentStatus,
             newStatus: "CANCELLED",
             cfPaymentId,
@@ -277,7 +253,7 @@ export const handlePaymentWebhook = async (webhookData) => {
         } else {
           logger.warn("Order payment failed but already processed", {
             orderId,
-            userId: order.userId,
+            userId: order.customerId,
             incomingPaymentStatus: paymentStatus,
             currentPaymentStatus: order.paymentStatus,
             cfPaymentId,
@@ -287,7 +263,7 @@ export const handlePaymentWebhook = async (webhookData) => {
         // ⚪ UNKNOWN STATUS
         logger.warn("Unknown payment status received", {
           orderId,
-          userId: order.userId,
+          userId: order.customerId,
           paymentStatus,
           cfPaymentId,
           validStatuses: ["SUCCESS", "FAILED", "CANCELLED"],

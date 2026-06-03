@@ -10,7 +10,35 @@ import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "
 
 export const getOrders = async (req, res) => {
   try {
-    const orders = await listOrders(req.user?.userId);
+    const { restaurantId } = req.query;
+    const { userId, role } = req.user;
+
+    // Shopkeeper can fetch orders for their restaurant
+    if (restaurantId && (role === "RESTAURANT" || role === "ADMIN")) {
+      const { prisma } = await import("../../config/prisma.js");
+
+      // Verify shopkeeper owns this restaurant
+      if (role === "RESTAURANT") {
+        const restaurant = await prisma.restaurant.findFirst({
+          where: { id: restaurantId, ownerId: userId },
+        });
+        if (!restaurant) return res.status(403).json({ message: "Not authorized for this restaurant" });
+      }
+
+      const orders = await prisma.order.findMany({
+        where: { restaurantId },
+        include: {
+          customer: { select: { id: true, name: true, phone: true } },
+          agent: { select: { id: true, name: true, phone: true } },
+        },
+        orderBy: { placedAt: "desc" },
+        take: 100,
+      });
+
+      return res.json({ orders });
+    }
+
+    const orders = await listOrders(userId);
     return res.json({ orders });
   } catch (error) {
     return res.status(500).json({ message: "Unable to fetch orders" });

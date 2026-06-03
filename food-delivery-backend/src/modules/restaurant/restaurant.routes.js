@@ -4,6 +4,7 @@ import {
   listRestaurants,
   getRestaurant,
   getMenu,
+  getMyRestaurant,
   createNewRestaurant,
   updateExistingRestaurant,
   toggleStatus,
@@ -15,20 +16,23 @@ import {
 
 const router = express.Router();
 
+// Authenticated shop owner route — must come before /:id to avoid conflict
+router.get("/mine", authenticate, authorize(["RESTAURANT", "ADMIN"]), getMyRestaurant);
+
 // Public routes (no authentication required)
 router.get("/", listRestaurants);
 router.get("/:id", getRestaurant);
 router.get("/:id/menu", getMenu);
 
-// Authenticated routes (SHOPKEEPER role only)
-router.post("/", authenticate, authorize(["SHOPKEEPER"]), createNewRestaurant);
-router.put("/:id", authenticate, authorize(["SHOPKEEPER"]), updateExistingRestaurant);
-router.patch("/:id/status", authenticate, authorize(["SHOPKEEPER"]), toggleStatus);
+// Authenticated routes (RESTAURANT role only)
+router.post("/", authenticate, authorize(["RESTAURANT"]), createNewRestaurant);
+router.put("/:id", authenticate, authorize(["RESTAURANT"]), updateExistingRestaurant);
+router.patch("/:id/status", authenticate, authorize(["RESTAURANT"]), toggleStatus);
 
-// Menu management routes (SHOPKEEPER role only)
-router.post("/:id/menu", authenticate, authorize(["SHOPKEEPER"]), addNewMenuItem);
-router.put("/:id/menu/:itemId", authenticate, authorize(["SHOPKEEPER"]), updateExistingMenuItem);
-router.patch("/:id/menu/:itemId/toggle", authenticate, authorize(["SHOPKEEPER"]), toggleMenuItemStatus);
-router.delete("/:id/menu/:itemId", authenticate, authorize(["SHOPKEEPER"]), deleteExistingMenuItem);
+// Menu management routes (RESTAURANT role only)
+router.post("/:id/menu", authenticate, authorize(["RESTAURANT"]), addNewMenuItem);
+router.put("/:id/menu/:itemId", authenticate, authorize(["RESTAURANT"]), updateExistingMenuItem);
+router.patch("/:id/menu/:itemId/toggle", authenticate, authorize(["RESTAURANT"]), toggleMenuItemStatus);
+router.delete("/:id/menu/:itemId", authenticate, authorize(["RESTAURANT"]), deleteExistingMenuItem);
 
 export default router;

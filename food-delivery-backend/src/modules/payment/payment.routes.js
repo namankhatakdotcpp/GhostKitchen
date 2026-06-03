@@ -1,6 +1,7 @@
 import express from "express";
 import * as paymentController from "./payment.controller.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
+import { roleMiddleware } from "../../middlewares/role.middleware.js";
 
 const router = express.Router();
 
@@ -17,9 +18,32 @@ const router = express.Router();
  */
 
 /**
+ * POST /api/payments/create-order
+ * Create Cashfree session without pre-created order (items in body)
+ * This is the primary checkout flow
+ */
+router.post(
+  "/create-order",
+  authenticate,
+  roleMiddleware(["CUSTOMER"]),
+  paymentController.createPaymentOrder
+);
+
+/**
+ * POST /api/payments/verify
+ * Verify Cashfree payment and create the order record
+ */
+router.post(
+  "/verify",
+  authenticate,
+  roleMiddleware(["CUSTOMER"]),
+  paymentController.verifyPaymentAndCreateOrder
+);
+
+/**
  * POST /api/payments/create-session
- * Create payment session for existing order
- * 
+ * Create payment session for existing order (legacy flow)
+ *
  * Required: authenticate (user must own the order)
  */
 router.post(

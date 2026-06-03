@@ -19,7 +19,7 @@ import { prisma } from "./config/prisma.js";
 import { logger, httpLogger } from "./utils/logger.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import cartRoutes from "./modules/cart/cart.routes.js";
-import orderRoutes from "./modules/order/order.routes.js";
+import orderRoutes from "./modules/orders/orders.routes.js";
 import restaurantRoutes from "./modules/restaurant/restaurant.routes.js";
 import paymentRoutes from "./modules/payment/payment.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";

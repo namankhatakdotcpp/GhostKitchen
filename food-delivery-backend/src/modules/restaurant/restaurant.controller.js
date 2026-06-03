@@ -14,11 +14,33 @@ import {
   getRestaurantWithCache,
 } from "./restaurant.service.js";
 import { redis } from "../../lib/redis.js";
+import { prisma } from "../../config/prisma.js";
 import {
   validateRestaurant,
   validateMenuItem,
   validateUpdateRestaurant,
 } from "./restaurant.validation.js";
+
+export const getMyRestaurant = async (req, res) => {
+  try {
+    const restaurant = await prisma.restaurant.findFirst({
+      where: { ownerId: req.user.userId },
+      include: {
+        menuItems: { where: { isAvailable: true }, orderBy: { category: "asc" } },
+        _count: { select: { orders: true } },
+      },
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({ success: false, message: "No restaurant found for this account" });
+    }
+
+    return res.json({ success: true, data: restaurant });
+  } catch (error) {
+    console.error("Error fetching own restaurant:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 
 export const listRestaurants = async (req, res) => {
   try {
@@ -89,7 +111,7 @@ export const getMenu = async (req, res) => {
       return res.status(400).json({ message: "Restaurant ID is required" });
     }
 
-    const isOwner = req.user && req.user.role === "SHOPKEEPER";
+    const isOwner = req.user && req.user.role === "RESTAURANT";
 
     console.log("📖 Fetching menu for restaurant:", { id, isOwner });
     const menu = await getRestaurantMenu(id, isOwner);

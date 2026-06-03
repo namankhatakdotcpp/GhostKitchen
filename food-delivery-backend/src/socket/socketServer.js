@@ -46,8 +46,9 @@ export const initSocket = async (server) => {
         return next(new Error("Authentication failed: No token provided"));
       }
       const decoded = verifyAccessToken(token);
-      socket.user = { id: decoded.id, email: decoded.email, role: decoded.role };
-      logger.debug("Socket authenticated", { socketId: socket.id, userId: decoded.id });
+      // JWT payload stores the user id as `userId` (not `id`)
+      socket.user = { id: decoded.userId, email: decoded.email, role: decoded.role };
+      logger.debug("Socket authenticated", { socketId: socket.id, userId: decoded.userId });
       next();
     } catch (error) {
       logger.warn("Socket connection rejected: Invalid or expired token", { socketId: socket.id, error: error.message });
@@ -56,9 +57,14 @@ export const initSocket = async (server) => {
   });
 
   io.on("connection", (socket) => {
-    logger.info("Socket connected", { socketId: socket.id, userId: socket.user.id });
-    socket.join(`user:${socket.user.id}`);
-    
+    const user = socket.user;
+    logger.info("Socket connected", { socketId: socket.id, userId: user.id, role: user.role });
+
+    // Auto-join rooms based on role
+    socket.join(`user:${user.id}`);
+    if (user.role === "ADMIN") socket.join("admin");
+    if (user.role === "DELIVERY") socket.join(`agent-${user.id}`);
+
     socket.on("join_user_room", (userId) => {
       if (!userId) return;
       socket.join(`user:${userId}`);
@@ -66,12 +72,31 @@ export const initSocket = async (server) => {
 
     socket.on("join_restaurant_room", (restaurantId) => {
       if (!restaurantId) return;
+      // Join both naming conventions for compatibility
       socket.join(`restaurant:${restaurantId}`);
+      socket.join(`shop-${restaurantId}`);
     });
 
     socket.on("join_delivery_room", (deliveryUserId) => {
       if (!deliveryUserId) return;
       socket.join(`delivery:${deliveryUserId}`);
+      socket.join(`agent-${deliveryUserId}`);
+    });
+
+    // Generic room join used by order tracking page and shop
+    socket.on("join-room", (room) => {
+      if (typeof room !== "string") return;
+      const allowed =
+        room === "admin" ||
+        room.startsWith("order-") ||
+        room.startsWith("shop-") ||
+        room.startsWith("agent-");
+      if (allowed) socket.join(room);
+    });
+
+    socket.on("leave-room", (room) => {
+      if (typeof room !== "string") return;
+      socket.leave(room);
     });
 
     socket.on("disconnect", () => {

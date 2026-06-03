@@ -42,7 +42,7 @@ const phoneSchema = z
   .optional()
   .nullable();
 
-const roleSchema = z.enum(["CUSTOMER", "SHOPKEEPER", "DELIVERY", "ADMIN"]);
+const roleSchema = z.enum(["CUSTOMER", "RESTAURANT", "DELIVERY", "ADMIN"]);
 
 // Register validation schema
 export const registerSchema = z.object({

@@ -38,9 +38,16 @@ export const authenticate = (req, res, next) => {
       throw new AppError("No token provided", 401);
     }
 
-    // Verify and decode token
     const decoded = verifyAccessToken(token);
-    req.user = decoded;
+    // Support both legacy (single role) and new multi-role tokens
+    req.user = {
+      userId: decoded.userId,
+      roles: decoded.roles ?? [decoded.role ?? "CUSTOMER"],
+      activeRole: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
+      role: decoded.activeRole ?? decoded.role ?? "CUSTOMER", // backwards compat
+      secondRole: decoded.secondRole ?? null,
+      restaurantId: decoded.restaurantId ?? null,
+    };
     next();
   } catch (error) {
     if (error.message.includes("expired")) {

@@ -250,8 +250,8 @@ export const assignDeliveryAgent = async (orderId, io) => {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  const restaurantLat = order.restaurant.currentLat ?? 28.6139;
-  const restaurantLng = order.restaurant.currentLng ?? 77.209;
+  const restaurantLat = order.restaurant.lat ?? 28.6139;
+  const restaurantLng = order.restaurant.lng ?? 77.2090;
 
   const agentWithDistance = availableAgents.map((agent) => ({
     ...agent,

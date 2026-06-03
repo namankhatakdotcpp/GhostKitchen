@@ -10,18 +10,31 @@ export const getRestaurants = async (
   limit = 12
 ) => {
   try {
-    console.log("PARAMS:", { search, city, page, limit });
+    const where = {
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+        ],
+      }),
+      ...(minRating && { rating: { gte: parseFloat(minRating) } }),
+    };
 
-    const restaurants = await prisma.restaurant.findMany({
-      take: limit,
-      skip: (page - 1) * limit,
-    });
-
-    console.log("DB RESULT:", restaurants);
+    const [restaurants, total] = await Promise.all([
+      prisma.restaurant.findMany({
+        where,
+        take: limit,
+        skip: (page - 1) * limit,
+        orderBy: { rating: "desc" },
+      }),
+      prisma.restaurant.count({ where }),
+    ]);
 
     return {
       restaurants: restaurants || [],
-      pagination: { page, limit }
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
     };
   } catch (error) {
     console.error("❌ getRestaurants DB error:", error.message);

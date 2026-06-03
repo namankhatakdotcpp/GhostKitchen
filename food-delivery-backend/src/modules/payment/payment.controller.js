@@ -4,6 +4,10 @@ import { logger } from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
 import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
+import cashfree from "../../config/cashfree.js";
+import { v4 as uuid } from "uuid";
+import { calculateOrderTotal } from "../orders/orders.service.js";
+import { emitOrderNew } from "../../socket/socket.server.js";
 
 /**
  * Payment Controller - HTTP Handlers
@@ -187,6 +191,162 @@ export const verifyPayment = async (req, res, next) => {
 };
 
 /**
+ * POST /api/payments/create-order
+ * Create Cashfree payment session for new order (without creating the DB order first)
+ * Cart-free flow: items sent in request body, order created after payment verification
+ */
+export const createPaymentOrder = async (req, res, next) => {
+  try {
+    const { restaurantId, items, deliveryAddress, couponCode } = req.body;
+    const customerId = req.user.userId;
+
+    if (!restaurantId || !items?.length || !deliveryAddress) {
+      return res.status(400).json({ message: "restaurantId, items, and deliveryAddress are required" });
+    }
+
+    const customer = await prisma.user.findUnique({
+      where: { id: customerId },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+    if (!customer) return res.status(404).json({ message: "User not found" });
+
+    const { subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+      restaurantId,
+      items,
+      couponCode,
+    });
+
+    const cfOrderId = `GK-${uuid().slice(0, 8).toUpperCase()}`;
+
+    const request = {
+      order_id: cfOrderId,
+      order_amount: (total / 100).toFixed(2),
+      order_currency: "INR",
+      customer_details: {
+        customer_id: customer.id,
+        customer_name: customer.name || "Customer",
+        customer_email: customer.email,
+        customer_phone: customer.phone || "9999999999",
+      },
+      order_meta: {
+        return_url: `${env.FRONTEND_URL}/checkout/callback?order_id={order_id}`,
+        notify_url: `${env.BACKEND_URL}/api/payments/webhook`,
+      },
+      order_note: "GhostKitchen order",
+    };
+
+    let paymentSessionId;
+    try {
+      const response = await cashfree.PGCreateOrder(request);
+      paymentSessionId = response.payment_session_id;
+    } catch (cfErr) {
+      logger.error("Cashfree create order failed", { error: cfErr.message });
+      return res.status(502).json({ message: "Payment gateway error. Please try again." });
+    }
+
+    await prisma.payment.create({
+      data: {
+        cfOrderId,
+        customerId,
+        restaurantId,
+        amount: total,
+        status: "PENDING",
+        itemsSnapshot: JSON.stringify(items),
+        deliveryAddress: JSON.stringify(deliveryAddress),
+        couponCode: couponCode || null,
+      },
+    });
+
+    return res.json({
+      cfOrderId,
+      paymentSessionId,
+      orderAmount: total / 100,
+      deliveryFee,
+    });
+  } catch (error) {
+    if (error.message?.includes("Invalid items") || error.message?.includes("coupon")) {
+      return res.status(400).json({ message: error.message });
+    }
+    logger.error("Create payment order error", { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * POST /api/payments/verify
+ * Verify Cashfree payment then create the order record
+ */
+export const verifyPaymentAndCreateOrder = async (req, res, next) => {
+  try {
+    const { cfOrderId } = req.body;
+    const customerId = req.user.userId;
+
+    if (!cfOrderId) return res.status(400).json({ message: "cfOrderId is required" });
+
+    const pendingPayment = await prisma.payment.findUnique({ where: { cfOrderId } });
+    if (!pendingPayment) return res.status(404).json({ message: "Payment record not found" });
+    if (pendingPayment.customerId !== customerId) return res.status(403).json({ message: "Forbidden" });
+
+    // Idempotency: already processed → return existing order
+    if (pendingPayment.status === "SUCCESS") {
+      const existingOrder = await prisma.order.findFirst({ where: { cfOrderId } });
+      return res.json({ orderId: existingOrder?.id, success: true });
+    }
+
+    // Verify with Cashfree
+    let cfOrderStatus;
+    try {
+      const response = await cashfree.PGFetchOrder("2025-01-01", cfOrderId);
+      cfOrderStatus = response.data?.order_status ?? response.order_status;
+    } catch (cfErr) {
+      logger.error("Cashfree fetch order failed", { cfOrderId, error: cfErr.message });
+      return res.status(502).json({ message: "Could not verify payment with gateway" });
+    }
+
+    if (cfOrderStatus !== "PAID") {
+      return res.status(400).json({ message: "Payment not completed", status: cfOrderStatus });
+    }
+
+    const parsedItems = JSON.parse(pendingPayment.itemsSnapshot);
+    const parsedAddress = JSON.parse(pendingPayment.deliveryAddress);
+
+    const { orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+      restaurantId: pendingPayment.restaurantId,
+      items: parsedItems,
+      couponCode: pendingPayment.couponCode,
+    });
+
+    const order = await prisma.order.create({
+      data: {
+        customerId,
+        restaurantId: pendingPayment.restaurantId,
+        status: "PLACED",
+        items: orderItems,
+        subtotal,
+        deliveryFee,
+        discount,
+        total,
+        deliveryAddress: parsedAddress,
+        cfOrderId,
+      },
+      include: { restaurant: true },
+    });
+
+    await prisma.payment.update({
+      where: { cfOrderId },
+      data: { status: "SUCCESS" },
+    });
+
+    emitOrderNew({ restaurantId: pendingPayment.restaurantId, order });
+
+    return res.json({ orderId: order.id, success: true });
+  } catch (error) {
+    logger.error("Verify payment error", { error: error.message });
+    next(error);
+  }
+};
+
+/**
  * POST /api/payments/retry/:orderId
  * Retry payment for a failed order
  * 
@@ -223,29 +383,19 @@ export const retryPayment = async (req, res, next) => {
       throw new AppError("Order not found", 404);
     }
 
-    // 2️⃣ VERIFY USER OWNS ORDER (CRITICAL: Prevent customers from retrying other users' orders)
-    if (order.userId !== userId) {
+    if (order.customerId !== userId) {
       logger.error("Unauthorized payment retry attempt", {
         orderId,
         requestedBy: userId,
-        orderOwner: order.userId,
-        timestamp: new Date(),
-        severity: "CRITICAL",
+        orderOwner: order.customerId,
       });
       throw new AppError("Unauthorized to retry payment for this order", 403);
     }
 
-    // 3️⃣ CHECK IF PAYMENT CAN BE RETRIED
-    if (order.paymentStatus !== "FAILED") {
-      logger.warn("Retry payment attempted on non-failed order", {
-        orderId,
-        userId,
-        currentPaymentStatus: order.paymentStatus,
-        currentOrderStatus: order.status,
-      });
+    if (order.status !== "CANCELLED") {
       return res.status(400).json({
         success: false,
-        message: `Cannot retry payment. Current status: ${order.paymentStatus}`,
+        message: "Can only retry payment for cancelled orders.",
       });
     }
 
@@ -258,8 +408,7 @@ export const retryPayment = async (req, res, next) => {
     logger.info("Payment retry initiated successfully", {
       orderId,
       userId,
-      amount: order.totalAmount,
-      previousPaymentStatus: "FAILED",
+      amount: order.total,
       newSessionId: session.payment_session_id,
       timestamp: new Date(),
     });

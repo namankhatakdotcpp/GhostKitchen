@@ -51,6 +51,15 @@ export const generateTokenPair = (payload) => {
   };
 };
 
+// Convenience: build token payload from a User DB record
+export const buildTokenPayload = (user) => ({
+  userId: user.id,
+  roles: user.roles ?? ["CUSTOMER"],
+  activeRole: user.activeRole ?? "CUSTOMER",
+  secondRole: user.secondRole ?? null,
+  restaurantId: user.restaurantId ?? null,
+});
+
 /**
  * Verify Access Token
  * @param {string} token - JWT to verify

@@ -1,119 +1,74 @@
 import { prisma } from "../../config/prisma.js";
 import { logger } from "../../utils/logger.js";
 
-/**
- * Create a review for an order
- * Only allow review after order is delivered
- */
 export const createReview = async (req, res, next) => {
   try {
     const { orderId, rating, comment } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
-    // Validate rating
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "Rating must be between 1 and 5" });
     }
 
-    // Check if order exists and belongs to user
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { orderItems: true },
-    });
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
 
-    if (!order || order.userId !== userId) {
-      return res
-        .status(404)
-        .json({ error: "Order not found or unauthorized" });
+    if (!order || order.customerId !== userId) {
+      return res.status(404).json({ error: "Order not found or unauthorized" });
     }
 
-    // Check if order is delivered
     if (order.status !== "DELIVERED") {
       return res.status(400).json({ error: "Can only review delivered orders" });
     }
 
-    // Check if review already exists
-    const existingReview = await prisma.review.findUnique({
-      where: { orderId },
-    });
-
+    const existingReview = await prisma.review.findUnique({ where: { orderId } });
     if (existingReview) {
       return res.status(400).json({ error: "Order already reviewed" });
     }
 
-    // Create review
     const review = await prisma.review.create({
-      data: {
-        orderId,
-        rating,
-        comment: comment || null,
-      },
+      data: { orderId, rating, comment: comment || null },
     });
 
     logger.info(`Review created for order ${orderId} by user ${userId}`);
-
-    res.json({
-      success: true,
-      review,
-    });
+    res.json({ success: true, review });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * Get reviews for a restaurant
- * Based on delivered orders
- */
 export const getRestaurantReviews = async (req, res, next) => {
   try {
     const { restaurantId } = req.params;
 
-    // Get all orders from this restaurant with reviews
+    // Order now has direct restaurantId field
     const reviews = await prisma.review.findMany({
-      where: {
-        order: {
-          orderItems: {
-            some: {
-              menuItem: {
-                restaurantId,
-              },
-            },
-          },
-        },
-      },
+      where: { order: { restaurantId } },
       include: {
         order: {
           include: {
-            user: {
-              select: { id: true, name: true },
-            },
+            customer: { select: { id: true, name: true } },
           },
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 10, // Get latest 10 reviews
+      take: 10,
     });
 
-    // Format response
     const formattedReviews = reviews.map((review) => ({
       id: review.id,
       rating: review.rating,
       comment: review.comment,
-      userName: review.order.user.name,
+      userName: review.order.customer.name,
       createdAt: review.createdAt,
     }));
 
-    // Calculate average rating
     const avgRating =
       reviews.length > 0
-        ? (
-            reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-          ).toFixed(1)
+        ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
         : 0;
 
     res.json({
-      averageRating: parseFloat(avgRating),
+      averageRating: parseFloat(String(avgRating)),
       totalReviews: reviews.length,
       reviews: formattedReviews,
     });
@@ -122,9 +77,6 @@ export const getRestaurantReviews = async (req, res, next) => {
   }
 };
 
-/**
- * Get single row review by order ID
- */
 export const getReviewByOrderId = async (req, res, next) => {
   try {
     const { orderId } = req.params;
@@ -133,11 +85,7 @@ export const getReviewByOrderId = async (req, res, next) => {
       where: { orderId },
       include: {
         order: {
-          include: {
-            user: {
-              select: { name: true },
-            },
-          },
+          include: { customer: { select: { name: true } } },
         },
       },
     });
@@ -150,7 +98,7 @@ export const getReviewByOrderId = async (req, res, next) => {
       id: review.id,
       rating: review.rating,
       comment: review.comment,
-      userName: review.order.user.name,
+      userName: review.order.customer.name,
       createdAt: review.createdAt,
     });
   } catch (error) {
@@ -158,16 +106,12 @@ export const getReviewByOrderId = async (req, res, next) => {
   }
 };
 
-/**
- * Update review (only by the reviewer)
- */
 export const updateReview = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { rating, comment } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
-    // Check if review exists
     const review = await prisma.review.findUnique({
       where: { orderId },
       include: { order: true },
@@ -177,17 +121,14 @@ export const updateReview = async (req, res, next) => {
       return res.status(404).json({ error: "Review not found" });
     }
 
-    // Check if user is the reviewer
-    if (review.order.userId !== userId) {
+    if (review.order.customerId !== userId) {
       return res.status(403).json({ error: "Unauthorized to update this review" });
     }
 
-    // Validate rating if provided
     if (rating && (rating < 1 || rating > 5)) {
       return res.status(400).json({ error: "Rating must be between 1 and 5" });
     }
 
-    // Update review
     const updatedReview = await prisma.review.update({
       where: { id: review.id },
       data: {
@@ -197,25 +138,17 @@ export const updateReview = async (req, res, next) => {
     });
 
     logger.info(`Review updated for order ${orderId} by user ${userId}`);
-
-    res.json({
-      success: true,
-      review: updatedReview,
-    });
+    res.json({ success: true, review: updatedReview });
   } catch (error) {
     next(error);
   }
 };
 
-/**
- * Delete review (only by the reviewer)
- */
 export const deleteReview = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
-    // Check if review exists
     const review = await prisma.review.findUnique({
       where: { orderId },
       include: { order: true },
@@ -225,22 +158,14 @@ export const deleteReview = async (req, res, next) => {
       return res.status(404).json({ error: "Review not found" });
     }
 
-    // Check if user is the reviewer
-    if (review.order.userId !== userId) {
+    if (review.order.customerId !== userId) {
       return res.status(403).json({ error: "Unauthorized to delete this review" });
     }
 
-    // Delete review
-    await prisma.review.delete({
-      where: { id: review.id },
-    });
+    await prisma.review.delete({ where: { id: review.id } });
 
     logger.info(`Review deleted for order ${orderId} by user ${userId}`);
-
-    res.json({
-      success: true,
-      message: "Review deleted successfully",
-    });
+    res.json({ success: true, message: "Review deleted successfully" });
   } catch (error) {
     next(error);
   }

@@ -1,397 +1,131 @@
-/**
- * Admin Service
- * 
- * Business logic for admin operations:
- * - Retrieve all orders with filtering
- * - Update order status (with real-time socket emission)
- * - Generate admin reports
- * - System diagnostics
- */
-
 import { prisma } from "../../config/prisma.js";
-import { emitOrderUpdate, emitOrderCancelled } from "../../socket/socketEvents.js";
 import { logger } from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
+import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
 
-/**
- * Get all orders with optional filtering
- * Admin can see every order in the system
- * 
- * Options:
- * - status: Filter by order status
- * - startDate, endDate: Filter by date range
- * - restaurantId: Filter by restaurant
- * - userId: Filter by customer
- */
+const ORDER_INCLUDE = {
+  customer: { select: { id: true, email: true, name: true, phone: true } },
+  restaurant: { select: { id: true, name: true, address: true } },
+  agent: { select: { id: true, name: true, phone: true } },
+};
+
 export const getAllOrders = async (filters = {}) => {
   try {
-    const whereClause = {};
+    const where = {};
 
-    // Apply filters
-    if (filters.status) {
-      whereClause.status = filters.status.toUpperCase();
-    }
-
+    if (filters.status) where.status = filters.status.toUpperCase();
+    if (filters.restaurantId) where.restaurantId = filters.restaurantId;
+    if (filters.userId) where.customerId = filters.userId;
     if (filters.startDate || filters.endDate) {
-      whereClause.createdAt = {};
-      if (filters.startDate) {
-        whereClause.createdAt.gte = new Date(filters.startDate);
-      }
-      if (filters.endDate) {
-        whereClause.createdAt.lte = new Date(filters.endDate);
-      }
-    }
-
-    if (filters.restaurantId) {
-      whereClause.restaurantId = filters.restaurantId;
-    }
-
-    if (filters.userId) {
-      whereClause.userId = filters.userId;
+      where.createdAt = {};
+      if (filters.startDate) where.createdAt.gte = new Date(filters.startDate);
+      if (filters.endDate) where.createdAt.lte = new Date(filters.endDate);
     }
 
     const orders = await prisma.order.findMany({
-      where: whereClause,
-      include: {
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            phone: true,
-          },
-        },
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
-        deliveryUser: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+      where,
+      include: ORDER_INCLUDE,
+      orderBy: { createdAt: "desc" },
     });
 
-    logger.info("Fetched all orders", {
-      count: orders.length,
-      filters,
-    });
-
+    logger.info("Fetched all orders", { count: orders.length, filters });
     return orders;
   } catch (error) {
-    logger.error("Failed to fetch all orders", {
-      error: error.message,
-      filters,
-    });
+    logger.error("Failed to fetch all orders", { error: error.message, filters });
     throw new AppError("Failed to fetch orders", 500);
   }
 };
 
-/**
- * Get order by ID (admin view)
- */
 export const getOrderById = async (orderId) => {
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            phone: true,
-            address: true,
-          },
-        },
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
-        deliveryUser: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-          },
-        },
-      },
-    });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: ORDER_INCLUDE,
+  });
 
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
-
-    return order;
-  } catch (error) {
-    logger.error("Failed to fetch order", {
-      orderId,
-      error: error.message,
-    });
-    throw error;
-  }
+  if (!order) throw new AppError("Order not found", 404);
+  return order;
 };
 
-/**
- * Update order status (admin override)
- * Can manually update any order status
- * Emits real-time socket event
- */
 export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
-  try {
-    const validStatuses = [
-      "PENDING",
-      "CONFIRMED",
-      "PREPARING",
-      "OUT_FOR_DELIVERY",
-      "DELIVERED",
-      "CANCELLED",
-    ];
+  const validStatuses = ["PLACED", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
 
-    if (!validStatuses.includes(newStatus.toUpperCase())) {
-      throw new AppError(`Invalid status: ${newStatus}`, 400);
-    }
-
-    // Fetch current order
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        orderItems: true,
-      },
-    });
-
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
-
-    // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: newStatus.toUpperCase(),
-        updatedAt: new Date(),
-      },
-      include: {
-        orderItems: {
-          include: {
-            menuItem: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        },
-        restaurant: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    // Emit real-time socket update
-    emitOrderUpdate(updatedOrder);
-
-    logger.warn("Admin updated order status", {
-      orderId,
-      oldStatus: order.status,
-      newStatus,
-      reason,
-    });
-
-    return updatedOrder;
-  } catch (error) {
-    logger.error("Failed to update order status", {
-      orderId,
-      newStatus,
-      error: error.message,
-    });
-    throw error;
+  if (!validStatuses.includes(newStatus.toUpperCase())) {
+    throw new AppError(`Invalid status: ${newStatus}`, 400);
   }
+
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new AppError("Order not found", 404);
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: newStatus.toUpperCase() },
+    include: ORDER_INCLUDE,
+  });
+
+  emitOrderStatusUpdated({ orderId, status: newStatus.toUpperCase(), timestamp: new Date().toISOString() });
+
+  logger.warn("Admin updated order status", { orderId, oldStatus: order.status, newStatus, reason });
+  return updatedOrder;
 };
 
-/**
- * Cancel order (admin override)
- */
 export const cancelOrder = async (orderId, reason = "Admin cancelled") => {
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        orderItems: true,
-      },
-    });
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.status === "DELIVERED") throw new AppError("Cannot cancel delivered orders", 400);
 
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
+  const cancelledOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: "CANCELLED" },
+    include: ORDER_INCLUDE,
+  });
 
-    if (order.status === "DELIVERED") {
-      throw new AppError("Cannot cancel delivered orders", 400);
-    }
+  emitOrderStatusUpdated({ orderId, status: "CANCELLED", timestamp: new Date().toISOString() });
 
-    const cancelledOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "CANCELLED",
-        updatedAt: new Date(),
-      },
-      include: {
-        orderItems: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    // Emit cancellation event
-    emitOrderCancelled(cancelledOrder, reason);
-
-    logger.warn("Admin cancelled order", {
-      orderId,
-      reason,
-    });
-
-    return cancelledOrder;
-  } catch (error) {
-    logger.error("Failed to cancel order", {
-      orderId,
-      error: error.message,
-    });
-    throw error;
-  }
+  logger.warn("Admin cancelled order", { orderId, reason });
+  return cancelledOrder;
 };
 
-/**
- * Get admin statistics
- */
 export const getAdminStats = async () => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const [
-      totalOrders,
-      todayOrders,
-      completedOrders,
-      cancelledOrders,
-      totalRevenue,
-    ] = await Promise.all([
+    const [totalOrders, todayOrders, completedOrders, cancelledOrders, revenueAgg] = await Promise.all([
       prisma.order.count(),
-      prisma.order.count({
-        where: {
-          createdAt: {
-            gte: today,
-            lt: tomorrow,
-          },
-        },
-      }),
-      prisma.order.count({
-        where: {
-          status: "DELIVERED",
-        },
-      }),
-      prisma.order.count({
-        where: {
-          status: "CANCELLED",
-        },
-      }),
-      prisma.order.aggregate({
-        _sum: {
-          totalAmount: true,
-        },
-      }),
+      prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+      prisma.order.count({ where: { status: "DELIVERED" } }),
+      prisma.order.count({ where: { status: "CANCELLED" } }),
+      prisma.order.aggregate({ _sum: { total: true } }),
     ]);
-
-    logger.info("Generated admin statistics");
 
     return {
       totalOrders,
       todayOrders,
       completedOrders,
       cancelledOrders,
-      totalRevenue: totalRevenue._sum.totalAmount || 0,
-      successRate: totalOrders > 0 
-        ? ((completedOrders / totalOrders) * 100).toFixed(2)
-        : 0,
+      totalRevenue: revenueAgg._sum.total || 0,
+      successRate: totalOrders > 0 ? ((completedOrders / totalOrders) * 100).toFixed(2) : 0,
     };
   } catch (error) {
-    logger.error("Failed to generate statistics", {
-      error: error.message,
-    });
+    logger.error("Failed to generate statistics", { error: error.message });
     throw new AppError("Failed to generate statistics", 500);
   }
 };
 
-/**
- * Assign delivery partner to order (admin operation)
- */
-export const assignDeliveryPartner = async (orderId, deliveryUserId) => {
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-    });
+export const assignDeliveryPartner = async (orderId, agentId) => {
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new AppError("Order not found", 404);
 
-    if (!order) {
-      throw new AppError("Order not found", 404);
-    }
+  const updatedOrder = await prisma.order.update({
+    where: { id: orderId },
+    data: { agentId, status: "OUT_FOR_DELIVERY" },
+    include: ORDER_INCLUDE,
+  });
 
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        deliveryUserId,
-        status: "OUT_FOR_DELIVERY",
-      },
-      include: {
-        orderItems: true,
-      },
-    });
+  emitOrderStatusUpdated({ orderId, status: "OUT_FOR_DELIVERY", timestamp: new Date().toISOString() });
 
-    emitOrderUpdate(updatedOrder);
-
-    logger.info("Admin assigned delivery partner", {
-      orderId,
-      deliveryUserId,
-    });
-
-    return updatedOrder;
-  } catch (error) {
-    logger.error("Failed to assign delivery partner", {
-      orderId,
-      error: error.message,
-    });
-    throw error;
-  }
+  logger.info("Admin assigned delivery partner", { orderId, agentId });
+  return updatedOrder;
 };

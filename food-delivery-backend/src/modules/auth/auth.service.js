@@ -15,8 +15,15 @@ import {
   generateTokenPair,
   verifyRefreshToken,
   generateAccessToken,
+  buildTokenPayload,
 } from "../../utils/jwt.js";
 import AppError from "../../utils/AppError.js";
+
+const USER_SELECT = {
+  id: true, name: true, email: true, role: false,
+  roles: true, activeRole: true, secondRole: true, restaurantId: true,
+  phone: true, createdAt: true, updatedAt: true,
+};
 
 /**
  * Register a new user
@@ -41,31 +48,24 @@ export const registerUser = async (data) => {
   // Hash password with bcrypt
   const hashedPassword = await hashPassword(data.password);
 
-  // Create user in database
+  // Create user in database with multi-role defaults
   const user = await prisma.user.create({
     data: {
       name: data.name,
       email: data.email,
       password: hashedPassword,
       phone: data.phone || null,
-      role: data.role || "CUSTOMER",
+      roles: ["CUSTOMER"],
+      activeRole: "CUSTOMER",
     },
     select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      phone: true,
+      id: true, name: true, email: true, phone: true,
+      roles: true, activeRole: true, secondRole: true, restaurantId: true,
       createdAt: true,
     },
   });
 
-  // Generate token pair (access + refresh)
-  const tokenPair = generateTokenPair({
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  });
+  const tokenPair = generateTokenPair(buildTokenPayload(user));
 
   // Store refresh token in database
   const refreshTokenExpiry = new Date();
@@ -83,11 +83,8 @@ export const registerUser = async (data) => {
     success: true,
     message: "User registered successfully",
     data: {
-      user,
-      tokens: {
-        accessToken: tokenPair.accessToken,
-        refreshToken: tokenPair.refreshToken,
-      },
+      user: { ...user, role: "CUSTOMER" },
+      tokens: { accessToken: tokenPair.accessToken, refreshToken: tokenPair.refreshToken },
     },
   };
 };
@@ -99,39 +96,22 @@ export const registerUser = async (data) => {
  * @returns {Object} User and tokens
  */
 export const loginUser = async (email, password) => {
-  // Find user by email
   const user = await prisma.user.findUnique({
     where: { email },
     select: {
-      id: true,
-      name: true,
-      email: true,
-      password: true,
-      role: true,
-      phone: true,
+      id: true, name: true, email: true, password: true, phone: true,
+      roles: true, activeRole: true, secondRole: true, restaurantId: true,
     },
   });
 
-  if (!user) {
-    throw new AppError("Invalid email or password", 401);
-  }
+  if (!user) throw new AppError("Invalid email or password", 401);
 
-  // Verify password
   const isPasswordValid = await comparePassword(password, user.password);
+  if (!isPasswordValid) throw new AppError("Invalid email or password", 401);
 
-  if (!isPasswordValid) {
-    throw new AppError("Invalid email or password", 401);
-  }
-
-  // Remove password from response
   const { password: _, ...userWithoutPassword } = user;
 
-  // Generate token pair
-  const tokenPair = generateTokenPair({
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  });
+  const tokenPair = generateTokenPair(buildTokenPayload(user));
 
   // Store refresh token in database
   const refreshTokenExpiry = new Date();
@@ -149,11 +129,8 @@ export const loginUser = async (email, password) => {
     success: true,
     message: "Login successful",
     data: {
-      user: userWithoutPassword,
-      tokens: {
-        accessToken: tokenPair.accessToken,
-        refreshToken: tokenPair.refreshToken,
-      },
+      user: { ...userWithoutPassword, role: userWithoutPassword.activeRole },
+      tokens: { accessToken: tokenPair.accessToken, refreshToken: tokenPair.refreshToken },
     },
   };
 };
@@ -225,13 +202,9 @@ export const getCurrentUser = async (userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      phone: true,
-      createdAt: true,
-      updatedAt: true,
+      id: true, name: true, email: true, phone: true,
+      roles: true, activeRole: true, secondRole: true, restaurantId: true,
+      createdAt: true, updatedAt: true,
     },
   });
 

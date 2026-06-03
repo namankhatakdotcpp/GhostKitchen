@@ -5,6 +5,7 @@ import http from "http";
 dotenv.config({ path: ".env" });
 
 import app from "./app.js";
+
 import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { connectRedis } from "./config/redis.js";
@@ -44,7 +45,8 @@ const startServer = async () => {
 
       // 5. Initialize Socket.IO explicitly after Redis attempting
       try {
-        await initSocket(server);
+        const io = await initSocket(server);
+        app.locals.io = io;
       } catch (socketError) {
         logger.error("❌ Socket initialization failed", { error: socketError.message });
       }
