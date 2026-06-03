@@ -6,10 +6,30 @@ import { BellRing, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { getShopOrdersBoardData } from "@/lib/opsData";
+import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import type { ShopBoardItem } from "@/types";
+
+function orderToBoard(order: any): ShopBoardItem {
+  const items: any[] = Array.isArray(order.items) ? order.items : [];
+  return {
+    id: order.id,
+    customerName: order.customer?.name ?? "Customer",
+    itemsSummary: items.map((i: any) => `${i.quantity}x ${i.name}`),
+    totalAmount: order.total ?? 0,
+    placedAt: order.placedAt ?? order.createdAt,
+    status: order.status === "PLACED" ? "new"
+      : order.status === "CONFIRMED" || order.status === "PREPARING" ? "preparing"
+      : order.status === "OUT_FOR_DELIVERY" ? "ready"
+      : "completed",
+    prepTimeMinutes: 15,
+    autoRejectAt: order.status === "PLACED"
+      ? new Date(new Date(order.placedAt ?? order.createdAt).getTime() + 3 * 60 * 1000).toISOString()
+      : undefined,
+    assignedAgentName: order.agent?.name ?? undefined,
+  };
+}
 
 const columns = [
   { key: "new", label: "New Orders", headerClass: "bg-danger text-white" },
@@ -206,16 +226,27 @@ export function ShopOrdersPage() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
-  const boardQuery = useQuery({
-    queryKey: ["shop-orders-board"],
-    queryFn: getShopOrdersBoardData,
+  // Fetch my restaurant to get its ID for API + socket
+  const restaurantQuery = useQuery({
+    queryKey: ["my-restaurant"],
+    queryFn: () => api.get("/restaurants/mine").then(r => r.data?.data ?? r.data),
+  });
+  const restaurantId: string | null = restaurantQuery.data?.id ?? null;
+
+  const boardQuery = useQuery<ShopBoardItem[]>({
+    queryKey: ["shop-orders-board", restaurantId],
+    queryFn: () =>
+      api.get("/orders", { params: { restaurantId } })
+        .then(r => (r.data?.orders ?? []).map(orderToBoard) as ShopBoardItem[]),
+    enabled: !!restaurantId,
+    refetchInterval: 30_000,
   });
 
   useEffect(() => {
     if (!boardQuery.data) return;
 
     const intervalId = window.setInterval(() => {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board"], (current) =>
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) =>
         current?.filter((item) => {
           if (item.status !== "new" || !item.autoRejectAt) {
             return item.status !== "completed" || Date.now() - new Date(item.placedAt).getTime() < 2 * 60 * 60 * 1000;
@@ -236,8 +267,9 @@ export function ShopOrdersPage() {
   }, [boardQuery.data, queryClient]);
 
   useEffect(() => {
+    if (!restaurantId) return;
     const socket = getSocket();
-    const room = "shop-ghost-biryani-house";
+    const room = `shop-${restaurantId}`;
 
     function maybeNotify(order: ShopBoardItem) {
       if (soundEnabled) {
@@ -251,17 +283,23 @@ export function ShopOrdersPage() {
       }
     }
 
-    function handleOrderNew(order: ShopOrderEvent) {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board"], (current = []) => [
-        { ...order, status: "new", autoRejectAt: new Date(Date.now() + 3 * 60 * 1000).toISOString() },
+    function handleOrderNew(payload: { order?: ShopOrderEvent } | ShopOrderEvent) {
+      const raw: any = (payload as any).order ?? payload;
+      const boardItem: ShopBoardItem = {
+        ...orderToBoard(raw),
+        status: "new",
+        autoRejectAt: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+      };
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) => [
+        boardItem,
         ...current,
       ]);
-      setBanner(`New order ${order.id} received.`);
-      maybeNotify(order);
+      setBanner(`New order ${raw.id?.slice(-6).toUpperCase() ?? ""} received.`);
+      maybeNotify(boardItem);
     }
 
     function handleAgentAssigned(payload: { orderId: string; agentName: string }) {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board"], (current = []) =>
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
         current.map((item) =>
           item.id === payload.orderId ? { ...item, assignedAgentName: payload.agentName } : item,
         ),
@@ -269,7 +307,7 @@ export function ShopOrdersPage() {
     }
 
     function handlePickedUp(payload: { orderId: string }) {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board"], (current = []) =>
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
         current.map((item) =>
           item.id === payload.orderId ? { ...item, status: "completed" } : item,
         ),
@@ -294,10 +332,10 @@ export function ShopOrdersPage() {
       socket.off("order:picked-up", handlePickedUp);
       socket.disconnect();
     };
-  }, [queryClient, soundEnabled]);
+  }, [queryClient, soundEnabled, restaurantId]);
 
   function updateBoard(mutator: (item: ShopBoardItem) => ShopBoardItem | null) {
-    queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board"], (current = []) =>
+    queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
       current
         .map(mutator)
         .filter((item): item is ShopBoardItem => Boolean(item)),

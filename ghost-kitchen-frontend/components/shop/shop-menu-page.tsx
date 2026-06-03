@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
-import { getShopMenuData } from "@/lib/opsData";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { ShopMenuEditorItem } from "@/types";
 
@@ -121,9 +121,37 @@ export function ShopMenuPage() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
+  // Fetch restaurant first to get its ID
+  const restaurantQuery = useQuery({
+    queryKey: ["my-restaurant"],
+    queryFn: () => api.get("/restaurants/mine").then(r => r.data?.data ?? r.data),
+  });
+  const restaurantId: string | null = restaurantQuery.data?.id ?? null;
+
   const menuQuery = useQuery({
-    queryKey: ["shop-menu"],
-    queryFn: getShopMenuData,
+    queryKey: ["shop-menu", restaurantId],
+    queryFn: async () => {
+      // Menu endpoint returns { category: [items] } — flatten to array
+      const byCategory: Record<string, any[]> = await api
+        .get(`/restaurants/${restaurantId}/menu`)
+        .then(r => r.data);
+      return Object.entries(byCategory).flatMap(([cat, items]) =>
+        items.map((item: any, idx: number): ShopMenuEditorItem => ({
+          id: item.id,
+          restaurantId: restaurantId!,
+          name: item.name,
+          description: item.description ?? "",
+          price: Number(item.price),
+          category: cat,
+          imageUrl: item.imageUrl ?? "",
+          isVeg: item.isVeg ?? false,
+          isAvailable: item.isAvailable ?? true,
+          isBestseller: item.isBestseller ?? false,
+          sortOrder: idx + 1,
+        }))
+      );
+    },
+    enabled: !!restaurantId,
   });
 
   useEffect(() => {
@@ -182,7 +210,7 @@ export function ShopMenuPage() {
     setMenuItems((current) => [
       {
         id: `menu-${Date.now()}`,
-        restaurantId: "ghost-biryani-house",
+        restaurantId: restaurantId ?? "",
         sortOrder: current.length + 1,
         isAvailable: true,
         ...parsed.data,

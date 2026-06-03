@@ -374,7 +374,7 @@ export function RestaurantMenuPage({
                           <button
                             className="text-brand"
                             onClick={() =>
-                              updateQuantity(item.menuItem.id, item.quantity - 1)
+                              updateQuantity(item.id, item.quantity - 1)
                             }
                             type="button"
                           >
@@ -386,7 +386,7 @@ export function RestaurantMenuPage({
                           <button
                             className="text-brand"
                             onClick={() =>
-                              updateQuantity(item.menuItem.id, item.quantity + 1)
+                              updateQuantity(item.id, item.quantity + 1)
                             }
                             type="button"
                           >

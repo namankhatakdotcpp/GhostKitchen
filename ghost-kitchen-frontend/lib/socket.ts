@@ -1,5 +1,4 @@
 import { io, type Socket } from "socket.io-client";
-import { useAuthStore } from "@/store/authStore";
 
 let socket: Socket | null = null;
 
@@ -12,12 +11,22 @@ let lastSocketError: { message: string; timestamp: Date } | null = null;
  * Initialize Socket.IO connection
  * Handles authentication with JWT token and comprehensive error handling
  */
+function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    // authStore persists under key "auth-storage" as JSON { state: { accessToken, ... } }
+    const stored = localStorage.getItem("auth-storage");
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return parsed?.state?.accessToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getSocket() {
   if (!socket) {
-    // Get token from localStorage for authentication
-    const token = typeof window !== "undefined" 
-      ? localStorage.getItem("accessToken") 
-      : null;
+    const token = getAccessToken();
 
     socket = io(
       process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000",
@@ -120,20 +129,16 @@ export function isSocketConnected() {
  * Should be called after login
  */
 export function connectSocket(userId: string, token?: string) {
-  const socket = getSocket();
+  const s = getSocket();
 
-  // Update authentication token if provided
-  if (token) {
-    socket.auth = { token };
+  const authToken = token ?? getAccessToken();
+  if (authToken) {
+    s.auth = { token: authToken };
   }
 
-  // Reconnect to apply new token if needed
-  if (!socket.connected) {
-    socket.connect();
+  if (!s.connected) {
+    s.connect();
   }
-
-  // Note: User room (user:${userId}) is now automatically joined on server
-  // No need to emit join_user_room - server does it automatically during connection
 }
 
 /**

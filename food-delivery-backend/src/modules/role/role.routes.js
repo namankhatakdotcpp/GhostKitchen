@@ -1,0 +1,81 @@
+import express from "express";
+import { authenticate } from "../../middlewares/auth.middleware.js";
+import {
+  switchRole, registerRestaurant, addRestaurant, registerRider,
+  getMyRestaurants, updateMyRestaurant,
+} from "./role.service.js";
+import { prisma } from "../../config/prisma.js";
+import AppError from "../../utils/AppError.js";
+
+const router = express.Router();
+
+// POST /api/role/switch
+router.post("/switch", authenticate, async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    if (!role) return res.status(400).json({ message: "role is required" });
+    const result = await switchRole(req.user.userId, role);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+// POST /api/role/register-restaurant
+router.post("/register-restaurant", authenticate, async (req, res, next) => {
+  try {
+    const result = await registerRestaurant(req.user.userId, req.body);
+    res.status(201).json(result);
+  } catch (e) { next(e); }
+});
+
+// POST /api/role/add-restaurant (already a RESTAURANT, adding another city)
+router.post("/add-restaurant", authenticate, async (req, res, next) => {
+  try {
+    const restaurant = await addRestaurant(req.user.userId, req.body);
+    res.status(201).json({ restaurant });
+  } catch (e) { next(e); }
+});
+
+// POST /api/role/register-rider
+router.post("/register-rider", authenticate, async (req, res, next) => {
+  try {
+    const result = await registerRider(req.user.userId, req.body);
+    res.status(201).json(result);
+  } catch (e) { next(e); }
+});
+
+// GET /api/role/my-restaurants
+router.get("/my-restaurants", authenticate, async (req, res, next) => {
+  try {
+    const restaurants = await getMyRestaurants(req.user.userId);
+    res.json({ restaurants });
+  } catch (e) { next(e); }
+});
+
+// GET /api/role/my-restaurant (active one)
+router.get("/my-restaurant", authenticate, async (req, res, next) => {
+  try {
+    const restaurantId = req.user.restaurantId;
+    if (!restaurantId) return res.status(404).json({ message: "No restaurant found" });
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      include: {
+        menuItems: { orderBy: { sortOrder: "asc" } },
+        _count: { select: { orders: true } },
+      },
+    });
+    if (!restaurant) return res.status(404).json({ message: "Restaurant not found" });
+    res.json({ restaurant });
+  } catch (e) { next(e); }
+});
+
+// PUT /api/role/my-restaurant
+router.put("/my-restaurant", authenticate, async (req, res, next) => {
+  try {
+    const restaurantId = req.user.restaurantId || req.body.restaurantId;
+    if (!restaurantId) return res.status(400).json({ message: "No restaurant associated with account" });
+    const updated = await updateMyRestaurant(req.user.userId, restaurantId, req.body);
+    res.json({ restaurant: updated });
+  } catch (e) { next(e); }
+});
+
+export default router;

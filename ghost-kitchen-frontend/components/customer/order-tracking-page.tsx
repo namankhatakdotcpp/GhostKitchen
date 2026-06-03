@@ -138,8 +138,44 @@ function patchTimeline(
   );
 }
 
+function buildTimeline(status: OrderStatus): TimelineStage[] {
+  const stages: Array<{ status: OrderStatus; label: string; subText: string }> = [
+    { status: "PLACED", label: "Order Placed", subText: headlineByStatus["PLACED"] },
+    { status: "CONFIRMED", label: "Order Confirmed", subText: headlineByStatus["CONFIRMED"] },
+    { status: "PREPARING", label: "Being Prepared", subText: headlineByStatus["PREPARING"] },
+    { status: "OUT_FOR_DELIVERY", label: "Out for Delivery", subText: headlineByStatus["OUT_FOR_DELIVERY"] },
+    { status: "DELIVERED", label: "Delivered", subText: headlineByStatus["DELIVERED"] },
+  ];
+  const currentIdx = STATUS_ORDER.indexOf(status);
+  const now = new Date().toISOString();
+  return stages.map((stage, i) => ({
+    ...stage,
+    timestamp: i <= currentIdx ? now : null,
+  }));
+}
+
+function getRestaurantEmoji(cuisines?: string[]): string {
+  const first = (cuisines?.[0] ?? "").toLowerCase();
+  if (first.includes("pizza")) return "🍕";
+  if (first.includes("burger")) return "🍔";
+  if (first.includes("biryani") || first.includes("indian")) return "🍛";
+  if (first.includes("chinese")) return "🍜";
+  if (first.includes("dessert") || first.includes("ice cream")) return "🍦";
+  if (first.includes("cafe") || first.includes("coffee")) return "☕";
+  if (first.includes("sushi") || first.includes("japanese")) return "🍣";
+  return "🍽️";
+}
+
 async function fetchTrackedOrder(orderId: string) {
-  return api.get(`/orders/${orderId}`).then(r => r.data);
+  const raw = await api.get(`/orders/${orderId}`).then(r => r.data);
+  // Controller returns { order: {...} }
+  const order = raw?.order ?? raw;
+  return {
+    ...order,
+    timeline: buildTimeline((order?.status as OrderStatus) ?? "PLACED"),
+    restaurantTypeEmoji: getRestaurantEmoji(order?.restaurant?.cuisines),
+    deliveryAgent: order?.agent ?? order?.deliveryAgent ?? null,
+  };
 }
 
 function StageNode({
@@ -392,9 +428,11 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
               </p>
             </div>
           </div>
-          <Link className="text-sm font-semibold text-brand" href={`/restaurant/${order.restaurant.id}`}>
-            Order again
-          </Link>
+          {order.restaurant?.id && (
+            <Link className="text-sm font-semibold text-brand" href={`/restaurant/${order.restaurant.id}`}>
+              Order again
+            </Link>
+          )}
         </div>
       </header>
 
@@ -506,7 +544,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                 <div className="text-left">
                   <p className="text-sm font-semibold text-text-primary">Order summary</p>
                   <p className="mt-1 text-xs text-text-secondary">
-                    {order.items.length} items from {order.restaurant.name}
+                    {order.items?.length ?? 0} items from {order.restaurant?.name}
                   </p>
                 </div>
                 <span className="text-sm font-semibold text-brand">
@@ -525,10 +563,10 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                   >
                     <div className="mt-5 space-y-4">
                       {order.items.map((item: any) => (
-                        <div className="flex items-start justify-between gap-3" key={item.menuItem.id}>
+                        <div className="flex items-start justify-between gap-3" key={item.menuItemId ?? item.id}>
                           <div className="min-w-0">
                             <p className="line-clamp-1 text-sm font-semibold text-text-primary">
-                              {item.menuItem.name}
+                              {item.name ?? item.menuItem?.name}
                             </p>
                             <p className="mt-1 text-xs text-text-secondary">
                               Qty {item.quantity}
@@ -576,13 +614,16 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                 {order.restaurant.name}
               </h3>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
-                {order.restaurant.address.line1}, {order.restaurant.address.city}
+                {(order.restaurant?.address as any)?.line1 ? `${(order.restaurant.address as any).line1}, ` : ""}
+                {(order.restaurant?.address as any)?.city ?? ""}
               </p>
-              <Link href={`/restaurant/${order.restaurant.id}`}>
-                <Button className="mt-5 w-full" variant="ghost">
-                  Order again
-                </Button>
-              </Link>
+              {order.restaurant?.id && (
+                <Link href={`/restaurant/${order.restaurant.id}`}>
+                  <Button className="mt-5 w-full" variant="ghost">
+                    Order again
+                  </Button>
+                </Link>
+              )}
             </section>
 
             {isDelivered ? (

@@ -46,13 +46,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           const data = await res.json();
+          // Backend returns { success, data: { user, tokens: { accessToken, refreshToken } } }
+          const user = data.data?.user ?? data.user;
+          const accessToken = data.data?.tokens?.accessToken ?? data.token;
+
+          if (!user || !accessToken) return null;
 
           return {
-            id: data.user.id,
-            name: data.user.name,
-            email: data.user.email,
-            role: data.user.role,
-            accessToken: data.token,
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            accessToken,
           };
         } catch {
           return null;
