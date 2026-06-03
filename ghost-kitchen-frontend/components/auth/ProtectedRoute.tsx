@@ -32,9 +32,10 @@ export const ProtectedRoute = ({
     // Skip check if still loading
     if (isLoading) return;
 
-    // Redirect to login if not authenticated
+    // Redirect to login if not authenticated — use replace so back button skips this page
     if (!isAuthenticated) {
-      router.push("/login");
+      const returnUrl = encodeURIComponent(window.location.pathname)
+      router.replace(`/login?returnUrl=${returnUrl}`)
       return;
     }
 

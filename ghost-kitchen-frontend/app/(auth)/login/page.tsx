@@ -11,8 +11,8 @@
 
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
 import { z } from "zod";
@@ -25,8 +25,9 @@ const loginSchema = z.object({
 
 type LoginInput = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading, error, clearError } = useAuthStore();
 
   const [formData, setFormData] = useState({
@@ -68,8 +69,8 @@ export default function LoginPage() {
     try {
       clearError();
       await login(formData.email, formData.password);
-      // Redirect to dashboard on success
-      router.push("/");
+      const returnUrl = searchParams.get("returnUrl") || "/";
+      router.replace(decodeURIComponent(returnUrl));
     } catch (err: any) {
       setSubmitError(err.response?.data?.message || "Login failed");
     }
@@ -236,5 +237,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" /></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
