@@ -48,7 +48,10 @@ export default function RoleSwitcher() {
   const [switching, setSwitching] = useState(false);
 
   // Read user from authStore (populated on login); fall back to userStore for legacy
-  const user = authUser ?? useUserStore.getState().user;
+  const rawUser = authUser ?? useUserStore.getState().user;
+  const user = rawUser
+    ? { ...rawUser, activeRole: rawUser.activeRole as AppRole, roles: (rawUser.roles ?? ["CUSTOMER"]) as AppRole[] }
+    : null;
 
   if (!user) return null;
 
