@@ -1,30 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useAuthStore } from "@/store/authStore";
+// Auth state is fully persisted in localStorage via Zustand's persist middleware.
+// No server-side session check on every mount — that causes cross-origin cookie
+// failures on Vercel→Render to silently log users out.
+// Token validity is enforced naturally: API calls with expired cookies get 401,
+// the axios interceptor handles refresh, and logout clears state.
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const called = useRef(false);
-
-  useEffect(() => {
-    // Run exactly once after Zustand has rehydrated from localStorage.
-    // The ref guard prevents React StrictMode double-invocation from firing twice.
-    const unsub = useAuthStore.subscribe(
-      (state) => state.hasHydrated,
-      (hydrated) => {
-        if (hydrated && !called.current) {
-          called.current = true;
-          const { isAuthenticated, getCurrentUser } = useAuthStore.getState();
-          if (isAuthenticated) {
-            getCurrentUser().catch(() => {});
-          }
-          unsub();
-        }
-      },
-      { fireImmediately: true }
-    );
-    return () => unsub();
-  }, []);
-
   return <>{children}</>;
 }

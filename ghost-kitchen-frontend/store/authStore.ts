@@ -98,8 +98,19 @@ export const useAuthStore = create<AuthStore>()(
           const response = await axiosInstance.get("/auth/me");
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });
-        } catch {
-          set({ user: null, isAuthenticated: false, isLoading: false });
+        } catch (err: any) {
+          // Only clear auth state for definitive auth failures (401 with a specific
+          // error code). A plain 401 can happen when the cookie isn't sent
+          // cross-origin — don't log the user out in that case.
+          const code = err?.response?.data?.code;
+          const status = err?.response?.status;
+          const isDefinitivelyLoggedOut =
+            status === 401 && (code === "TOKEN_INVALID" || code === "NO_TOKEN");
+          if (isDefinitivelyLoggedOut) {
+            set({ user: null, isAuthenticated: false, isLoading: false });
+          } else {
+            set({ isLoading: false }); // keep existing auth state
+          }
         }
       },
     }),
