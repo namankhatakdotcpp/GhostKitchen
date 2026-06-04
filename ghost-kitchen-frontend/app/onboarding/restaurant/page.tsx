@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import api from "@/lib/api";
 import { toPaise } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
 
 const CUISINES = [
@@ -37,6 +37,7 @@ function FieldError({ msg }: { msg?: string }) {
 export default function RestaurantOnboarding() {
   const router = useRouter();
   const { user, setUser } = useUserStore();
+  const { setTokens } = useAuthStore();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -88,7 +89,8 @@ export default function RestaurantOnboarding() {
         deliveryRadius: s2.deliveryRadius,
       });
 
-      const { token, restaurant } = res.data;
+      const { accessToken, restaurant } = res.data;
+      if (accessToken) setTokens(accessToken);
 
       // Add first menu item
       if (s3.itemName) {
@@ -178,8 +180,8 @@ export default function RestaurantOnboarding() {
                   className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none"
                   placeholder="https://…" />
                 {s1.imageUrl && (
-                  <div className="mt-2 relative h-32 w-full overflow-hidden rounded-xl border border-[#E8E8E8]">
-                    <Image src={s1.imageUrl} alt="Preview" fill className="object-cover" unoptimized />
+                  <div className="mt-2 h-32 w-full overflow-hidden rounded-xl border border-[#E8E8E8]">
+                    <img src={s1.imageUrl} alt="Preview" className="h-full w-full object-cover" />
                   </div>
                 )}
               </div>
@@ -309,8 +311,8 @@ export default function RestaurantOnboarding() {
               <h2 className="text-xl font-bold text-[#1C1C1C]">Review & launch</h2>
               <div className="rounded-xl border border-[#E8E8E8] overflow-hidden">
                 {s1.imageUrl && (
-                  <div className="relative h-36 w-full">
-                    <Image src={s1.imageUrl} alt={s1.name} fill className="object-cover" unoptimized />
+                  <div className="h-36 w-full overflow-hidden">
+                    <img src={s1.imageUrl} alt={s1.name} className="h-full w-full object-cover" />
                   </div>
                 )}
                 <div className="p-4">

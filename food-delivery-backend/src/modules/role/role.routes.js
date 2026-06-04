@@ -20,7 +20,7 @@ router.post("/switch", authenticate, async (req, res, next) => {
     const result = await switchRole(req.user.userId, role);
     setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
     await auditLog({ userId: req.user.userId, action: 'ROLE_SWITCHED', meta: { from: prevRole, to: role }, req })
-    res.json({ activeRole: result.activeRole, user: result.user });
+    res.json({ activeRole: result.activeRole, user: result.user, accessToken: result.token });
   } catch (e) { next(e); }
 });
 
@@ -30,7 +30,7 @@ router.post("/register-restaurant", authenticate, async (req, res, next) => {
     const result = await registerRestaurant(req.user.userId, req.body);
     setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
     await auditLog({ userId: req.user.userId, action: 'RESTAURANT_REGISTERED', entityType: 'Restaurant', entityId: result.restaurant.id, meta: { name: result.restaurant.name }, req })
-    res.status(201).json({ restaurant: result.restaurant, user: result.user });
+    res.status(201).json({ restaurant: result.restaurant, user: result.user, accessToken: result.token });
   } catch (e) { next(e); }
 });
 
@@ -47,7 +47,7 @@ router.post("/register-rider", authenticate, async (req, res, next) => {
   try {
     const result = await registerRider(req.user.userId, req.body);
     setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
-    res.status(201).json({ user: result.user });
+    res.status(201).json({ user: result.user, accessToken: result.token });
   } catch (e) { next(e); }
 });
 

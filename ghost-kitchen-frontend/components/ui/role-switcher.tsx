@@ -65,7 +65,10 @@ export default function RoleSwitcher() {
     if (role === user!.activeRole) { setOpen(false); return; }
     setSwitching(true);
     try {
-      await api.post("/role/switch", { role });
+      const res = await api.post("/role/switch", { role });
+      if (res.data?.accessToken) {
+        useAuthStore.setState({ accessToken: res.data.accessToken });
+      }
       const updated = { ...user!, activeRole: role };
       setUser(updated as any);
       useAuthStore.setState({ user: updated as any });

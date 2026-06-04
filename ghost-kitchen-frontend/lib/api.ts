@@ -8,14 +8,27 @@ const API_BASE =
 export const api = axios.create({
   baseURL: API_BASE,
   headers: { "Content-Type": "application/json" },
-  // Cookies (access_token, refresh_token) are sent automatically by the browser.
   withCredentials: true,
 });
 
+// ── Request interceptor — attach stored Bearer token ─────────────────────────
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("gk-auth");
+      const token = raw ? JSON.parse(raw)?.state?.accessToken : null;
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers["Authorization"] = `Bearer ${token}`;
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return config;
+});
+
 // ── Response interceptor ──────────────────────────────────────────────────────
-// When the server returns 401 + code:"TOKEN_EXPIRED", silently refresh the
-// access token by hitting /auth/refresh (which sends the refresh_token cookie)
-// then replay the original request once.
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<{ code?: string; message?: string }>) => {
@@ -28,12 +41,38 @@ api.interceptors.response.use(
     ) {
       originalConfig._retry = true;
       try {
-        // /auth/refresh reads the refresh_token cookie and sets a new access_token cookie
-        await api.post("/auth/refresh");
-        // Replay the original request — the new cookie will be sent automatically
+        // Pass stored refreshToken in body as fallback for cross-origin environments
+        // where cookies may be blocked by the browser.
+        let refreshToken: string | undefined;
+        if (typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem("gk-auth");
+            refreshToken = raw ? JSON.parse(raw)?.state?.refreshToken : undefined;
+          } catch { /* ignore */ }
+        }
+
+        const refreshRes = await api.post("/auth/refresh", refreshToken ? { refreshToken } : {});
+        const newToken = refreshRes.data?.data?.accessToken;
+
+        if (newToken && typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem("gk-auth");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              const newRefreshToken = refreshRes.data?.data?.refreshToken;
+              parsed.state.accessToken = newToken;
+              if (newRefreshToken) parsed.state.refreshToken = newRefreshToken;
+              localStorage.setItem("gk-auth", JSON.stringify(parsed));
+            }
+          } catch { /* ignore */ }
+        }
+
+        // Replay the original request with the new token
+        if (newToken && originalConfig.headers) {
+          originalConfig.headers["Authorization"] = `Bearer ${newToken}`;
+        }
         return api(originalConfig);
       } catch {
-        // Refresh itself failed (expired / revoked) → force login
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }

@@ -9,10 +9,10 @@ import {
 import AppError from "../../utils/AppError.js";
 import { auditLog } from "../../utils/audit.js";
 
-const isProd = process.env.NODE_ENV === "production";
-
-// Vercel → Render is cross-origin so we need sameSite:'none' + secure in prod.
-// In development sameSite:'lax' works fine on the same machine.
+// Use cross-origin cookie settings whenever the frontend is served over HTTPS
+// (Vercel production). Avoids relying on NODE_ENV which may not be set on Render.
+const isProd = process.env.FRONTEND_URL?.startsWith("https://") ||
+               process.env.NODE_ENV === "production";
 const SAME_SITE = isProd ? "none" : "lax";
 
 export function setAuthCookies(res, accessToken, refreshToken) {
@@ -45,7 +45,7 @@ export const register = async (req, res, next) => {
     const { accessToken, refreshToken } = result.data.tokens;
     setAuthCookies(res, accessToken, refreshToken);
     await auditLog({ userId: result.data.user.id, action: 'USER_REGISTERED', req })
-    res.status(201).json({ success: true, data: { user: result.data.user } });
+    res.status(201).json({ success: true, data: { user: result.data.user, accessToken, refreshToken } });
   } catch (error) {
     next(error);
   }
@@ -58,7 +58,7 @@ export const login = async (req, res, next) => {
     const { accessToken, refreshToken } = result.data.tokens;
     setAuthCookies(res, accessToken, refreshToken);
     await auditLog({ userId: result.data.user.id, action: 'USER_LOGIN', req })
-    res.status(200).json({ success: true, data: { user: result.data.user } });
+    res.status(200).json({ success: true, data: { user: result.data.user, accessToken, refreshToken } });
   } catch (error) {
     next(error);
   }
@@ -75,16 +75,16 @@ export const me = async (req, res, next) => {
 };
 
 // POST /api/auth/refresh
-// Reads refresh_token cookie, rotates token pair, sets new cookies
+// Accepts refresh token from cookie (browser) or request body (cross-origin clients).
 export const refresh = async (req, res, next) => {
   try {
-    const rawRefreshToken = req.cookies?.refresh_token;
+    const rawRefreshToken = req.cookies?.refresh_token || req.body?.refreshToken;
     if (!rawRefreshToken) throw new AppError("Refresh token missing", 401);
 
     const result = await refreshAccessToken(rawRefreshToken);
     const { accessToken, refreshToken } = result.data.tokens;
     setAuthCookies(res, accessToken, refreshToken);
-    res.status(200).json({ success: true, data: { user: result.data.user } });
+    res.status(200).json({ success: true, data: { user: result.data.user, accessToken, refreshToken } });
   } catch (error) {
     // Clear stale cookies so the client re-authenticates
     clearAuthCookies(res);

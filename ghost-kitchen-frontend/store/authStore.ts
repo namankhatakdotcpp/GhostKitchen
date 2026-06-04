@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * Auth Store
- *
- * Tokens live in HttpOnly cookies managed by the server — never in JS memory
- * or localStorage.  This store only tracks the user object and loading state
- * so the UI can render the correct chrome without touching token logic.
- */
-
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
@@ -15,7 +7,6 @@ import axios from "axios";
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api";
 
-// Dedicated axios instance that always sends cookies
 const axiosInstance = axios.create({ baseURL: API_URL, withCredentials: true });
 
 interface User {
@@ -31,12 +22,15 @@ interface User {
 
 interface AuthStore {
   user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   hasHydrated: boolean;
   error: string | null;
 
   setHasHydrated: (v: boolean) => void;
+  setTokens: (accessToken: string, refreshToken?: string) => void;
   clearError: () => void;
   register: (data: { email: string; password: string; name: string; phone?: string }) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -46,8 +40,10 @@ interface AuthStore {
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
+      accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
       hasHydrated: false,
@@ -55,16 +51,19 @@ export const useAuthStore = create<AuthStore>()(
 
       setHasHydrated: (v) => set({ hasHydrated: v }),
 
+      setTokens: (accessToken, refreshToken) =>
+        set(refreshToken ? { accessToken, refreshToken } : { accessToken }),
+
       clearError: () => set({ error: null }),
 
       register: async (data) => {
         set({ isLoading: true, error: null });
         try {
           const response = await axiosInstance.post("/auth/register", data);
-          const user = response.data.data?.user ?? response.data.user;
-          set({ user, isAuthenticated: true, isLoading: false });
+          const { user, accessToken, refreshToken } = response.data.data ?? response.data;
+          set({ user, accessToken, refreshToken, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          const msg = err.response?.data?.message || err.response?.data?.error || "Registration failed"
+          const msg = err.response?.data?.message || err.response?.data?.error || "Registration failed";
           set({ error: msg, isLoading: false });
           throw err;
         }
@@ -74,10 +73,10 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, error: null });
         try {
           const response = await axiosInstance.post("/auth/login", { email, password });
-          const user = response.data.data?.user ?? response.data.user;
-          set({ user, isAuthenticated: true, isLoading: false });
+          const { user, accessToken, refreshToken } = response.data.data ?? response.data;
+          set({ user, accessToken, refreshToken, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          const msg = err.response?.data?.message || err.response?.data?.error || "Login failed"
+          const msg = err.response?.data?.message || err.response?.data?.error || "Login failed";
           set({ error: msg, isLoading: false });
           throw err;
         }
@@ -89,34 +88,39 @@ export const useAuthStore = create<AuthStore>()(
         } catch {
           // Server-side cookie clearing still happened; clear local state regardless
         }
-        set({ user: null, isAuthenticated: false, error: null });
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, error: null });
       },
 
       getCurrentUser: async () => {
         set({ isLoading: true });
         try {
-          const response = await axiosInstance.get("/auth/me");
+          const { accessToken } = get();
+          const response = await axiosInstance.get("/auth/me", {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          });
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          // Only clear auth state for definitive auth failures (401 with a specific
-          // error code). A plain 401 can happen when the cookie isn't sent
-          // cross-origin — don't log the user out in that case.
           const code = err?.response?.data?.code;
           const status = err?.response?.status;
           const isDefinitivelyLoggedOut =
             status === 401 && (code === "TOKEN_INVALID" || code === "NO_TOKEN");
           if (isDefinitivelyLoggedOut) {
-            set({ user: null, isAuthenticated: false, isLoading: false });
+            set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
           } else {
-            set({ isLoading: false }); // keep existing auth state
+            set({ isLoading: false });
           }
         }
       },
     }),
     {
       name: "gk-auth",
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
@@ -124,5 +128,4 @@ export const useAuthStore = create<AuthStore>()(
   )
 );
 
-// Export the instance so cart/other stores can reuse it
 export default axiosInstance;
