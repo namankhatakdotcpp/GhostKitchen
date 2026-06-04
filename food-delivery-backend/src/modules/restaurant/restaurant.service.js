@@ -43,21 +43,14 @@ export const getRestaurants = async (
 };
 
 export const getRestaurantById = async (param) => {
-  // Build conditions array to avoid NaN issues
   const conditions = [];
 
-  // Only add numeric ID condition if param is a valid number
-  if (!isNaN(Number(param)) && param !== "") {
-    conditions.push({ id: Number(param) });
-  }
+  // Always look up by string ID directly (covers UUIDs and legacy ids like "rest-001")
+  conditions.push({ id: param });
 
-  // Always try slug lookup (more reliable)
+  // Also try slug lookup
   conditions.push({ slug: param });
 
-  // If no conditions, return null
-  if (conditions.length === 0) {
-    return null;
-  }
 
   return await prisma.restaurant.findFirst({
     where: {

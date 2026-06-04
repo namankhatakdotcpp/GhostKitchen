@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+
+const FALLBACK = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80";
 
 type RestaurantCardProps = {
   id: string;
@@ -33,6 +36,8 @@ export function RestaurantCard({
   isNew,
   index = 0,
 }: RestaurantCardProps) {
+  const [imgSrc, setImgSrc] = useState(imageUrl || FALLBACK);
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -48,8 +53,10 @@ export function RestaurantCard({
             alt={name}
             className="object-cover transition duration-300 group-hover:scale-[1.03]"
             fill
+            onError={() => setImgSrc(FALLBACK)}
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 360px"
-            src={imageUrl}
+            src={imgSrc}
+            unoptimized={imgSrc.includes("example.com")}
           />
           <div className="absolute inset-x-0 top-0 flex items-start justify-between p-3">
             {isVeg ? (

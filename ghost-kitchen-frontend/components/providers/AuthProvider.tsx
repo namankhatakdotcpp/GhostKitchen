@@ -4,14 +4,17 @@ import { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { getCurrentUser } = useAuthStore();
+  const { isAuthenticated, hasHydrated, getCurrentUser } = useAuthStore();
 
   useEffect(() => {
-    // Always try to restore session from HttpOnly cookie on app load.
-    // If the cookie is valid, user stays logged in. If not, auth store clears.
-    getCurrentUser().catch(() => {});
+    // Only validate the session cookie if the store thinks we're authenticated.
+    // This prevents hitting /auth/me on every page load for logged-out users.
+    if (hasHydrated && isAuthenticated) {
+      getCurrentUser().catch(() => {});
+    }
+  // Run once after hydration completes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hasHydrated]);
 
   return <>{children}</>;
 }
