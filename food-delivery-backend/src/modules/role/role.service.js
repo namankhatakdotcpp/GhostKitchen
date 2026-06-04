@@ -40,13 +40,15 @@ export async function registerRestaurant(userId, restaurantData) {
     throw new AppError("You already have a second role. Remove it before adding another.", 409);
   }
 
-  // Enforce city uniqueness per owner
-  const existingInCity = await prisma.restaurant.findFirst({
-    where: {
-      ownerId: userId,
-      address: { path: ["city"], string_contains: restaurantData.city },
-    },
+  // Enforce city uniqueness per owner (in-memory check avoids fragile JSON path queries)
+  const ownerRestaurants = await prisma.restaurant.findMany({
+    where: { ownerId: userId },
+    select: { id: true, address: true },
   });
+  const targetCity = (restaurantData.city || "").toLowerCase().trim();
+  const existingInCity = ownerRestaurants.find(
+    (r) => ((r.address?.city) || "").toLowerCase().trim() === targetCity
+  );
   if (existingInCity) {
     throw new AppError("You already have a restaurant in this city", 409);
   }
@@ -99,13 +101,15 @@ export async function addRestaurant(userId, restaurantData) {
     throw new AppError("You are not a restaurant owner", 403);
   }
 
-  const existingInCity = await prisma.restaurant.findFirst({
-    where: {
-      ownerId: userId,
-      address: { path: ["city"], string_contains: restaurantData.city },
-    },
+  const ownerRestaurants2 = await prisma.restaurant.findMany({
+    where: { ownerId: userId },
+    select: { id: true, address: true },
   });
-  if (existingInCity) {
+  const targetCity2 = (restaurantData.city || "").toLowerCase().trim();
+  const existingInCity2 = ownerRestaurants2.find(
+    (r) => ((r.address?.city) || "").toLowerCase().trim() === targetCity2
+  );
+  if (existingInCity2) {
     throw new AppError("You already have a restaurant in this city", 409);
   }
 
