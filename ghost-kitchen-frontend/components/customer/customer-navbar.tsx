@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import RoleSwitcher from "@/components/ui/role-switcher";
 import { useCartStore } from "@/store/cartStore";
 import { useUserStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 
 function PinIcon() {
   return (
@@ -55,6 +56,7 @@ export function CustomerNavbar() {
   const pathname = usePathname();
   const { items, lastUpdatedAt } = useCartStore();
   const { location, openLocationModal } = useUserStore();
+  const { isAuthenticated, user, logout } = useAuthStore();
   const [shouldBounce, setShouldBounce] = useState(false);
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const previousCountRef = useRef(totalQuantity);
@@ -124,11 +126,26 @@ export function CustomerNavbar() {
               </span>
             </motion.div>
           </Link>
-          <Link href="/login">
-            <Button className="h-10 px-3 text-xs md:h-11 md:px-5 md:text-sm" variant="ghost">
-              Login
-            </Button>
-          </Link>
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden text-sm font-medium text-text-primary md:block">
+                {user.name?.split(" ")[0]}
+              </span>
+              <button
+                className="h-10 rounded-pill border border-border px-3 text-xs font-semibold text-text-secondary transition hover:border-danger/30 hover:text-danger md:h-11 md:px-4 md:text-sm"
+                onClick={() => logout()}
+                type="button"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <Link href="/login">
+              <Button className="h-10 px-3 text-xs md:h-11 md:px-5 md:text-sm" variant="ghost">
+                Login
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </header>
