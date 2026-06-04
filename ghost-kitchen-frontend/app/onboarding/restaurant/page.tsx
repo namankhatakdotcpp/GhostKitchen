@@ -112,7 +112,12 @@ export default function RestaurantOnboarding() {
       setSuccess(true);
       setTimeout(() => router.push("/shop/orders"), 2000);
     } catch (err: any) {
-      setErrors({ submit: err.response?.data?.message ?? "Something went wrong" });
+      // Already registered — just redirect to the shop
+      if (err.code === 409) {
+        router.push("/shop/menu");
+        return;
+      }
+      setErrors({ submit: err.error ?? err.response?.data?.message ?? "Something went wrong" });
     } finally {
       setLoading(false);
     }

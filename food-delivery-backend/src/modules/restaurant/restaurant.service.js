@@ -91,11 +91,12 @@ export const getRestaurantWithCache = async (param) => {
 
   const conditions = [];
 
-  if (!isNaN(Number(param))) {
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param);
+  if (isUUID) {
     conditions.push({ id: param });
+  } else {
+    conditions.push({ slug: param });
   }
-
-  conditions.push({ slug: param });
 
   const restaurant = await prisma.restaurant.findFirst({
     where: { OR: conditions },
