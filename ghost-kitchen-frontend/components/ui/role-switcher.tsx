@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { joinRoleRooms } from "@/lib/socket";
 import { useUserStore, type AppRole } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 
 const ROLE_CONFIG: Record<AppRole, {
   label: string;
@@ -41,9 +42,13 @@ const ROLE_CONFIG: Record<AppRole, {
 
 export default function RoleSwitcher() {
   const router = useRouter();
-  const { user, setUser, setActiveRole } = useUserStore();
+  const { setUser, setActiveRole } = useUserStore();
+  const authUser = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+
+  // Read user from authStore (populated on login); fall back to userStore for legacy
+  const user = authUser ?? useUserStore.getState().user;
 
   if (!user) return null;
 
@@ -57,10 +62,11 @@ export default function RoleSwitcher() {
     if (role === user!.activeRole) { setOpen(false); return; }
     setSwitching(true);
     try {
-      const res = await api.post("/role/switch", { role });
-      // Server sets new access_token cookie with updated roles — no localStorage write needed
-      setUser({ ...user!, activeRole: role });
-      joinRoleRooms(role, user!.id, user!.restaurantId);
+      await api.post("/role/switch", { role });
+      const updated = { ...user!, activeRole: role };
+      setUser(updated as any);
+      useAuthStore.setState({ user: updated as any });
+      joinRoleRooms(role, user!.id, user!.restaurantId ?? null);
       setOpen(false);
       router.push(ROLE_CONFIG[role].href);
     } catch (err) {
