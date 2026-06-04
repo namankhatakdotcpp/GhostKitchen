@@ -7,6 +7,17 @@ import Link from "next/link";
 
 const FALLBACK = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80";
 
+const TRUSTED_HOSTS = ["images.unsplash.com", "res.cloudinary.com", "ghostkitchen.onrender.com", "vercel.app"];
+
+function isTrustedImage(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return TRUSTED_HOSTS.some(h => host === h || host.endsWith("." + h));
+  } catch {
+    return false;
+  }
+}
+
 type RestaurantCardProps = {
   id: string;
   name: string;
@@ -36,7 +47,10 @@ export function RestaurantCard({
   isNew,
   index = 0,
 }: RestaurantCardProps) {
-  const [imgSrc, setImgSrc] = useState(imageUrl || FALLBACK);
+  // Use fallback immediately for untrusted/placeholder URLs — avoids Next.js optimization 404
+  const [imgSrc, setImgSrc] = useState(() =>
+    imageUrl && isTrustedImage(imageUrl) ? imageUrl : FALLBACK
+  );
 
   return (
     <motion.div

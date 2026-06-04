@@ -1,20 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, hasHydrated, getCurrentUser } = useAuthStore();
+  const called = useRef(false);
 
   useEffect(() => {
-    // Only validate the session cookie if the store thinks we're authenticated.
-    // This prevents hitting /auth/me on every page load for logged-out users.
-    if (hasHydrated && isAuthenticated) {
-      getCurrentUser().catch(() => {});
-    }
-  // Run once after hydration completes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated]);
+    // Run exactly once after Zustand has rehydrated from localStorage.
+    // The ref guard prevents React StrictMode double-invocation from firing twice.
+    const unsub = useAuthStore.subscribe(
+      (state) => state.hasHydrated,
+      (hydrated) => {
+        if (hydrated && !called.current) {
+          called.current = true;
+          const { isAuthenticated, getCurrentUser } = useAuthStore.getState();
+          if (isAuthenticated) {
+            getCurrentUser().catch(() => {});
+          }
+          unsub();
+        }
+      },
+      { fireImmediately: true }
+    );
+    return () => unsub();
+  }, []);
 
   return <>{children}</>;
 }
