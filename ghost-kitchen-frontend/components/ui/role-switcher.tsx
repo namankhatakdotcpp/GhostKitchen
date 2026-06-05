@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import api from "@/lib/api";
@@ -46,6 +46,9 @@ export default function RoleSwitcher() {
   const authUser = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
 
   // Read user from authStore (populated on login); fall back to userStore for legacy
   const rawUser = authUser ?? useUserStore.getState().user;

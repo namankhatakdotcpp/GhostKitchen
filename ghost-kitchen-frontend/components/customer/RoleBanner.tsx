@@ -1,29 +1,32 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 import { api } from "@/lib/api";
 import { joinRoleRooms } from "@/lib/socket";
 import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
+import toast from "react-hot-toast";
 
 export function RoleBanner() {
   const router = useRouter();
   const authUser = useAuthStore((s) => s.user);
-  const userStoreUser = useUserStore((s) => s.user);
   const { setUser } = useUserStore();
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Merge roles from both stores — whichever has more is authoritative
-  const authRoles: string[] = (authUser?.roles as string[]) ?? [];
-  const storeRoles: string[] = (userStoreUser?.roles as string[]) ?? [];
-  const allRoles = Array.from(new Set([...authRoles, ...storeRoles]));
+  // Prevent SSR/client mismatch — only render after hydration
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
 
-  const hasRestaurant = allRoles.includes("RESTAURANT");
-  const hasDelivery   = allRoles.includes("DELIVERY");
+  // ONLY trust authStore — it comes directly from the server login token.
+  // Don't merge with userStore roles which may be stale persisted data.
+  const roles: string[] = (authUser?.roles as string[]) ?? [];
+  const activeRole = authUser?.activeRole ?? "CUSTOMER";
 
-  // Only show when user has a secondary role but is currently in CUSTOMER mode
-  const activeRole = authUser?.activeRole ?? userStoreUser?.activeRole ?? "CUSTOMER";
+  const hasRestaurant = roles.includes("RESTAURANT");
+  const hasDelivery   = roles.includes("DELIVERY");
+
   if (activeRole !== "CUSTOMER") return null;
   if (!hasRestaurant && !hasDelivery) return null;
 
@@ -41,7 +44,8 @@ export function RoleBanner() {
         joinRoleRooms(role, serverUser.id, serverUser.restaurantId ?? null);
       }
       router.push(role === "RESTAURANT" ? "/shop/orders" : "/delivery/home");
-    } catch {
+    } catch (err: any) {
+      toast.error(err?.error ?? `Could not switch to ${role} mode`);
       setLoading(false);
     }
   }
@@ -52,7 +56,9 @@ export function RoleBanner() {
         {hasRestaurant && (
           <>
             <span className="text-lg">🍳</span>
-            <span className="text-sm text-text-secondary hidden sm:inline">You have a restaurant registered</span>
+            <span className="hidden text-sm text-text-secondary sm:inline">
+              You have a restaurant registered
+            </span>
             <button
               type="button"
               disabled={loading}
@@ -66,7 +72,9 @@ export function RoleBanner() {
         {hasDelivery && !hasRestaurant && (
           <>
             <span className="text-lg">🚴</span>
-            <span className="text-sm text-text-secondary hidden sm:inline">You&apos;re registered as a rider</span>
+            <span className="hidden text-sm text-text-secondary sm:inline">
+              You&apos;re registered as a rider
+            </span>
             <button
               type="button"
               disabled={loading}
