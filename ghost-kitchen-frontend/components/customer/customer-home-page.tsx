@@ -324,7 +324,7 @@ export function CustomerHomePage() {
                 deliveryFee={restaurant?.address?.deliveryFee || 0}
                 deliveryTime={restaurant?.address?.deliveryTime || 30}
                 id={restaurant?.id || "unknown"}
-                imageUrl={restaurant?.image || restaurant?.imageUrl || "/fallback.jpg"}
+                imageUrl={restaurant?.image || restaurant?.imageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"}
                 index={index}
                 isNew={false}
                 isVeg={false}

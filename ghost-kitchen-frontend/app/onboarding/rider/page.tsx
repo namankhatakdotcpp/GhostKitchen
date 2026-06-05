@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import api from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
 
 const VEHICLE_TYPES = [
@@ -46,9 +47,11 @@ export default function RiderOnboarding() {
         city,
       });
       const { token } = res.data;
-      if (user) {
-        setUser({ ...user, roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" });
-      }
+      const updatedUser = { ...(user ?? {}), roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" };
+      setUser(updatedUser as any);
+      useAuthStore.setState((s) => ({
+        user: s.user ? { ...s.user, roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" } : s.user,
+      }));
       setSuccess(true);
       setTimeout(() => router.push("/delivery/home"), 2000);
     } catch (err: any) {

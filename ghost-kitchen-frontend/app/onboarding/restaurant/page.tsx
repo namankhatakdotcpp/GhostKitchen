@@ -105,9 +105,12 @@ export default function RestaurantOnboarding() {
         });
       }
 
-      if (user) {
-        setUser({ ...user, roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id });
-      }
+      const updatedUser = { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id };
+      setUser(updatedUser as any);
+      // Keep authStore in sync so RoleBanner reads correct roles
+      useAuthStore.setState((s) => ({
+        user: s.user ? { ...s.user, roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id } : s.user,
+      }));
       // Tokens are HttpOnly cookies set by the server — no localStorage write needed
       setSuccess(true);
       setTimeout(() => router.push("/shop/orders"), 2000);
