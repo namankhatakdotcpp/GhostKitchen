@@ -8,12 +8,8 @@ ALTER TABLE "Restaurant" ADD COLUMN IF NOT EXISTS "lng" DOUBLE PRECISION;
 ALTER TABLE "Restaurant" ADD COLUMN IF NOT EXISTS "isOpen" BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE "Restaurant" ADD COLUMN IF NOT EXISTS "deliveryRadius" DOUBLE PRECISION NOT NULL DEFAULT 5;
 
--- ── Restaurant: unique constraint on slug ────────────────────────────────────
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Restaurant_slug_key') THEN
-    ALTER TABLE "Restaurant" ADD CONSTRAINT "Restaurant_slug_key" UNIQUE ("slug");
-  END IF;
-END $$;
+-- ── Restaurant: unique index on slug (idempotent) ────────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS "Restaurant_slug_key" ON "Restaurant"("slug");
 
 -- ── User: add multi-role columns if missing ───────────────────────────────────
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "activeRole" TEXT NOT NULL DEFAULT 'CUSTOMER';

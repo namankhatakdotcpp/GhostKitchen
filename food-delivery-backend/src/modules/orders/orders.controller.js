@@ -7,6 +7,7 @@ import {
 } from "./orders.service.js";
 import { validateCreateOrder, validateStatusUpdate } from "./orders.validation.js";
 import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "../../socket/socket.server.js";
+import { createNotification } from "../notification/notification.service.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -147,6 +148,16 @@ export const updateOrderStatusHTTP = async (req, res) => {
         status: newStatus,
         timestamp: new Date().toISOString(),
       });
+    }
+
+    // Notify customer based on new status
+    const customerId = updatedOrder.customerId;
+    if (newStatus === "CONFIRMED") {
+      createNotification({ userId: customerId, title: "Restaurant confirmed your order", body: "Your order is being prepared.", type: "ORDER_UPDATE", entityId: orderId });
+    } else if (newStatus === "OUT_FOR_DELIVERY" && updatedOrder.agent) {
+      createNotification({ userId: customerId, title: "Rider assigned", body: `${updatedOrder.agent.name} is on the way.`, type: "ORDER_UPDATE", entityId: orderId });
+    } else if (newStatus === "DELIVERED") {
+      createNotification({ userId: customerId, title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", type: "REVIEW_REQUEST", entityId: orderId });
     }
 
     return res.json({

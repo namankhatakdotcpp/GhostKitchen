@@ -4,6 +4,14 @@ import { useRouter } from 'next/navigation'
 import { load } from '@cashfreepayments/cashfree-js'
 import { useCartStore } from '@/store/cartStore'
 import api from '@/lib/api'
+import { toRupees } from '@/lib/utils'
+import AvailableCoupons from '@/components/customer/AvailableCoupons'
+
+interface AppliedCoupon {
+  code: string
+  discountAmount: number   // in rupees (from API response)
+  finalAmount: number      // in rupees
+}
 
 export default function CheckoutPage() {
   const router = useRouter()
@@ -11,27 +19,63 @@ export default function CheckoutPage() {
   const restaurantId = getRestaurantId()
   const [address, setAddress] = useState('')
   const [couponCode, setCouponCode] = useState('')
+  const [couponInput, setCouponInput] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null)
+  const [couponLoading, setCouponLoading] = useState(false)
+  const [couponError, setCouponError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [deliveryFee, setDeliveryFee] = useState<number | null>(null)
-  const [orderInProgress, setOrderInProgress] = useState(false) // Prevent double-submit
+  const [orderInProgress, setOrderInProgress] = useState(false)
 
-  const subtotal = getSubtotal()
+  // subtotal is in paise (from cart store)
+  const subtotalPaise = getSubtotal()
 
-  // When checkout data would be fetched, we'd get delivery fee from backend
-  // For now, use a reasonable default, but will be overridden by API response
   useEffect(() => {
-    // Set default - will be overridden when order is created
-    setDeliveryFee(50); // Backend standard is ₹50
+    setDeliveryFee(5000) // ₹50 in paise default, will be overridden by API
   }, [])
 
-  async function handlePlaceOrder() {
-    // Prevent double-submit
-    if (orderInProgress) {
-      setError('Order is already being processed. Please wait...');
-      return;
+  async function handleApplyCoupon() {
+    if (!couponInput.trim()) {
+      setCouponError('Please enter a coupon code')
+      return
     }
+    setCouponLoading(true)
+    setCouponError('')
+    try {
+      const { data } = await api.post('/coupons/validate', {
+        code: couponInput.toUpperCase(),
+        orderTotal: subtotalPaise / 100, // controller expects rupees for now
+      })
+      const { discountAmount, finalAmount } = data.coupon
+      setAppliedCoupon({ code: couponInput.toUpperCase(), discountAmount, finalAmount })
+      setCouponCode(couponInput.toUpperCase())
+    } catch (err: any) {
+      setCouponError(err.response?.data?.error ?? 'Invalid coupon code')
+    } finally {
+      setCouponLoading(false)
+    }
+  }
 
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null)
+    setCouponCode('')
+    setCouponInput('')
+    setCouponError('')
+  }
+
+  const subtotalRupees = toRupees(subtotalPaise)
+  const deliveryFeeRupees = deliveryFee !== null ? toRupees(deliveryFee) : null
+  const discountRupees = appliedCoupon?.discountAmount ?? 0
+  const totalRupees = deliveryFeeRupees !== null
+    ? subtotalRupees + deliveryFeeRupees - discountRupees
+    : null
+
+  async function handlePlaceOrder() {
+    if (orderInProgress) {
+      setError('Order is already being processed. Please wait...')
+      return
+    }
     if (!address.trim()) { setError('Please enter a delivery address'); return }
     if (items.length === 0) { setError('Your cart is empty'); return }
 
@@ -40,7 +84,6 @@ export default function CheckoutPage() {
     setError('')
 
     try {
-      // 1. Create Cashfree order on server
       const { data } = await api.post('/payments/create-order', {
         restaurantId,
         items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
@@ -48,22 +91,16 @@ export default function CheckoutPage() {
         couponCode: couponCode || undefined,
       })
 
-      // Backend returns actual delivery fee - use it to ensure consistency
-      const actualDeliveryFee = data.deliveryFee || deliveryFee || 50;
-      setDeliveryFee(actualDeliveryFee);
+      if (data.deliveryFee) setDeliveryFee(data.deliveryFee)
 
-      // 2. Load Cashfree SDK
       const cashfree = await load({
         mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
       })
 
-      // 3. Open Cashfree checkout
-      const checkoutOptions = {
+      const result = await cashfree.checkout({
         paymentSessionId: data.paymentSessionId,
-        redirectTarget: '_modal', // opens as popup, not redirect
-      }
-
-      const result = await cashfree.checkout(checkoutOptions)
+        redirectTarget: '_modal',
+      })
 
       if (result.error) {
         setError(result.error.message ?? 'Payment failed')
@@ -72,28 +109,16 @@ export default function CheckoutPage() {
         return
       }
 
-      if (result.redirect) {
-        // User was redirected (UPI apps etc.) — verification handled in callback page
-        return
-      }
+      if (result.redirect) return
 
       if (result.paymentDetails) {
-        // 4. Verify payment on server
-        const verifyRes = await api.post('/payments/verify', {
-          cfOrderId: data.cfOrderId,
-        })
-
+        const verifyRes = await api.post('/payments/verify', { cfOrderId: data.cfOrderId })
         clearCart()
         router.push(`/order/${verifyRes.data.orderId}/track`)
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message ?? 'Something went wrong. Please try again.'
-      setError(errorMsg)
-      
-      // If idempotency error (409), let user reload
-      if (err.response?.status === 409) {
-        setError('Payment already in progress. Please refresh the page.');
-      }
+      const msg = err.response?.data?.message ?? 'Something went wrong. Please try again.'
+      setError(err.response?.status === 409 ? 'Payment already in progress. Please refresh.' : msg)
     } finally {
       setOrderInProgress(false)
       setIsLoading(false)
@@ -110,16 +135,28 @@ export default function CheckoutPage() {
         {items.map(item => (
           <div key={item.menuItem.id} className="flex justify-between py-2 text-sm border-b border-gray-100 last:border-0">
             <span className="text-gray-700">{item.menuItem.name} × {item.quantity}</span>
-            <span className="font-medium">₹{(item.menuItem.price * item.quantity) / 100}</span>
+            <span className="font-medium">₹{toRupees(item.menuItem.price * item.quantity)}</span>
           </div>
         ))}
-        <div className="flex justify-between pt-3 text-sm text-gray-500">
-          <span>Delivery fee</span>
-          <span>₹{deliveryFee !== null ? (deliveryFee / 100) : '...'}</span>
-        </div>
-        <div className="flex justify-between pt-2 font-bold text-gray-900">
-          <span>Total (approx)</span>
-          <span>₹{deliveryFee !== null ? ((subtotal + deliveryFee) / 100) : '...'}</span>
+        <div className="mt-3 space-y-1 text-sm text-gray-500">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>₹{subtotalRupees}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Delivery fee</span>
+            <span>₹{deliveryFeeRupees !== null ? deliveryFeeRupees : '...'}</span>
+          </div>
+          {discountRupees > 0 && (
+            <div className="flex justify-between text-green-600">
+              <span>Discount ({appliedCoupon?.code})</span>
+              <span>-₹{discountRupees.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between pt-2 font-bold text-gray-900 border-t border-gray-100">
+            <span>Total</span>
+            <span>₹{totalRupees !== null ? totalRupees.toFixed(2) : '...'}</span>
+          </div>
         </div>
         <p className="text-xs text-gray-400 mt-1">Final amount confirmed at payment</p>
       </div>
@@ -137,14 +174,40 @@ export default function CheckoutPage() {
       </div>
 
       {/* Coupon */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <label className="block text-sm font-semibold text-gray-800 mb-2">Coupon code (optional)</label>
-        <input
-          value={couponCode}
-          onChange={e => setCouponCode(e.target.value.toUpperCase())}
-          placeholder="e.g. GHOST20"
-          className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-        />
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 space-y-3">
+        <label className="block text-sm font-semibold text-gray-800">Coupon code</label>
+
+        {appliedCoupon ? (
+          <div className="flex items-start justify-between bg-green-50 border border-green-200 rounded-lg p-3">
+            <div>
+              <p className="text-sm font-semibold text-green-800">✓ {appliedCoupon.code} applied</p>
+              <p className="text-xs text-green-700 mt-0.5">Discount: -₹{appliedCoupon.discountAmount.toFixed(2)}</p>
+            </div>
+            <button onClick={handleRemoveCoupon} className="text-xs font-semibold text-green-700 hover:underline">Remove</button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              value={couponInput}
+              onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
+              placeholder="e.g. GHOST20"
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+              disabled={couponLoading}
+            />
+            <button
+              onClick={handleApplyCoupon}
+              disabled={couponLoading || !couponInput.trim()}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:bg-gray-300 transition"
+            >
+              {couponLoading ? '...' : 'Apply'}
+            </button>
+          </div>
+        )}
+
+        {couponError && <p className="text-xs text-red-600">{couponError}</p>}
+
+        {/* Available coupon chips */}
+        {restaurantId && <AvailableCoupons restaurantId={restaurantId} onSelect={code => { setCouponInput(code); setCouponError('') }} />}
       </div>
 
       {error && (
@@ -156,7 +219,7 @@ export default function CheckoutPage() {
         disabled={isLoading || items.length === 0 || deliveryFee === null || orderInProgress}
         className="w-full h-14 bg-brand hover:bg-brand-dark disabled:bg-gray-300 text-white font-bold text-base rounded-xl transition-colors"
       >
-        {isLoading ? 'Processing...' : `Pay ₹${deliveryFee !== null ? ((subtotal + deliveryFee) / 100) : '...'}`}
+        {isLoading ? 'Processing...' : `Pay ₹${totalRupees !== null ? totalRupees.toFixed(2) : '...'}`}
       </button>
 
       <p className="text-center text-xs text-gray-400 mt-3">

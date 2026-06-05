@@ -63,6 +63,7 @@ model User {
   agentOrders     Order[]        @relation("AgentOrders")
   refreshTokens   RefreshToken[]
   cartItems       CartItem[]     @relation("UserCart")
+  notifications   Notification[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -105,11 +106,13 @@ model Restaurant {
   description    String
   cuisines       String[]
   rating         Float      @default(0)
+  reviewCount    Int        @default(0)
   imageUrl       String
   address        Json
   lat            Float?
   lng            Float?
   isOpen         Boolean    @default(true)
+  suspended      Boolean    @default(false)
   deliveryRadius Float      @default(5)
   owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   menuItems      MenuItem[]
@@ -190,11 +193,14 @@ model Review {
 model Coupon {
   id            String       @id @default(uuid())
   code          String       @unique
+  description   String?
   discountType  DiscountType
   discountValue Decimal      @db.Decimal(10, 2)
   minOrder      Decimal      @db.Decimal(10, 2)
   maxUses       Int
   usedCount     Int          @default(0)
+  isActive      Boolean      @default(true)
+  restaurantId  String?
   expiresAt     DateTime
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -224,6 +230,21 @@ model PaymentWebhook {
   createdAt DateTime @default(now())
 
   @@index([eventId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String
+  entityId  String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 model AuditLog {

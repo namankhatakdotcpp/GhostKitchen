@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { MenuItemCard } from "@/components/customer/MenuItemCard";
+import ReviewsSection from "@/components/customer/ReviewsSection";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -302,8 +303,7 @@ export function RestaurantMenuPage({
 
       <div className="mx-auto max-w-shell px-4 pb-8 pt-2 md:px-6 lg:px-8">
         <div className="max-w-3xl">
-          {filteredMenu.map((section) => (
-            <section
+          {filteredMenu.map((section) => (            <section
               className="scroll-mt-[136px]"
               key={section.category}
               ref={(node) => {
@@ -330,6 +330,12 @@ export function RestaurantMenuPage({
               </div>
             </section>
           ))}
+          {restaurantId && (
+            <div className="mt-8">
+              <h3 className="text-[16px] font-bold text-text-primary mb-4">Reviews</h3>
+              <ReviewsSection restaurantId={restaurantId} />
+            </div>
+          )}
         </div>
       </div>
 

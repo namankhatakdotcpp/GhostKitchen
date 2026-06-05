@@ -46,6 +46,12 @@ router.post(
  *
  * Required: authenticate (user must own the order)
  */
+router.get(
+  "/history",
+  authenticate,
+  paymentController.getPaymentHistory
+);
+
 router.post(
   "/create-session",
   authenticate,

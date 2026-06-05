@@ -8,6 +8,7 @@ import cashfree from "../../config/cashfree.js";
 import { v4 as uuid } from "uuid";
 import { calculateOrderTotal } from "../orders/orders.service.js";
 import { emitOrderNew } from "../../socket/socket.server.js";
+import { createNotification } from "../notification/notification.service.js";
 
 /**
  * Payment Controller - HTTP Handlers
@@ -339,9 +340,66 @@ export const verifyPaymentAndCreateOrder = async (req, res, next) => {
 
     emitOrderNew({ restaurantId: pendingPayment.restaurantId, order });
 
+    // Notify customer and restaurant owner
+    createNotification({
+      userId: customerId,
+      title: "Order placed!",
+      body: "Your order is being prepared.",
+      type: "ORDER_UPDATE",
+      entityId: order.id,
+    });
+    if (order.restaurant?.ownerId) {
+      createNotification({
+        userId: order.restaurant.ownerId,
+        title: "New order!",
+        body: `Order #${order.id.slice(-6).toUpperCase()} received.`,
+        type: "ORDER_UPDATE",
+        entityId: order.id,
+      });
+    }
+
     return res.json({ orderId: order.id, success: true });
   } catch (error) {
     logger.error("Verify payment error", { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * GET /api/payments/history
+ * Get payment history for the logged-in customer
+ */
+export const getPaymentHistory = async (req, res, next) => {
+  try {
+    const customerId = req.user.userId;
+    const payments = await prisma.payment.findMany({
+      where: { customerId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    // Enrich with order data via cfOrderId
+    const enriched = await Promise.all(
+      payments.map(async (p) => {
+        const order = await prisma.order.findFirst({
+          where: { cfOrderId: p.cfOrderId },
+          include: { restaurant: { select: { name: true } } },
+        });
+        return {
+          id: p.id,
+          cfOrderId: p.cfOrderId,
+          amount: p.amount,
+          status: p.status,
+          createdAt: p.createdAt,
+          orderId: order?.id ?? null,
+          restaurantName: order?.restaurant?.name ?? null,
+          items: order?.items ?? JSON.parse(p.itemsSnapshot || "[]"),
+        };
+      })
+    );
+
+    res.json({ payments: enriched });
+  } catch (error) {
     next(error);
   }
 };

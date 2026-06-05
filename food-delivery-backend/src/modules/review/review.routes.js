@@ -34,6 +34,7 @@ const router = express.Router();
  * }
  */
 router.post("/create", authenticate, reviewController.createReview);
+router.get("/can-review/:orderId", authenticate, reviewController.canReview);
 
 /**
  * GET /api/reviews/restaurant/:restaurantId

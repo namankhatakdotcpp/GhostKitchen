@@ -119,12 +119,8 @@ export const getActiveCoupons = async (req, res, next) => {
   try {
     const coupons = await prisma.coupon.findMany({
       where: {
-        expiresAt: {
-          gt: new Date(),
-        },
-        usedCount: {
-          lt: prisma.coupon.fields.maxUses,
-        },
+        isActive: true,
+        expiresAt: { gt: new Date() },
       },
       select: {
         id: true,
@@ -146,6 +142,53 @@ export const getActiveCoupons = async (req, res, next) => {
         minOrder: parseFloat(c.minOrder),
         availableUses: c.maxUses - c.usedCount,
       })),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/coupons/available?restaurantId=
+ * Public: active coupons for a restaurant or global ones
+ */
+export const getAvailableCoupons = async (req, res, next) => {
+  try {
+    const { restaurantId } = req.query;
+    const where = {
+      isActive: true,
+      expiresAt: { gt: new Date() },
+    };
+    if (restaurantId) {
+      where.OR = [{ restaurantId }, { restaurantId: null }];
+    }
+
+    const coupons = await prisma.coupon.findMany({
+      where,
+      select: {
+        code: true,
+        description: true,
+        discountType: true,
+        discountValue: true,
+        minOrder: true,
+        expiresAt: true,
+        maxUses: true,
+        usedCount: true,
+      },
+      orderBy: { expiresAt: "asc" },
+    });
+
+    res.json({
+      coupons: coupons
+        .filter((c) => c.usedCount < c.maxUses)
+        .map((c) => ({
+          code: c.code,
+          description: c.description,
+          discountType: c.discountType,
+          discountValue: parseFloat(String(c.discountValue)),
+          minOrder: parseFloat(String(c.minOrder)),
+          expiresAt: c.expiresAt,
+        })),
     });
   } catch (error) {
     next(error);

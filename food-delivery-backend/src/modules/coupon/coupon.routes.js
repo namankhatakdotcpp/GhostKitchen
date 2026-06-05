@@ -67,6 +67,7 @@ router.post("/apply", couponController.applyCoupon);
  * }
  */
 router.get("/active", couponController.getActiveCoupons);
+router.get("/available", couponController.getAvailableCoupons);
 
 /**
  * GET /api/coupons/:code

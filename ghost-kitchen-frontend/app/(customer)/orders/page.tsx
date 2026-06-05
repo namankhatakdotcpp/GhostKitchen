@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Clock, CheckCircle, Truck, AlertCircle, Package } from "lucide-react";
+import { Clock, CheckCircle, Truck, AlertCircle, Package, Star } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import ReviewForm from "@/components/customer/ReviewForm";
 
 interface OrderItemJSON {
   menuItemId: string;
@@ -35,6 +36,8 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [reviewingOrderId, setReviewingOrderId] = useState<string | null>(null);
+  const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchOrders();
@@ -113,7 +116,12 @@ export default function OrdersPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">Your Orders</h1>
+          <Link href="/payments" className="text-sm font-semibold text-orange-600 hover:underline">
+            Payment History →
+          </Link>
+        </div>
         <p className="text-gray-600 mb-8">Track your deliveries</p>
 
         {orders.length === 0 ? (
@@ -201,6 +209,28 @@ export default function OrdersPage() {
                       >
                         Track Order
                       </Link>
+                    )}
+
+                    {order.status === "DELIVERED" && !reviewedOrderIds.has(order.id) && (
+                      reviewingOrderId === order.id ? (
+                        <div className="mt-2">
+                          <ReviewForm
+                            orderId={order.id}
+                            onReviewSubmitted={() => {
+                              setReviewedOrderIds(prev => new Set([...prev, order.id]));
+                              setReviewingOrderId(null);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setReviewingOrderId(order.id)}
+                          className="mt-2 w-full flex items-center justify-center gap-2 py-2 px-4 border border-yellow-400 text-yellow-700 bg-yellow-50 rounded-lg hover:bg-yellow-100 font-medium transition text-sm"
+                        >
+                          <Star className="h-4 w-4" />
+                          Rate this order
+                        </button>
+                      )
                     )}
                   </div>
                 )}

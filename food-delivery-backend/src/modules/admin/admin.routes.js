@@ -17,6 +17,13 @@ import {
   assignDeliveryPartner,
   getUsers,
   getRestaurants,
+  getAdminPayments,
+  getAdminCoupons,
+  createAdminCoupon,
+  updateAdminCoupon,
+  deleteAdminCoupon,
+  updateUserRole,
+  suspendRestaurant,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -75,5 +82,13 @@ router.patch("/orders/:id/cancel", cancelOrder);
  * - deliveryUserId: ID of delivery partner
  */
 router.post("/orders/:id/assign-delivery", assignDeliveryPartner);
+
+router.get("/payments", getAdminPayments);
+router.get("/coupons", getAdminCoupons);
+router.post("/coupons", createAdminCoupon);
+router.put("/coupons/:id", updateAdminCoupon);
+router.delete("/coupons/:id", deleteAdminCoupon);
+router.patch("/users/:id/role", updateUserRole);
+router.patch("/restaurants/:id/suspend", suspendRestaurant);
 
 export default router;

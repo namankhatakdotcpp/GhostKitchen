@@ -11,6 +11,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
+  Tag,
   Users,
   Wallet,
 } from "lucide-react";
@@ -24,8 +25,9 @@ const navItems = [
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/delivery-agents", label: "Delivery Agents", icon: Bike },
+  { href: "/admin/payments", label: "Payments", icon: Wallet },
+  { href: "/admin/coupons", label: "Coupons", icon: Tag },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/admin/payouts", label: "Payouts", icon: Wallet },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

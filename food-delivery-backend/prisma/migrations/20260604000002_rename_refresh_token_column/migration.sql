@@ -8,13 +8,8 @@ CREATE TABLE IF NOT EXISTS "RefreshToken" (
     CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
 );
 
--- Add unique constraint on tokenHash if not present
-DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'RefreshToken')
-  AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'RefreshToken_tokenHash_key') THEN
-    ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_tokenHash_key" UNIQUE ("tokenHash");
-  END IF;
-END $$;
+-- Add unique index on tokenHash if not present
+CREATE UNIQUE INDEX IF NOT EXISTS "RefreshToken_tokenHash_key" ON "RefreshToken"("tokenHash");
 
 -- Rename token -> tokenHash only if old column exists
 DO $$ BEGIN

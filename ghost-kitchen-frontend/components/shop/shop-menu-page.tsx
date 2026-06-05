@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, toPaise, toRupees } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────
 interface MenuItem {
@@ -41,8 +41,7 @@ type ItemForm = z.infer<typeof itemSchema>;
 
 const BLANK_FORM: ItemForm = { name: "", description: "", price: 0, category: "", isVeg: true, imageUrl: "", isBestseller: false, sortOrder: 0 };
 
-// ─── Helpers ──────────────────────────────────────────────────
-const toRupees = (p: number | string) => Number(p);
+// ─── Helpers (prices in DB are PAISE) ────────────────────────
 
 // ─── Sub-components ───────────────────────────────────────────
 function AvailabilitySwitch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -63,7 +62,7 @@ function MenuItemCard({
   onToggleAvailable: (id: string) => void;
   onToggleBestseller: (id: string) => void;
 }) {
-  const price = toRupees(item.price);
+  const price = toRupees(Number(item.price));
   return (
     <div className={cn("rounded-[18px] border bg-white p-4 shadow-[0_8px_20px_rgba(28,28,28,0.05)] transition", !item.isAvailable && "opacity-60")}>
       <div className="grid grid-cols-[72px_1fr] gap-3">
@@ -127,7 +126,7 @@ function ItemSheet({
 
   useEffect(() => {
     if (open) {
-      setForm(initial ? { name: initial.name, description: initial.description, price: toRupees(initial.price), category: initial.category, isVeg: initial.isVeg, imageUrl: initial.imageUrl, isBestseller: initial.isBestseller, sortOrder: initial.sortOrder } : BLANK_FORM);
+      setForm(initial ? { name: initial.name, description: initial.description, price: toRupees(Number(initial.price)), category: initial.category, isVeg: initial.isVeg, imageUrl: initial.imageUrl, isBestseller: initial.isBestseller, sortOrder: initial.sortOrder } : BLANK_FORM);
       setErrors({});
     }
   }, [open, initial]);
@@ -142,7 +141,7 @@ function ItemSheet({
     }
     setSaving(true);
     try {
-      const payload = { ...parsed.data, price: parsed.data.price, category: newCategory || parsed.data.category };
+      const payload = { ...parsed.data, price: toPaise(parsed.data.price), category: newCategory || parsed.data.category };
       let saved: MenuItem;
       if (initial) {
         const res = await api.put(`/restaurants/${restaurantId}/menu/${initial.id}`, payload);

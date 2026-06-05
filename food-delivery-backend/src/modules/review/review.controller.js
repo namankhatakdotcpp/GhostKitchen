@@ -29,6 +29,20 @@ export const createReview = async (req, res, next) => {
       data: { orderId, rating, comment: comment || null },
     });
 
+    // Recalculate restaurant rating
+    const agg = await prisma.review.aggregate({
+      where: { order: { restaurantId: order.restaurantId } },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+    await prisma.restaurant.update({
+      where: { id: order.restaurantId },
+      data: {
+        rating: Math.round((agg._avg.rating ?? 0) * 10) / 10,
+        reviewCount: agg._count.rating,
+      },
+    });
+
     logger.info(`Review created for order ${orderId} by user ${userId}`);
     res.json({ success: true, review });
   } catch (error) {
@@ -39,37 +53,45 @@ export const createReview = async (req, res, next) => {
 export const getRestaurantReviews = async (req, res, next) => {
   try {
     const { restaurantId } = req.params;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 10);
 
-    // Order now has direct restaurantId field
-    const reviews = await prisma.review.findMany({
-      where: { order: { restaurantId } },
-      include: {
-        order: {
-          include: {
-            customer: { select: { id: true, name: true } },
+    const [reviews, totalReviews] = await prisma.$transaction([
+      prisma.review.findMany({
+        where: { order: { restaurantId } },
+        include: {
+          order: {
+            include: {
+              customer: { select: { id: true, name: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.review.count({ where: { order: { restaurantId } } }),
+    ]);
 
     const formattedReviews = reviews.map((review) => ({
       id: review.id,
       rating: review.rating,
       comment: review.comment,
-      userName: review.order.customer.name,
+      userName: review.order.customer.name.split(" ")[0],
       createdAt: review.createdAt,
     }));
 
-    const avgRating =
-      reviews.length > 0
-        ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
-        : 0;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { rating: true, reviewCount: true },
+    });
 
     res.json({
-      averageRating: parseFloat(String(avgRating)),
-      totalReviews: reviews.length,
+      averageRating: restaurant?.rating ?? 0,
+      totalReviews: restaurant?.reviewCount ?? totalReviews,
+      page,
+      limit,
+      hasMore: page * limit < totalReviews,
       reviews: formattedReviews,
     });
   } catch (error) {
@@ -101,6 +123,28 @@ export const getReviewByOrderId = async (req, res, next) => {
       userName: review.order.customer.name,
       createdAt: review.createdAt,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const canReview = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const userId = req.user.userId;
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order || order.customerId !== userId) {
+      return res.json({ canReview: false, reason: "Order not found" });
+    }
+    if (order.status !== "DELIVERED") {
+      return res.json({ canReview: false, reason: "Order not yet delivered" });
+    }
+    const existing = await prisma.review.findUnique({ where: { orderId } });
+    if (existing) {
+      return res.json({ canReview: false, reason: "Already reviewed" });
+    }
+    res.json({ canReview: true });
   } catch (error) {
     next(error);
   }

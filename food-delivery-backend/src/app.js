@@ -16,6 +16,7 @@ import reviewRoutes from "./modules/review/review.routes.js";
 import couponRoutes from "./modules/coupon/coupon.routes.js";
 import roleRoutes from "./modules/role/role.routes.js";
 import deliveryRoutes from "./modules/delivery/delivery.routes.js";
+import notificationRoutes from "./modules/notification/notification.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -158,6 +159,7 @@ app.use("/api/coupons", couponRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/role", roleRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 // ── 13. 404 ───────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

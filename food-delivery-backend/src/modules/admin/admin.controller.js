@@ -141,6 +141,58 @@ export const getRestaurants = async (req, res, next) => {
  * POST /admin/orders/:id/assign-delivery
  * Assign delivery partner to order
  */
+export const getAdminPayments = async (req, res, next) => {
+  try {
+    const result = await adminService.getAdminPayments(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+export const getAdminCoupons = async (req, res, next) => {
+  try {
+    const result = await adminService.getAdminCoupons(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+export const createAdminCoupon = async (req, res, next) => {
+  try {
+    const coupon = await adminService.createAdminCoupon(req.body);
+    res.json({ success: true, coupon });
+  } catch (error) { next(error); }
+};
+
+export const updateAdminCoupon = async (req, res, next) => {
+  try {
+    const coupon = await adminService.updateAdminCoupon(req.params.id, req.body);
+    res.json({ success: true, coupon });
+  } catch (error) { next(error); }
+};
+
+export const deleteAdminCoupon = async (req, res, next) => {
+  try {
+    await adminService.deleteAdminCoupon(req.params.id);
+    res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+export const updateUserRole = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot modify your own role" });
+    }
+    const user = await adminService.updateUserRole(req.params.id, req.body);
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const suspendRestaurant = async (req, res, next) => {
+  try {
+    const restaurant = await adminService.suspendRestaurant(req.params.id);
+    res.json({ success: true, restaurant });
+  } catch (error) { next(error); }
+};
+
 export const assignDeliveryPartner = async (req, res, next) => {
   try {
     const { id } = req.params;

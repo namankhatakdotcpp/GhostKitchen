@@ -173,6 +173,91 @@ export const getRestaurants = async ({ page = 1, limit = 20, search } = {}) => {
   return { restaurants, total, page: Number(page), limit: Number(limit) }
 };
 
+export const getAdminPayments = async ({ page = 1, limit = 20, status } = {}) => {
+  const where = {};
+  if (status) where.status = status;
+  const [payments, total] = await prisma.$transaction([
+    prisma.payment.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.payment.count({ where }),
+  ]);
+  // Enrich with customer/restaurant names
+  const enriched = await Promise.all(
+    payments.map(async (p) => {
+      const customer = await prisma.user.findUnique({ where: { id: p.customerId }, select: { name: true } });
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: p.restaurantId }, select: { name: true } });
+      const order = await prisma.order.findFirst({ where: { cfOrderId: p.cfOrderId }, select: { id: true } });
+      return { ...p, customerName: customer?.name, restaurantName: restaurant?.name, orderId: order?.id };
+    })
+  );
+  return { payments: enriched, total, page: Number(page), limit: Number(limit) };
+};
+
+export const getAdminCoupons = async ({ page = 1, limit = 20 } = {}) => {
+  const [coupons, total] = await prisma.$transaction([
+    prisma.coupon.findMany({
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.coupon.count(),
+  ]);
+  return { coupons, total, page: Number(page), limit: Number(limit) };
+};
+
+export const createAdminCoupon = async ({ code, discountType, discountValue, minOrder, maxUses, expiresAt, description, restaurantId, isActive = true }) => {
+  return prisma.coupon.create({
+    data: {
+      code: code.toUpperCase(),
+      description: description ?? null,
+      discountType,
+      discountValue: parseFloat(discountValue),
+      minOrder: parseFloat(minOrder),
+      maxUses: Number(maxUses),
+      expiresAt: new Date(expiresAt),
+      restaurantId: restaurantId ?? null,
+      isActive,
+    },
+  });
+};
+
+export const updateAdminCoupon = async (id, updates) => {
+  const data = {};
+  if (updates.code) data.code = updates.code.toUpperCase();
+  if (updates.description !== undefined) data.description = updates.description;
+  if (updates.discountType) data.discountType = updates.discountType;
+  if (updates.discountValue !== undefined) data.discountValue = parseFloat(updates.discountValue);
+  if (updates.minOrder !== undefined) data.minOrder = parseFloat(updates.minOrder);
+  if (updates.maxUses !== undefined) data.maxUses = Number(updates.maxUses);
+  if (updates.expiresAt) data.expiresAt = new Date(updates.expiresAt);
+  if (updates.isActive !== undefined) data.isActive = updates.isActive;
+  if (updates.restaurantId !== undefined) data.restaurantId = updates.restaurantId;
+  return prisma.coupon.update({ where: { id }, data });
+};
+
+export const deleteAdminCoupon = async (id) => {
+  await prisma.coupon.update({ where: { id }, data: { isActive: false } });
+};
+
+export const updateUserRole = async (id, { roles, activeRole }) => {
+  return prisma.user.update({
+    where: { id },
+    data: { roles, activeRole },
+    select: { id: true, name: true, email: true, roles: true, activeRole: true },
+  });
+};
+
+export const suspendRestaurant = async (id) => {
+  return prisma.restaurant.update({
+    where: { id },
+    data: { isOpen: false, suspended: true },
+  });
+};
+
 export const assignDeliveryPartner = async (orderId, agentId) => {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new AppError("Order not found", 404);
