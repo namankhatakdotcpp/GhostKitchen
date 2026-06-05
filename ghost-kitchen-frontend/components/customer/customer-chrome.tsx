@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { CustomerBottomNav } from "@/components/customer/customer-bottom-nav";
 import { CustomerNavbar } from "@/components/customer/customer-navbar";
 import { LocationModal } from "@/components/customer/location-modal";
+import { RoleBanner } from "@/components/customer/RoleBanner";
 
 type CustomerChromeProps = {
   children: ReactNode;
@@ -20,6 +21,7 @@ export function CustomerChrome({ children }: CustomerChromeProps) {
   return (
     <>
       {!useImmersivePageChrome ? <CustomerNavbar /> : null}
+      {!useImmersivePageChrome ? <RoleBanner /> : null}
       {!useImmersivePageChrome ? <LocationModal /> : null}
       <main className={useImmersivePageChrome ? "" : "pb-24 md:pb-8"}>
         {children}
