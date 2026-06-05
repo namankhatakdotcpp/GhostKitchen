@@ -66,13 +66,14 @@ export default function RoleSwitcher() {
     setSwitching(true);
     try {
       const res = await api.post("/role/switch", { role });
+      // Use server-returned user (has correct roles, not stale frontend state)
+      const serverUser = res.data?.user ?? { ...user!, activeRole: role };
       if (res.data?.accessToken) {
         useAuthStore.setState({ accessToken: res.data.accessToken });
       }
-      const updated = { ...user!, activeRole: role };
-      setUser(updated as any);
-      useAuthStore.setState({ user: updated as any });
-      joinRoleRooms(role, user!.id, user!.restaurantId ?? null);
+      setUser(serverUser as any);
+      useAuthStore.setState({ user: serverUser as any });
+      joinRoleRooms(role, serverUser.id, serverUser.restaurantId ?? null);
       setOpen(false);
       router.push(ROLE_CONFIG[role].href);
     } catch (err) {

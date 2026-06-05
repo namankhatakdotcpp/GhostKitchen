@@ -46,12 +46,10 @@ export default function RiderOnboarding() {
         vehicleNumber: vehicleNumber.toUpperCase(),
         city,
       });
-      const { token } = res.data;
-      const updatedUser = { ...(user ?? {}), roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" };
+      const { user: serverUser } = res.data;
+      const updatedUser = serverUser ?? { ...(user ?? {}), roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" };
       setUser(updatedUser as any);
-      useAuthStore.setState((s) => ({
-        user: s.user ? { ...s.user, roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" } : s.user,
-      }));
+      useAuthStore.setState({ user: updatedUser as any });
       setSuccess(true);
       setTimeout(() => router.push("/delivery/home"), 2000);
     } catch (err: any) {

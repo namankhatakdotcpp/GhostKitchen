@@ -89,7 +89,7 @@ export default function RestaurantOnboarding() {
         deliveryRadius: s2.deliveryRadius,
       });
 
-      const { accessToken, restaurant } = res.data;
+      const { accessToken, restaurant, user: serverUser } = res.data;
       if (accessToken) setTokens(accessToken);
 
       // Add first menu item
@@ -105,12 +105,10 @@ export default function RestaurantOnboarding() {
         });
       }
 
-      const updatedUser = { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id };
+      // Use server-returned user (has correct roles array)
+      const updatedUser = serverUser ?? { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id };
       setUser(updatedUser as any);
-      // Keep authStore in sync so RoleBanner reads correct roles
-      useAuthStore.setState((s) => ({
-        user: s.user ? { ...s.user, roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant.id } : s.user,
-      }));
+      useAuthStore.setState({ user: updatedUser as any });
       // Tokens are HttpOnly cookies set by the server — no localStorage write needed
       setSuccess(true);
       setTimeout(() => router.push("/shop/orders"), 2000);
