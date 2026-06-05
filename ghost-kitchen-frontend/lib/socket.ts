@@ -6,8 +6,14 @@ let lastSocketError: { message: string; timestamp: Date } | null = null;
 
 export function getSocket() {
   if (!socket) {
+    // Derive socket URL: explicit var → strip /api from API URL → localhost
+    const backendUrl =
+      process.env.NEXT_PUBLIC_BACKEND_URL ??
+      process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ??
+      "http://localhost:5000";
+
     socket = io(
-      process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:5000",
+      backendUrl,
       {
         // The access_token cookie is sent automatically with the WebSocket
         // handshake because withCredentials:true is set below.
