@@ -84,7 +84,10 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: async () => {
         try {
-          await axiosInstance.post("/auth/logout");
+          // Use the shared api instance so the Bearer token interceptor fires,
+          // ensuring the backend can invalidate the session even after cookies expire.
+          const { api } = await import("@/lib/api");
+          await api.post("/auth/logout");
         } catch {
           // Server-side cookie clearing still happened; clear local state regardless
         }
