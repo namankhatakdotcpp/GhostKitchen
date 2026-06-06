@@ -19,13 +19,20 @@ export function RoleBanner() {
   useEffect(() => { setMounted(true); }, []);
   if (!mounted) return null;
 
-  // ONLY trust authStore — it comes directly from the server login token.
-  // Don't merge with userStore roles which may be stale persisted data.
   const roles: string[] = (authUser?.roles as string[]) ?? [];
   const activeRole = authUser?.activeRole ?? "CUSTOMER";
 
-  const hasRestaurant = roles.includes("RESTAURANT");
-  const hasDelivery   = roles.includes("DELIVERY");
+  // Use roles[] as primary signal; fall back to secondRole / restaurantId on the
+  // user object so the banner appears even when the roles array is stale in the
+  // persisted store (e.g. registered a restaurant in the same session without
+  // a full re-login triggering a fresh token).
+  const hasRestaurant =
+    roles.includes("RESTAURANT") ||
+    authUser?.secondRole === "RESTAURANT" ||
+    !!authUser?.restaurantId;
+  const hasDelivery =
+    roles.includes("DELIVERY") ||
+    authUser?.secondRole === "DELIVERY";
 
   if (activeRole !== "CUSTOMER") return null;
   if (!hasRestaurant && !hasDelivery) return null;

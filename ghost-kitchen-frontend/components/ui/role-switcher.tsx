@@ -60,9 +60,24 @@ export default function RoleSwitcher() {
 
   const activeConfig = ROLE_CONFIG[user.activeRole];
   const userRoles: AppRole[] = user.roles ?? ["CUSTOMER"];
-  const hasRestaurant = userRoles.includes("RESTAURANT");
-  const hasDelivery = userRoles.includes("DELIVERY");
-  const hasSecondRole = !!(user.secondRole);
+  // Fall back to secondRole / restaurantId so the switcher works even when
+  // the roles[] array is stale in the persisted store.
+  const hasRestaurant =
+    userRoles.includes("RESTAURANT") ||
+    user.secondRole === "RESTAURANT" ||
+    !!user.restaurantId;
+  const hasDelivery =
+    userRoles.includes("DELIVERY") ||
+    user.secondRole === "DELIVERY";
+  const hasSecondRole = hasRestaurant || hasDelivery;
+
+  // Build the effective roles list for the dropdown, adding any role detected
+  // via secondRole that may be missing from the stale roles[] array.
+  const effectiveRoles: AppRole[] = [...new Set([
+    ...userRoles,
+    ...(hasRestaurant && !userRoles.includes("RESTAURANT") ? ["RESTAURANT" as AppRole] : []),
+    ...(hasDelivery   && !userRoles.includes("DELIVERY")   ? ["DELIVERY"   as AppRole] : []),
+  ])];
 
   async function switchRole(role: AppRole) {
     if (role === user!.activeRole) { setOpen(false); return; }
@@ -117,7 +132,7 @@ export default function RoleSwitcher() {
             </div>
 
             {/* Available roles */}
-            {userRoles.map((role) => {
+            {effectiveRoles.map((role) => {
               const cfg = ROLE_CONFIG[role];
               if (!cfg) return null;
               const isActive = role === user.activeRole;
