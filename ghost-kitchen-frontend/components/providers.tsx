@@ -17,6 +17,13 @@ export function Providers({ children }: ProvidersProps) {
           queries: {
             staleTime: 30_000,
             refetchOnWindowFocus: false,
+            // Don't retry on auth/permission errors — the axios interceptor already
+            // handles TOKEN_EXPIRED refresh. Retrying 401/403/404 only spams the server.
+            retry: (failureCount, error: unknown) => {
+              const code = (error as { code?: number })?.code;
+              if (code === 401 || code === 403 || code === 404) return false;
+              return failureCount < 2;
+            },
           },
         },
       }),
