@@ -97,9 +97,17 @@ export const useAuthStore = create<AuthStore>()(
       getCurrentUser: async () => {
         set({ isLoading: true });
         try {
-          const { accessToken } = get();
+          // Prefer the token from localStorage (may be fresher after a silent refresh)
+          // then fall back to in-memory store state.
+          let token = get().accessToken;
+          if (typeof window !== "undefined") {
+            try {
+              const raw = localStorage.getItem("gk-auth");
+              token = raw ? (JSON.parse(raw)?.state?.accessToken ?? token) : token;
+            } catch { /* ignore */ }
+          }
           const response = await axiosInstance.get("/auth/me", {
-            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });

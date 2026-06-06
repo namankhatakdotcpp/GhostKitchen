@@ -61,18 +61,26 @@ api.interceptors.response.use(
 
         const refreshRes = await api.post("/auth/refresh", refreshToken ? { refreshToken } : {});
         const newToken = refreshRes.data?.data?.accessToken;
+        const newRefreshToken = refreshRes.data?.data?.refreshToken;
+        const refreshedUser = refreshRes.data?.data?.user;
 
         if (newToken && typeof window !== "undefined") {
           try {
+            // Keep localStorage in sync
             const raw = localStorage.getItem("gk-auth");
             if (raw) {
               const parsed = JSON.parse(raw);
-              const newRefreshToken = refreshRes.data?.data?.refreshToken;
               parsed.state.accessToken = newToken;
               if (newRefreshToken) parsed.state.refreshToken = newRefreshToken;
               localStorage.setItem("gk-auth", JSON.stringify(parsed));
             }
           } catch { /* ignore */ }
+
+          // Also update Zustand store so roles/user data stay fresh
+          const storeUpdate: Record<string, unknown> = { accessToken: newToken };
+          if (newRefreshToken) storeUpdate.refreshToken = newRefreshToken;
+          if (refreshedUser) storeUpdate.user = refreshedUser;
+          useAuthStore.setState(storeUpdate);
         }
 
         // Replay the original request with the new token
