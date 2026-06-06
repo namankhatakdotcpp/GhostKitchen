@@ -1,6 +1,8 @@
 import axios, { AxiosError } from "axios";
 
 import type { ApiErrorPayload } from "@/types";
+// Lazy import to avoid circular dependency — authStore itself doesn't import api.ts
+import { useAuthStore } from "@/store/authStore";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "https://ghostkitchen.onrender.com/api";
@@ -15,8 +17,14 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     try {
+      // Primary: read from localStorage (persisted Zustand state)
       const raw = localStorage.getItem("gk-auth");
-      const token = raw ? JSON.parse(raw)?.state?.accessToken : null;
+      let token: string | null = raw ? JSON.parse(raw)?.state?.accessToken : null;
+      // Fallback: read from in-memory Zustand store (handles timing edge cases
+      // where setState was called but persist hasn't written to localStorage yet)
+      if (!token) {
+        token = useAuthStore.getState().accessToken;
+      }
       if (token) {
         config.headers = config.headers ?? {};
         config.headers["Authorization"] = `Bearer ${token}`;

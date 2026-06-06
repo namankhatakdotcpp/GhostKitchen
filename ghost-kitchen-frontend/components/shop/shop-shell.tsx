@@ -131,7 +131,16 @@ export function ShopShell({ children }: ShopShellProps) {
         </nav>
       </aside>
 
-      <main className="pb-24 md:pl-[72px] md:pb-0 xl:pl-56">{children}</main>
+      {/* Mobile top header with logo + role switcher */}
+      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-white px-4 md:hidden">
+        <Link className="text-xl font-extrabold tracking-[-0.04em]" href="/shop/orders">
+          <span className="text-text-primary">ghost</span>
+          <span className="text-brand">kitchen</span>
+        </Link>
+        <RoleSwitcher />
+      </header>
+
+      <main className="pt-14 pb-24 md:pt-0 md:pl-[72px] md:pb-0 xl:pl-56">{children}</main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 py-2 backdrop-blur md:hidden">
         <div className="mx-auto flex max-w-md items-center justify-around">
