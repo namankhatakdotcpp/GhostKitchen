@@ -113,9 +113,14 @@ export default function RestaurantOnboarding() {
       setSuccess(true);
       setTimeout(() => router.push("/shop/orders"), 2000);
     } catch (err: any) {
-      // Already registered — just redirect to the shop
       if (err.code === 409) {
-        router.push("/shop/menu");
+        // Restaurant already exists (or partial failure was healed by the backend).
+        // Refresh user data from the server so roles/restaurantId are up to date,
+        // then redirect to the dashboard — never leave the store in a stale state.
+        try {
+          await useAuthStore.getState().getCurrentUser();
+        } catch { /* non-fatal — redirect anyway */ }
+        router.push("/shop/orders");
         return;
       }
       setErrors({ submit: err.error ?? err.response?.data?.message ?? "Something went wrong" });

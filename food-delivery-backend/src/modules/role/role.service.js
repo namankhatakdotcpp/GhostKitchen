@@ -36,21 +36,41 @@ export async function registerRestaurant(userId, restaurantData) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_ROLE_SELECT });
   if (!user) throw new AppError("User not found", 404);
 
-  if (user.secondRole) {
-    throw new AppError("You already have a second role. Remove it before adding another.", 409);
-  }
-
-  // Enforce city uniqueness per owner (in-memory check avoids fragile JSON path queries)
+  // Check if user already owns a restaurant (handles partial-failure recovery:
+  // restaurant row may exist in DB from a previous 500 where user.update never ran)
   const ownerRestaurants = await prisma.restaurant.findMany({
     where: { ownerId: userId },
     select: { id: true, address: true },
   });
-  const targetCity = (restaurantData.city || "").toLowerCase().trim();
-  const existingInCity = ownerRestaurants.find(
-    (r) => ((r.address?.city) || "").toLowerCase().trim() === targetCity
-  );
-  if (existingInCity) {
-    throw new AppError("You already have a restaurant in this city", 409);
+
+  if (ownerRestaurants.length > 0) {
+    // User already has at least one restaurant. If their user record is out of sync
+    // (roles/secondRole/restaurantId not set — can happen after a partial failure),
+    // heal it now and return as if registration succeeded.
+    const existingRestaurant = ownerRestaurants[0];
+    const needsHeal = !user.secondRole || !user.restaurantId || !user.roles.includes("RESTAURANT");
+    if (needsHeal) {
+      const healed = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          secondRole: "RESTAURANT",
+          roles: { set: ["CUSTOMER", "RESTAURANT"] },
+          restaurantId: existingRestaurant.id,
+        },
+        select: USER_ROLE_SELECT,
+      });
+      const { accessToken } = generateTokenPair(buildTokenPayload(healed));
+      // Return the existing restaurant with the healed user so the frontend
+      // can update its store and redirect normally.
+      const fullRestaurant = await prisma.restaurant.findUnique({ where: { id: existingRestaurant.id } });
+      return { token: accessToken, restaurant: fullRestaurant, user: healed };
+    }
+    // User record already correct — 409 so frontend redirects to dashboard
+    throw new AppError("You already have a second role. Remove it before adding another.", 409);
+  }
+
+  if (user.secondRole) {
+    throw new AppError("You already have a second role. Remove it before adding another.", 409);
   }
 
   const slug = restaurantData.name
@@ -58,35 +78,41 @@ export async function registerRestaurant(userId, restaurantData) {
     .replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 50)
     + "-" + Date.now().toString(36);
 
-  const restaurant = await prisma.restaurant.create({
-    data: {
-      name: restaurantData.name,
-      slug,
-      description: restaurantData.description || "",
-      cuisines: restaurantData.cuisines || [],
-      ownerId: userId,
-      imageUrl: restaurantData.imageUrl || "",
-      address: {
-        line1: restaurantData.addressLine || "",
-        city: restaurantData.city || "",
-        deliveryFee: restaurantData.deliveryFee || 3000,
-        deliveryTime: restaurantData.deliveryTime || 30,
-        minOrder: restaurantData.minOrder || 9900,
+  // Wrap create + user-update in a transaction so a partial failure can never
+  // leave the restaurant row orphaned with the user roles un-updated.
+  const { restaurant, updated } = await prisma.$transaction(async (tx) => {
+    const restaurant = await tx.restaurant.create({
+      data: {
+        name: restaurantData.name,
+        slug,
+        description: restaurantData.description || "",
+        cuisines: restaurantData.cuisines || [],
+        ownerId: userId,
+        imageUrl: restaurantData.imageUrl || "",
+        address: {
+          line1: restaurantData.addressLine || "",
+          city: restaurantData.city || "",
+          deliveryFee: restaurantData.deliveryFee || 3000,
+          deliveryTime: restaurantData.deliveryTime || 30,
+          minOrder: restaurantData.minOrder || 9900,
+        },
+        lat: restaurantData.lat ?? null,
+        lng: restaurantData.lng ?? null,
+        deliveryRadius: restaurantData.deliveryRadius || 5,
       },
-      lat: restaurantData.lat ?? null,
-      lng: restaurantData.lng ?? null,
-      deliveryRadius: restaurantData.deliveryRadius || 5,
-    },
-  });
+    });
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      secondRole: "RESTAURANT",
-      roles: { set: ["CUSTOMER", "RESTAURANT"] },
-      restaurantId: restaurant.id,
-    },
-    select: USER_ROLE_SELECT,
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data: {
+        secondRole: "RESTAURANT",
+        roles: { set: ["CUSTOMER", "RESTAURANT"] },
+        restaurantId: restaurant.id,
+      },
+      select: USER_ROLE_SELECT,
+    });
+
+    return { restaurant, updated };
   });
 
   const { accessToken } = generateTokenPair(buildTokenPayload(updated));
