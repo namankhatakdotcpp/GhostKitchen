@@ -44,33 +44,40 @@ export async function registerRestaurant(userId, restaurantData) {
   });
 
   if (ownerRestaurants.length > 0) {
-    // User already has at least one restaurant. If their user record is out of sync
-    // (roles/secondRole/restaurantId not set — can happen after a partial failure),
-    // heal it now and return as if registration succeeded.
+    // User already has at least one restaurant — make registration idempotent.
+    // Whether or not the user record needs healing, return success with the
+    // existing restaurant so the frontend can update its store and redirect.
+    // (Previously we 409'd when state was already correct, which forced an
+    // extra getCurrentUser round-trip on the frontend — now we just return.)
     const existingRestaurant = ownerRestaurants[0];
     const needsHeal = !user.secondRole || !user.restaurantId || !user.roles.includes("RESTAURANT");
-    if (needsHeal) {
-      const healed = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          secondRole: "RESTAURANT",
-          roles: { set: ["CUSTOMER", "RESTAURANT"] },
-          restaurantId: existingRestaurant.id,
-        },
-        select: USER_ROLE_SELECT,
-      });
-      const { accessToken } = generateTokenPair(buildTokenPayload(healed));
-      // Return the existing restaurant with the healed user so the frontend
-      // can update its store and redirect normally.
-      const fullRestaurant = await prisma.restaurant.findUnique({ where: { id: existingRestaurant.id } });
-      return { token: accessToken, restaurant: fullRestaurant, user: healed };
-    }
-    // User record already correct — 409 so frontend redirects to dashboard
+    const healed = needsHeal
+      ? await prisma.user.update({
+          where: { id: userId },
+          data: {
+            // Only set secondRole if not already populated — preserve DELIVERY
+            ...(user.secondRole ? {} : { secondRole: "RESTAURANT" }),
+            roles: {
+              set: Array.from(new Set([...(user.roles || []), "CUSTOMER", "RESTAURANT"])),
+            },
+            restaurantId: existingRestaurant.id,
+          },
+          select: USER_ROLE_SELECT,
+        })
+      : user;
+    const { accessToken } = generateTokenPair(buildTokenPayload(healed));
+    const fullRestaurant = await prisma.restaurant.findUnique({ where: { id: existingRestaurant.id } });
+    return { token: accessToken, restaurant: fullRestaurant, user: healed };
+  }
+
+  if (user.secondRole && user.secondRole !== "RESTAURANT") {
+    // They have a non-restaurant second role (DELIVERY) — block.
     throw new AppError("You already have a second role. Remove it before adding another.", 409);
   }
 
-  if (user.secondRole) {
-    throw new AppError("You already have a second role. Remove it before adding another.", 409);
+  // Validate required fields up front so we 400 cleanly instead of 500.
+  if (!restaurantData?.name || typeof restaurantData.name !== "string" || !restaurantData.name.trim()) {
+    throw new AppError("Restaurant name is required", 400);
   }
 
   const slug = restaurantData.name

@@ -29,9 +29,33 @@ router.post("/register-restaurant", authenticate, async (req, res, next) => {
   try {
     const result = await registerRestaurant(req.user.userId, req.body);
     setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
-    await auditLog({ userId: req.user.userId, action: 'RESTAURANT_REGISTERED', entityType: 'Restaurant', entityId: result.restaurant.id, meta: { name: result.restaurant.name }, req })
+    // Audit logging is best-effort — never let a logging failure crash the
+    // registration response. The user must always get a clean 201 with their
+    // new restaurant + healed user record.
+    try {
+      await auditLog({
+        userId: req.user.userId,
+        action: 'RESTAURANT_REGISTERED',
+        entityType: 'Restaurant',
+        entityId: result.restaurant?.id,
+        meta: { name: result.restaurant?.name },
+        req,
+      });
+    } catch (auditErr) {
+      console.warn("[register-restaurant] audit log failed (non-fatal):", auditErr.message);
+    }
     res.status(201).json({ restaurant: result.restaurant, user: result.user, accessToken: result.token });
-  } catch (e) { next(e); }
+  } catch (e) {
+    // Surface the actual error to Render logs so future 500s are diagnosable.
+    console.error("[register-restaurant] failed:", {
+      userId: req.user?.userId,
+      message: e?.message,
+      stack: e?.stack,
+      code: e?.code,
+      meta: e?.meta,
+    });
+    next(e);
+  }
 });
 
 // POST /api/role/add-restaurant (already a RESTAURANT owner, adding another city)
