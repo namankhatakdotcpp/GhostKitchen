@@ -133,6 +133,32 @@ export const refreshAccessToken = async (rawRefreshToken) => {
 export const getCurrentUser = async (userId) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_SELECT });
   if (!user) throw new AppError("User not found", 404);
+
+  // Auto-heal orphaned restaurant registrations. If the user owns a restaurant
+  // in the DB but their user record is out of sync (roles/secondRole/restaurantId
+  // missing — from a pre-transaction partial failure), repair it on read so the
+  // role-switch banner appears without requiring a re-registration attempt.
+  const needsHeal =
+    !user.roles.includes("RESTAURANT") || !user.secondRole || !user.restaurantId;
+  if (needsHeal) {
+    const ownedRestaurant = await prisma.restaurant.findFirst({
+      where: { ownerId: userId },
+      select: { id: true },
+    });
+    if (ownedRestaurant) {
+      const nextRoles = Array.from(new Set([...(user.roles || []), "CUSTOMER", "RESTAURANT"]));
+      return prisma.user.update({
+        where: { id: userId },
+        data: {
+          roles: { set: nextRoles },
+          secondRole: user.secondRole ?? "RESTAURANT",
+          restaurantId: ownedRestaurant.id,
+        },
+        select: USER_SELECT,
+      });
+    }
+  }
+
   return user;
 };
 
