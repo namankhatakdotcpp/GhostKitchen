@@ -97,25 +97,20 @@ export const useAuthStore = create<AuthStore>()(
       getCurrentUser: async () => {
         set({ isLoading: true });
         try {
-          // Prefer the token from localStorage (may be fresher after a silent refresh)
-          // then fall back to in-memory store state.
-          let token = get().accessToken;
-          if (typeof window !== "undefined") {
-            try {
-              const raw = localStorage.getItem("gk-auth");
-              token = raw ? (JSON.parse(raw)?.state?.accessToken ?? token) : token;
-            } catch { /* ignore */ }
-          }
-          const response = await axiosInstance.get("/auth/me", {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
+          // Use the shared `api` instance so the 401-refresh interceptor fires
+          // on cold-start token expiry. The local axiosInstance has no retry
+          // logic, so /auth/me failures on stale tokens were silently dropping
+          // the heal'd user payload and leaving the role banner hidden.
+          const { api } = await import("@/lib/api");
+          const response = await api.get("/auth/me");
           const user = response.data.data?.user ?? response.data.user;
           set({ user, isAuthenticated: true, isLoading: false });
         } catch (err: any) {
-          const code = err?.response?.data?.code;
-          const status = err?.response?.status;
+          // api.ts normalizes errors to { error, code } where code is HTTP status
+          const status = err?.code ?? err?.response?.status;
+          const innerCode = err?.response?.data?.code;
           const isDefinitivelyLoggedOut =
-            status === 401 && (code === "TOKEN_INVALID" || code === "NO_TOKEN");
+            status === 401 && (innerCode === "TOKEN_INVALID" || innerCode === "NO_TOKEN");
           if (isDefinitivelyLoggedOut) {
             set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false, isLoading: false });
           } else {

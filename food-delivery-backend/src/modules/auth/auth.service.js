@@ -138,25 +138,41 @@ export const getCurrentUser = async (userId) => {
   // in the DB but their user record is out of sync (roles/secondRole/restaurantId
   // missing — from a pre-transaction partial failure), repair it on read so the
   // role-switch banner appears without requiring a re-registration attempt.
-  const needsHeal =
-    !user.roles.includes("RESTAURANT") || !user.secondRole || !user.restaurantId;
-  if (needsHeal) {
-    const ownedRestaurant = await prisma.restaurant.findFirst({
-      where: { ownerId: userId },
-      select: { id: true },
-    });
-    if (ownedRestaurant) {
-      const nextRoles = Array.from(new Set([...(user.roles || []), "CUSTOMER", "RESTAURANT"]));
-      return prisma.user.update({
-        where: { id: userId },
-        data: {
-          roles: { set: nextRoles },
-          secondRole: user.secondRole ?? "RESTAURANT",
-          restaurantId: ownedRestaurant.id,
-        },
-        select: USER_SELECT,
+  //
+  // Wrapped in try/catch so a heal failure (enum mismatch, race, etc.) NEVER
+  // breaks /auth/me. The endpoint must always return a user payload — if heal
+  // fails we just return the unhealed user and try again next request.
+  try {
+    const needsHeal =
+      !Array.isArray(user.roles) ||
+      !user.roles.includes("RESTAURANT") ||
+      !user.secondRole ||
+      !user.restaurantId;
+
+    if (needsHeal) {
+      const ownedRestaurant = await prisma.restaurant.findFirst({
+        where: { ownerId: userId },
+        select: { id: true },
       });
+      if (ownedRestaurant) {
+        const currentRoles = Array.isArray(user.roles) ? user.roles : [];
+        const nextRoles = Array.from(new Set([...currentRoles, "CUSTOMER", "RESTAURANT"]));
+        const healed = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            roles: { set: nextRoles },
+            // Only set secondRole if not already populated (don't clobber DELIVERY)
+            ...(user.secondRole ? {} : { secondRole: "RESTAURANT" }),
+            restaurantId: ownedRestaurant.id,
+          },
+          select: USER_SELECT,
+        });
+        return healed;
+      }
     }
+  } catch (healErr) {
+    // Log but don't fail the request — the user can still browse the app.
+    console.warn("[auth.me] heal failed, returning unhealed user:", healErr.message);
   }
 
   return user;
