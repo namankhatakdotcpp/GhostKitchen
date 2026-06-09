@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { Bell, Globe, Lock, Shield, Store, Truck } from "lucide-react";
+import { Bell, Globe, Lock, Shield, Store, Truck, CheckCircle } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
+import { useConfigStore } from "@/store/configStore";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
@@ -19,13 +22,14 @@ function SettingRow({ label, description, children }: { label: string; descripti
   );
 }
 
-function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+function Toggle({ enabled, onToggle, disabled }: { enabled: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
       className={cn(
-        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50",
         enabled ? "bg-[#FF5200]" : "bg-[#D1D5DB]"
       )}
     >
@@ -34,61 +38,105 @@ function Toggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void 
   );
 }
 
+function NumInput({ value, onChange, min, max, disabled }: { value: number; onChange: (v: number) => void; min?: number; max?: number; disabled?: boolean }) {
+  return (
+    <input type="number" min={min} max={max} value={value}
+      onChange={(e) => onChange(+e.target.value)}
+      disabled={disabled}
+      className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none disabled:opacity-50" />
+  );
+}
+
 const SECTIONS = [
-  { id: "platform", label: "Platform", icon: Globe },
-  { id: "orders",   label: "Orders & Delivery", icon: Truck },
-  { id: "restaurants", label: "Restaurants", icon: Store },
-  { id: "security", label: "Security", icon: Shield },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "access",   label: "Access Control", icon: Lock },
+  { id: "platform",      label: "Platform",           icon: Globe },
+  { id: "orders",        label: "Orders & Delivery",  icon: Truck },
+  { id: "restaurants",   label: "Restaurants",        icon: Store },
+  { id: "security",      label: "Security",           icon: Shield },
+  { id: "notifications", label: "Notifications",      icon: Bell },
+  { id: "access",        label: "Access Control",     icon: Lock },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+async function fetchSettings() {
+  const { data } = await api.get("/admin/settings");
+  return data.settings;
+}
+
+async function saveSettings(body: Record<string, unknown>) {
+  const { data } = await api.patch("/admin/settings", body);
+  return data.settings;
+}
+
 export function AdminSettingsPage() {
+  const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const setGlobalConfig = useConfigStore((s) => s.setConfig);
   const [active, setActive] = useState<SectionId>("platform");
 
-  // Platform toggles
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [newRegistrations, setNewRegistrations] = useState(true);
-  const [riderRegistrations, setRiderRegistrations] = useState(true);
+  const { data: remote, isLoading } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: fetchSettings,
+  });
 
-  // Orders
-  const [autoConfirm, setAutoConfirm]     = useState(false);
-  const [cashOnDelivery, setCashOnDelivery] = useState(true);
-  const [codMin, setCodMin]               = useState(0);
-  const [maxDeliveryRadius, setMaxDeliveryRadius] = useState(20);
-  const [defaultDeliveryFee, setDefaultDeliveryFee] = useState(30);
+  // Local working copy — initialised from remote once loaded
+  const [local, setLocal] = useState<Record<string, any>>({});
+  useEffect(() => {
+    if (remote) setLocal(remote);
+  }, [remote]);
 
-  // Restaurants
-  const [requireApproval, setRequireApproval]   = useState(false);
-  const [allowBranches, setAllowBranches]       = useState(true);
-  const [maxMenuItems, setMaxMenuItems]         = useState(200);
+  const mutation = useMutation({
+    mutationFn: saveSettings,
+    onSuccess: (saved) => {
+      qc.setQueryData(["admin-settings"], saved);
+      setLocal(saved);
+      // Propagate to the in-app config store so maintenance mode etc. takes effect immediately
+      setGlobalConfig(saved);
+      toast.success("Settings saved", { icon: "✓" });
+    },
+    onError: (e: any) => toast.error(e.error ?? "Failed to save settings"),
+  });
 
-  // Security
-  const [requireEmailVerify, setRequireEmailVerify] = useState(false);
-  const [sessionTimeout, setSessionTimeout]         = useState(15);
+  function set(key: string, value: any) {
+    setLocal((prev) => ({ ...prev, [key]: value }));
+  }
 
-  // Notifications
-  const [emailAlerts, setEmailAlerts]   = useState(true);
-  const [orderAlerts, setOrderAlerts]   = useState(true);
-  const [agentAlerts, setAgentAlerts]   = useState(true);
+  function save() {
+    mutation.mutate(local);
+  }
 
-  function saveSection() {
-    toast.success("Settings saved", { icon: "✓" });
+  const saving = mutation.isPending;
+  const dirty = remote ? JSON.stringify(local) !== JSON.stringify(remote) : false;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9CA3AF]">Configuration</p>
+          <h1 className="mt-2 text-3xl font-bold text-[#111827]">Settings</h1>
+        </div>
+        <div className="h-[400px] animate-pulse rounded-2xl bg-[#F9FAFB]" />
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9CA3AF]">Configuration</p>
-        <h1 className="mt-2 text-3xl font-bold text-[#111827]">Settings</h1>
-        <p className="mt-2 text-sm text-[#6B7280]">Manage platform-wide configuration, policies, and operational defaults.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9CA3AF]">Configuration</p>
+          <h1 className="mt-2 text-3xl font-bold text-[#111827]">Settings</h1>
+          <p className="mt-2 text-sm text-[#6B7280]">Manage platform-wide configuration, policies, and operational defaults.</p>
+        </div>
+        {local.maintenanceMode && (
+          <div className="flex items-center gap-2 rounded-full bg-yellow-100 border border-yellow-300 px-3 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+            <span className="text-xs font-bold text-yellow-700">MAINTENANCE MODE ON</span>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-6">
-        {/* Sidebar nav */}
         <aside className="w-48 shrink-0">
           <nav className="space-y-0.5">
             {SECTIONS.map(({ id, label, icon: Icon }) => (
@@ -108,22 +156,26 @@ export function AdminSettingsPage() {
           </nav>
         </aside>
 
-        {/* Content */}
         <div className="flex-1">
           <div className="rounded-2xl border border-[#E5E7EB] bg-white p-6">
 
             {active === "platform" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Platform</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Global switches that affect all users and restaurants.</p>
-                <SettingRow label="Maintenance mode" description="Takes the platform offline for all non-admin users">
-                  <Toggle enabled={maintenanceMode} onToggle={() => { setMaintenanceMode(!maintenanceMode); toast(maintenanceMode ? "Maintenance mode off" : "⚠️ Maintenance mode ON"); }} />
+                <p className="text-xs text-[#9CA3AF] mb-5">Global switches that affect all users and restaurants. Changes take effect immediately.</p>
+
+                <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
+                  <p className="text-xs font-semibold text-yellow-800">⚠️ Maintenance mode blocks all non-admin API calls instantly (cached for 30s on server). Admins always get through.</p>
+                </div>
+
+                <SettingRow label="Maintenance mode" description="Takes the platform offline for all non-admin users — they see a maintenance page">
+                  <Toggle enabled={local.maintenanceMode ?? false} onToggle={() => set("maintenanceMode", !local.maintenanceMode)} />
                 </SettingRow>
-                <SettingRow label="New restaurant registrations" description="Allow new restaurant owners to sign up">
-                  <Toggle enabled={newRegistrations} onToggle={() => setNewRegistrations(!newRegistrations)} />
+                <SettingRow label="New restaurant registrations" description="Allow new restaurant owners to register on the platform">
+                  <Toggle enabled={local.newRestaurantReg ?? true} onToggle={() => set("newRestaurantReg", !local.newRestaurantReg)} />
                 </SettingRow>
                 <SettingRow label="Rider registrations" description="Allow new delivery agents to sign up">
-                  <Toggle enabled={riderRegistrations} onToggle={() => setRiderRegistrations(!riderRegistrations)} />
+                  <Toggle enabled={local.riderRegistrations ?? true} onToggle={() => set("riderRegistrations", !local.riderRegistrations)} />
                 </SettingRow>
               </div>
             )}
@@ -131,26 +183,20 @@ export function AdminSettingsPage() {
             {active === "orders" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Orders & Delivery</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Defaults for order flow and delivery logistics.</p>
-                <SettingRow label="Auto-confirm orders" description="Automatically confirm placed orders after 2 minutes">
-                  <Toggle enabled={autoConfirm} onToggle={() => setAutoConfirm(!autoConfirm)} />
+                <p className="text-xs text-[#9CA3AF] mb-5">Defaults for order flow and delivery logistics. Saved values are enforced server-side on every order.</p>
+                <SettingRow label="Cash on delivery" description="Allow COD as a payment method — enforced on checkout and in the backend">
+                  <Toggle enabled={local.cashOnDelivery ?? true} onToggle={() => set("cashOnDelivery", !local.cashOnDelivery)} />
                 </SettingRow>
-                <SettingRow label="Cash on delivery" description="Allow COD as a payment method">
-                  <Toggle enabled={cashOnDelivery} onToggle={() => setCashOnDelivery(!cashOnDelivery)} />
-                </SettingRow>
-                {cashOnDelivery && (
+                {(local.cashOnDelivery ?? true) && (
                   <SettingRow label="Minimum order for COD (₹)" description="Orders below this amount cannot use COD">
-                    <input type="number" min={0} value={codMin} onChange={(e) => setCodMin(+e.target.value)}
-                      className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none" />
+                    <NumInput value={local.codMinOrder ?? 0} onChange={(v) => set("codMinOrder", v)} min={0} />
                   </SettingRow>
                 )}
-                <SettingRow label="Max delivery radius (km)" description="Restaurants cannot exceed this delivery radius">
-                  <input type="number" min={1} max={100} value={maxDeliveryRadius} onChange={(e) => setMaxDeliveryRadius(+e.target.value)}
-                    className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none" />
+                <SettingRow label="Max delivery radius (km)" description="Restaurants cannot set a delivery radius beyond this limit">
+                  <NumInput value={local.maxDeliveryRadius ?? 20} onChange={(v) => set("maxDeliveryRadius", v)} min={1} max={200} />
                 </SettingRow>
-                <SettingRow label="Default delivery fee (₹)" description="Suggested delivery fee for new restaurants">
-                  <input type="number" min={0} value={defaultDeliveryFee} onChange={(e) => setDefaultDeliveryFee(+e.target.value)}
-                    className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none" />
+                <SettingRow label="Default delivery fee (₹)" description="Pre-filled delivery fee when a restaurant registers">
+                  <NumInput value={Math.round((local.defaultDeliveryFee ?? 3000) / 100)} onChange={(v) => set("defaultDeliveryFee", v * 100)} min={0} />
                 </SettingRow>
               </div>
             )}
@@ -158,16 +204,15 @@ export function AdminSettingsPage() {
             {active === "restaurants" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Restaurants</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Controls around restaurant onboarding and content limits.</p>
-                <SettingRow label="Require admin approval" description="New restaurants go live only after manual review">
-                  <Toggle enabled={requireApproval} onToggle={() => setRequireApproval(!requireApproval)} />
+                <p className="text-xs text-[#9CA3AF] mb-5">Controls around restaurant onboarding, approval, and content limits. All enforced server-side.</p>
+                <SettingRow label="Require admin approval" description="New restaurants go live only after you approve them — they appear as pending until approved">
+                  <Toggle enabled={local.requireApproval ?? false} onToggle={() => set("requireApproval", !local.requireApproval)} />
                 </SettingRow>
-                <SettingRow label="Allow branch restaurants" description="Existing owners can open branches in other cities">
-                  <Toggle enabled={allowBranches} onToggle={() => setAllowBranches(!allowBranches)} />
+                <SettingRow label="Allow branch restaurants" description="Existing owners can open additional branches in other cities">
+                  <Toggle enabled={local.allowBranches ?? true} onToggle={() => set("allowBranches", !local.allowBranches)} />
                 </SettingRow>
-                <SettingRow label="Max menu items per restaurant" description="Hard limit on menu items a restaurant can list">
-                  <input type="number" min={10} max={1000} value={maxMenuItems} onChange={(e) => setMaxMenuItems(+e.target.value)}
-                    className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none" />
+                <SettingRow label="Max menu items per restaurant" description="Hard cap — new items are rejected once this limit is reached">
+                  <NumInput value={local.maxMenuItems ?? 200} onChange={(v) => set("maxMenuItems", v)} min={10} max={2000} />
                 </SettingRow>
               </div>
             )}
@@ -175,18 +220,26 @@ export function AdminSettingsPage() {
             {active === "security" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Security</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Authentication and session policies.</p>
-                <SettingRow label="Require email verification" description="New accounts must verify email before ordering">
-                  <Toggle enabled={requireEmailVerify} onToggle={() => setRequireEmailVerify(!requireEmailVerify)} />
-                </SettingRow>
-                <SettingRow label="Access token lifetime (min)" description="How long a session token stays valid">
-                  <input type="number" min={5} max={120} value={sessionTimeout} onChange={(e) => setSessionTimeout(+e.target.value)}
-                    className="w-24 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm text-right focus:border-[#FF5200] focus:outline-none" />
+                <p className="text-xs text-[#9CA3AF] mb-5">Authentication and session policies. Blocked/suspended users cannot log in.</p>
+                <SettingRow label="Require email verification" description="New accounts must verify email before they can place orders (coming soon)">
+                  <Toggle enabled={local.requireEmailVerify ?? false} onToggle={() => set("requireEmailVerify", !local.requireEmailVerify)} disabled />
                 </SettingRow>
                 <SettingRow label="Signed in as">
                   <div className="text-right">
                     <p className="text-sm font-semibold text-[#111827]">{user?.name ?? "—"}</p>
                     <p className="text-xs text-[#6B7280]">{user?.email}</p>
+                  </div>
+                </SettingRow>
+                <SettingRow label="Blocked users" description="Users with isBlocked=true cannot log in and see a block message">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-xs font-semibold text-green-700">Enforced on login</span>
+                  </div>
+                </SettingRow>
+                <SettingRow label="Suspended users" description="Users with isSuspended=true cannot log in and see a suspension message">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-xs font-semibold text-green-700">Enforced on login</span>
                   </div>
                 </SettingRow>
               </div>
@@ -195,15 +248,21 @@ export function AdminSettingsPage() {
             {active === "notifications" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Notifications</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Alert preferences for the operations team.</p>
-                <SettingRow label="Email digest" description="Daily summary of platform metrics to admin email">
-                  <Toggle enabled={emailAlerts} onToggle={() => setEmailAlerts(!emailAlerts)} />
+                <p className="text-xs text-[#9CA3AF] mb-5">In-app notifications are live. Email digest requires an email service integration (not configured).</p>
+                <SettingRow label="Auto-confirm orders" description="Automatically confirm orders 2 minutes after placement (requires background job)">
+                  <Toggle enabled={local.autoConfirmOrders ?? false} onToggle={() => set("autoConfirmOrders", !local.autoConfirmOrders)} disabled />
                 </SettingRow>
-                <SettingRow label="Unconfirmed order alerts" description="Alert when orders are unconfirmed for >15 min">
-                  <Toggle enabled={orderAlerts} onToggle={() => setOrderAlerts(!orderAlerts)} />
+                <SettingRow label="In-app order notifications" description="Real-time socket notifications to customers when order status changes">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-xs font-semibold text-green-700">Always on</span>
+                  </div>
                 </SettingRow>
-                <SettingRow label="No-agent alerts" description="Alert when an order has no assigned delivery agent">
-                  <Toggle enabled={agentAlerts} onToggle={() => setAgentAlerts(!agentAlerts)} />
+                <SettingRow label="In-app rider notifications" description="Riders receive socket notifications when orders are assigned">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    <span className="text-xs font-semibold text-green-700">Always on</span>
+                  </div>
                 </SettingRow>
               </div>
             )}
@@ -211,13 +270,13 @@ export function AdminSettingsPage() {
             {active === "access" && (
               <div>
                 <h2 className="text-base font-bold text-[#111827] mb-1">Access Control</h2>
-                <p className="text-xs text-[#9CA3AF] mb-5">Role and permission management. Use the Users page to manage individual accounts.</p>
-                <div className="rounded-xl border border-[#E5E7EB] divide-y divide-[#F3F4F6]">
+                <p className="text-xs text-[#9CA3AF] mb-5">Role definitions. Manage individual accounts from the Users page.</p>
+                <div className="rounded-xl border border-[#E5E7EB] divide-y divide-[#F3F4F6] mb-5">
                   {[
-                    { role: "ADMIN", desc: "Full platform access — orders, users, settings, DB", color: "bg-[#0C0C0E] text-white" },
-                    { role: "RESTAURANT", desc: "Restaurant dashboard — menu, orders for their outlet", color: "bg-teal-100 text-teal-700" },
-                    { role: "DELIVERY", desc: "Rider dashboard — accept and complete deliveries", color: "bg-blue-100 text-blue-700" },
-                    { role: "CUSTOMER", desc: "Consumer app — browse, cart, order, review", color: "bg-[#F3F4F6] text-[#374151]" },
+                    { role: "ADMIN",      desc: "Full platform access — users, settings, restaurants, orders, DB", color: "bg-[#0C0C0E] text-white" },
+                    { role: "RESTAURANT", desc: "Restaurant dashboard — menu management, order processing", color: "bg-teal-100 text-teal-700" },
+                    { role: "DELIVERY",   desc: "Rider dashboard — accept orders, update delivery status", color: "bg-blue-100 text-blue-700" },
+                    { role: "CUSTOMER",   desc: "Consumer app — browse restaurants, cart, order, review", color: "bg-[#F3F4F6] text-[#374151]" },
                   ].map(({ role, desc, color }) => (
                     <div key={role} className="flex items-center gap-3 p-4">
                       <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold shrink-0", color)}>{role}</span>
@@ -225,16 +284,40 @@ export function AdminSettingsPage() {
                     </div>
                   ))}
                 </div>
+                <div className="rounded-xl bg-[#F9FAFB] p-4 space-y-2">
+                  <p className="text-xs font-bold text-[#374151]">Enforcement summary</p>
+                  {[
+                    "Maintenance mode → 503 on all non-admin API calls",
+                    "isBlocked / isSuspended → login rejected immediately",
+                    "newRestaurantReg=off → register-restaurant returns 403",
+                    "riderRegistrations=off → register-rider returns 403",
+                    "requireApproval=on → new restaurants not visible until approved",
+                    "allowBranches=off → branch creation returns 403",
+                    "maxMenuItems → new menu items rejected once limit reached",
+                    "maxDeliveryRadius → restaurant creation blocked above limit",
+                  ].map((line) => (
+                    <div key={line} className="flex items-start gap-2">
+                      <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                      <span className="text-xs text-[#6B7280]">{line}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex items-center justify-between">
+              {dirty && !saving && (
+                <p className="text-xs text-amber-600 font-semibold">Unsaved changes</p>
+              )}
+              {saving && <p className="text-xs text-[#9CA3AF]">Saving…</p>}
+              {!dirty && !saving && <span />}
               <button
                 type="button"
-                onClick={saveSection}
-                className="rounded-xl bg-[#FF5200] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#E84800] transition"
+                onClick={save}
+                disabled={saving || !dirty}
+                className="rounded-xl bg-[#FF5200] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#E84800] transition disabled:opacity-40"
               >
-                Save changes
+                {saving ? "Saving…" : "Save changes"}
               </button>
             </div>
           </div>

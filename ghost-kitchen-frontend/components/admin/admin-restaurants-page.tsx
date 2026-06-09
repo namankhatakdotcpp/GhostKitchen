@@ -10,20 +10,21 @@ import { RestaurantDetailDrawer } from "@/components/admin/restaurant-detail-dra
 import { DataTable } from "@/components/ui/data-table";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { RestaurantManagementRow } from "@/types";
 
-const statuses = ["All", "Active", "Suspended"] as const;
+const statuses = ["All", "Active", "Pending Approval", "Suspended"] as const;
 
-async function fetchRestaurants(): Promise<RestaurantManagementRow[]> {
+async function fetchRestaurants() {
   const { data } = await api.get("/admin/restaurants", { params: { limit: 100 } });
-  return (data.restaurants ?? []).map((r: any): RestaurantManagementRow => ({
+  return (data.restaurants ?? []).map((r: any) => ({
     id: r.id,
     name: r.name,
     owner: r.owner?.name ?? r.owner?.email ?? "—",
     cuisine: Array.isArray(r.cuisines) ? r.cuisines.slice(0, 2).join(", ") : "—",
     rating: r.rating ?? 0,
     orders: r._count?.orders ?? 0,
-    status: r.suspended ? "Suspended" : r.isOpen ? "Active" : "Pending",
+    suspended: r.suspended ?? false,
+    isApproved: r.isApproved ?? true,
+    status: r.suspended ? "Suspended" : !r.isApproved ? "Pending Approval" : r.isOpen ? "Active" : "Closed",
   }));
 }
 
@@ -39,7 +40,7 @@ export function AdminRestaurantsPage() {
   });
 
   const filtered = useMemo(() =>
-    data.filter((r) => {
+    data.filter((r: any) => {
       const q = query.toLowerCase();
       const matchQuery = !q || r.name.toLowerCase().includes(q) || r.owner.toLowerCase().includes(q);
       const matchStatus = status === "All" || r.status === status;
@@ -47,18 +48,29 @@ export function AdminRestaurantsPage() {
     }),
   [data, query, status]);
 
-  async function handleSuspend(id: string) {
-    if (!confirm("Suspend this restaurant? It will be closed and hidden.")) return;
+  async function handleSuspend(id: string, currentlySuspended: boolean) {
+    const action = currentlySuspended ? "Unsuspend" : "Suspend";
+    if (!confirm(`${action} this restaurant?`)) return;
     try {
       await api.patch(`/admin/restaurants/${id}/suspend`);
-      toast.success("Restaurant suspended");
+      toast.success(`Restaurant ${action.toLowerCase()}ed`);
       queryClient.invalidateQueries({ queryKey: ["admin-restaurants"] });
     } catch {
-      toast.error("Failed to suspend");
+      toast.error(`Failed to ${action.toLowerCase()}`);
     }
   }
 
-  const columns = useMemo<ColumnDef<RestaurantManagementRow>[]>(() => [
+  async function handleApprove(id: string, currentlyApproved: boolean) {
+    try {
+      await api.patch(`/admin/restaurants/${id}/approve`, { approve: !currentlyApproved });
+      toast.success(currentlyApproved ? "Restaurant unapproved" : "Restaurant approved — now live");
+      queryClient.invalidateQueries({ queryKey: ["admin-restaurants"] });
+    } catch {
+      toast.error("Failed to update approval");
+    }
+  }
+
+  const columns = useMemo<ColumnDef<Record<string, any>>[]>(() => [
     {
       accessorKey: "name",
       header: "Name",
@@ -82,9 +94,10 @@ export function AdminRestaurantsPage() {
       cell: ({ row }) => (
         <span className={cn(
           "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-          row.original.status === "Active"    ? "bg-success/10 text-success" :
-          row.original.status === "Suspended" ? "bg-danger/10 text-danger"  :
-                                                "bg-warning/10 text-warning"
+          row.original.status === "Active"           ? "bg-success/10 text-success" :
+          row.original.status === "Suspended"        ? "bg-danger/10 text-danger"  :
+          row.original.status === "Pending Approval" ? "bg-yellow-100 text-yellow-700" :
+                                                       "bg-[#F3F4F6] text-[#6B7280]"
         )}>
           {row.original.status}
         </span>
@@ -94,7 +107,7 @@ export function AdminRestaurantsPage() {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={() => setSelectedId(row.original.id)}
@@ -102,15 +115,36 @@ export function AdminRestaurantsPage() {
           >
             View
           </button>
-          {row.original.status !== "Suspended" && (
+          {!row.original.isApproved && (
             <button
               type="button"
-              onClick={() => handleSuspend(row.original.id)}
-              className="rounded-full border border-danger/30 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5 transition"
+              onClick={() => handleApprove(row.original.id, row.original.isApproved)}
+              className="rounded-full border border-green-300 bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100 transition"
             >
-              Suspend
+              Approve
             </button>
           )}
+          {row.original.isApproved && (
+            <button
+              type="button"
+              onClick={() => handleApprove(row.original.id, row.original.isApproved)}
+              className="rounded-full border border-[#E5E7EB] px-3 py-1.5 text-xs font-semibold text-[#6B7280] hover:bg-[#F9FAFB] transition"
+            >
+              Unapprove
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => handleSuspend(row.original.id, row.original.suspended)}
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              row.original.suspended
+                ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                : "border-danger/30 text-danger hover:bg-danger/5"
+            )}
+          >
+            {row.original.suspended ? "Unsuspend" : "Suspend"}
+          </button>
         </div>
       ),
     },

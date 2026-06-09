@@ -26,6 +26,8 @@ import {
 } from "./middlewares/rateLimiter.js";
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { redisHealthCheck } from "./config/redis.js";
+import { getSiteConfigCached } from "./modules/config/config.service.js";
+import { verifyAccessToken } from "./utils/jwt.js";
 
 const app = express();
 
@@ -189,7 +191,55 @@ app.post("/bootstrap-admin", async (req, res) => {
   }
 });
 
-// ── 12. API routes ────────────────────────────────────────────────────────────
+// ── 12. Public config endpoint ────────────────────────────────────────────────
+app.get("/api/config", async (_req, res, next) => {
+  try {
+    const cfg = await getSiteConfigCached();
+    res.json({
+      maintenanceMode:    cfg.maintenanceMode,
+      cashOnDelivery:     cfg.cashOnDelivery,
+      codMinOrder:        cfg.codMinOrder,
+      maxDeliveryRadius:  cfg.maxDeliveryRadius,
+      defaultDeliveryFee: cfg.defaultDeliveryFee,
+      newRestaurantReg:   cfg.newRestaurantReg,
+      riderRegistrations: cfg.riderRegistrations,
+      allowBranches:      cfg.allowBranches,
+      maxMenuItems:       cfg.maxMenuItems,
+      requireApproval:    cfg.requireApproval,
+    });
+  } catch (err) { next(err); }
+});
+
+// ── 13. Maintenance mode gate ─────────────────────────────────────────────────
+// Runs AFTER the public /api/config endpoint so the frontend can still read config.
+// Admins bypass the gate (checked by decoding their JWT without a DB lookup).
+app.use("/api", async (req, res, next) => {
+  // Skip admin routes — admins always get through
+  if (req.path.startsWith("/admin")) return next();
+  try {
+    const cfg = await getSiteConfigCached();
+    if (!cfg.maintenanceMode) return next();
+    // Peek at the token — if they are an ADMIN, let them through
+    let token = req.cookies?.access_token;
+    if (!token) {
+      const auth = req.headers.authorization;
+      if (auth?.startsWith("Bearer ")) token = auth.slice(7);
+    }
+    if (token) {
+      try {
+        const decoded = verifyAccessToken(token);
+        if ((decoded.roles ?? [decoded.role]).includes("ADMIN")) return next();
+      } catch { /* expired or invalid — fall through to 503 */ }
+    }
+    return res.status(503).json({
+      success: false,
+      message: "The platform is currently under maintenance. Please try again later.",
+      code: "MAINTENANCE_MODE",
+    });
+  } catch { next(); }
+});
+
+// ── 14. API routes ────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/restaurants", restaurantRoutes);
@@ -202,10 +252,10 @@ app.use("/api/role", roleRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
 
-// ── 13. 404 ───────────────────────────────────────────────────────────────────
+// ── 15. 404 ───────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
 
-// ── 14. Global error handler (last) ──────────────────────────────────────────
+// ── 16. Global error handler (last) ──────────────────────────────────────────
 app.use(globalErrorHandler);
 
 export default app;

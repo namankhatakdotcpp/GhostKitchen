@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { generateTokenPair, buildTokenPayload } from "../../utils/jwt.js";
 import AppError from "../../utils/AppError.js";
+import { getSiteConfigCached } from "../config/config.service.js";
 
 const USER_ROLE_SELECT = {
   id: true, name: true, email: true, phone: true,
@@ -33,6 +34,9 @@ export async function switchRole(userId, requestedRole) {
 }
 
 export async function registerRestaurant(userId, restaurantData) {
+  const cfg = await getSiteConfigCached();
+  if (!cfg.newRestaurantReg) throw new AppError("New restaurant registrations are currently disabled by admin", 403);
+
   const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_ROLE_SELECT });
   if (!user) throw new AppError("User not found", 404);
 
@@ -80,6 +84,11 @@ export async function registerRestaurant(userId, restaurantData) {
     throw new AppError("Restaurant name is required", 400);
   }
 
+  const requestedRadius = restaurantData.deliveryRadius || 5;
+  if (requestedRadius > cfg.maxDeliveryRadius) {
+    throw new AppError(`Delivery radius cannot exceed ${cfg.maxDeliveryRadius} km`, 400);
+  }
+
   const slug = restaurantData.name
     .toLowerCase().trim()
     .replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 50)
@@ -99,13 +108,15 @@ export async function registerRestaurant(userId, restaurantData) {
         address: {
           line1: restaurantData.addressLine || "",
           city: restaurantData.city || "",
-          deliveryFee: restaurantData.deliveryFee || 3000,
+          deliveryFee: restaurantData.deliveryFee || cfg.defaultDeliveryFee || 3000,
           deliveryTime: restaurantData.deliveryTime || 30,
           minOrder: restaurantData.minOrder || 9900,
         },
         lat: restaurantData.lat ?? null,
         lng: restaurantData.lng ?? null,
-        deliveryRadius: restaurantData.deliveryRadius || 5,
+        deliveryRadius: requestedRadius,
+        isApproved: !cfg.requireApproval,
+        isOpen: !cfg.requireApproval,
       },
     });
 
@@ -127,11 +138,19 @@ export async function registerRestaurant(userId, restaurantData) {
 }
 
 export async function addRestaurant(userId, restaurantData) {
+  const cfg = await getSiteConfigCached();
+  if (!cfg.allowBranches) throw new AppError("Opening branch restaurants is currently disabled by admin", 403);
+
   const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_ROLE_SELECT });
   if (!user) throw new AppError("User not found", 404);
 
   if (!user.roles.includes("RESTAURANT")) {
     throw new AppError("You are not a restaurant owner", 403);
+  }
+
+  const requestedRadius2 = restaurantData.deliveryRadius || 5;
+  if (requestedRadius2 > cfg.maxDeliveryRadius) {
+    throw new AppError(`Delivery radius cannot exceed ${cfg.maxDeliveryRadius} km`, 400);
   }
 
   const ownerRestaurants2 = await prisma.restaurant.findMany({
@@ -162,13 +181,15 @@ export async function addRestaurant(userId, restaurantData) {
       address: {
         line1: restaurantData.addressLine || "",
         city: restaurantData.city || "",
-        deliveryFee: restaurantData.deliveryFee || 3000,
+        deliveryFee: restaurantData.deliveryFee || cfg.defaultDeliveryFee || 3000,
         deliveryTime: restaurantData.deliveryTime || 30,
         minOrder: restaurantData.minOrder || 9900,
       },
       lat: restaurantData.lat ?? null,
       lng: restaurantData.lng ?? null,
-      deliveryRadius: restaurantData.deliveryRadius || 5,
+      deliveryRadius: requestedRadius2,
+      isApproved: !cfg.requireApproval,
+      isOpen: !cfg.requireApproval,
     },
   });
 
@@ -176,6 +197,9 @@ export async function addRestaurant(userId, restaurantData) {
 }
 
 export async function registerRider(userId, riderData) {
+  const cfg = await getSiteConfigCached();
+  if (!cfg.riderRegistrations) throw new AppError("New rider registrations are currently disabled by admin", 403);
+
   const user = await prisma.user.findUnique({ where: { id: userId }, select: USER_ROLE_SELECT });
   if (!user) throw new AppError("User not found", 404);
 

@@ -67,13 +67,16 @@ export const registerUser = async (data) => {
 export const loginUser = async (email, password) => {
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { ...USER_SELECT, password: true },
+    select: { ...USER_SELECT, password: true, isBlocked: true, isSuspended: true },
   });
 
   if (!user) throw new AppError("Invalid email or password", 401);
 
   const isPasswordValid = await comparePassword(password, user.password);
   if (!isPasswordValid) throw new AppError("Invalid email or password", 401);
+
+  if (user.isBlocked) throw new AppError("Your account has been blocked. Contact support.", 403);
+  if (user.isSuspended) throw new AppError("Your account is currently suspended. Contact support.", 403);
 
   const { password: _, ...userWithoutPassword } = user;
 

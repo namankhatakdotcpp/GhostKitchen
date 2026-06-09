@@ -1,5 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { redis } from "../../lib/redis.js";
+import AppError from "../../utils/AppError.js";
+import { getSiteConfigCached } from "../config/config.service.js";
 
 export const getRestaurants = async (
   search,
@@ -11,6 +13,8 @@ export const getRestaurants = async (
 ) => {
   try {
     const where = {
+      isApproved: true,
+      suspended: false,
       ...(search && {
         OR: [
           { name: { contains: search, mode: "insensitive" } },
@@ -296,6 +300,11 @@ export const toggleRestaurantStatus = async (id) => {
 };
 
 export const addMenuItem = async (restaurantId, data) => {
+  const cfg = await getSiteConfigCached();
+  const count = await prisma.menuItem.count({ where: { restaurantId } });
+  if (count >= cfg.maxMenuItems) {
+    throw new AppError(`Menu item limit of ${cfg.maxMenuItems} reached for this restaurant`, 400);
+  }
   return prisma.menuItem.create({
     data: {
       restaurantId,

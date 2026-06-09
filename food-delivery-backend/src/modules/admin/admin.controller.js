@@ -6,6 +6,7 @@
  */
 
 import * as adminService from "./admin.service.js";
+import { getSiteConfig, updateSiteConfig } from "../config/config.service.js";
 import { auditLog } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
 
@@ -362,6 +363,31 @@ export const deleteUser = async (req, res, next) => {
     await adminService.deleteUserById(req.params.id);
     try { await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_USER", entityType: "User", entityId: req.params.id, req }); } catch { /* non-fatal */ }
     res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+export const getSettings = async (req, res, next) => {
+  try {
+    const config = await getSiteConfig();
+    res.json({ success: true, settings: config });
+  } catch (error) { next(error); }
+};
+
+export const updateSettings = async (req, res, next) => {
+  try {
+    const config = await updateSiteConfig(req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_SETTINGS", entityType: "SiteConfig", entityId: "singleton", meta: req.body, req }); } catch { /* non-fatal */ }
+    res.json({ success: true, settings: config });
+  } catch (error) { next(error); }
+};
+
+export const approveRestaurant = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { approve = true } = req.body;
+    const restaurant = await adminService.setRestaurantApproval(id, approve);
+    try { await auditLog({ userId: req.user.userId, action: approve ? "ADMIN_APPROVE_RESTAURANT" : "ADMIN_UNAPPROVE_RESTAURANT", entityType: "Restaurant", entityId: id, req }); } catch { /* non-fatal */ }
+    res.json({ success: true, restaurant });
   } catch (error) { next(error); }
 };
 

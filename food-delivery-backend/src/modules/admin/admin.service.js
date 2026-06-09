@@ -252,9 +252,18 @@ export const updateUserRole = async (id, { roles, activeRole }) => {
 };
 
 export const suspendRestaurant = async (id) => {
+  const r = await prisma.restaurant.findUnique({ where: { id }, select: { suspended: true } });
+  if (!r) throw new AppError("Restaurant not found", 404);
   return prisma.restaurant.update({
     where: { id },
-    data: { isOpen: false, suspended: true },
+    data: { isOpen: r.suspended ? true : false, suspended: !r.suspended },
+  });
+};
+
+export const setRestaurantApproval = async (id, approve) => {
+  return prisma.restaurant.update({
+    where: { id },
+    data: { isApproved: !!approve },
   });
 };
 

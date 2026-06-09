@@ -40,6 +40,9 @@ import {
   getReviews,
   deleteReview,
   getAuditLogEntries,
+  getSettings,
+  updateSettings,
+  approveRestaurant,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -122,5 +125,8 @@ router.delete("/menu-items/:id", deleteMenuItem);
 router.get("/reviews", getReviews);
 router.delete("/reviews/:id", deleteReview);
 router.get("/audit-log", getAuditLogEntries);
+router.get("/settings", getSettings);
+router.patch("/settings", updateSettings);
+router.patch("/restaurants/:id/approve", approveRestaurant);
 
 export default router;

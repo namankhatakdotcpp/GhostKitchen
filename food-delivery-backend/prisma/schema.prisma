@@ -116,6 +116,7 @@ model Restaurant {
   lng            Float?
   isOpen         Boolean    @default(true)
   suspended      Boolean    @default(false)
+  isApproved     Boolean    @default(true)
   deliveryRadius Float      @default(5)
   owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   menuItems      MenuItem[]
@@ -264,4 +265,21 @@ model AuditLog {
   @@index([userId])
   @@index([action])
   @@index([createdAt])
+}
+
+model SiteConfig {
+  id                 String   @id @default("singleton")
+  maintenanceMode    Boolean  @default(false)
+  newRestaurantReg   Boolean  @default(true)
+  riderRegistrations Boolean  @default(true)
+  cashOnDelivery     Boolean  @default(true)
+  codMinOrder        Int      @default(0)
+  maxDeliveryRadius  Int      @default(20)
+  defaultDeliveryFee Int      @default(3000)
+  requireApproval    Boolean  @default(false)
+  allowBranches      Boolean  @default(true)
+  maxMenuItems       Int      @default(200)
+  requireEmailVerify Boolean  @default(false)
+  autoConfirmOrders  Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
 }
