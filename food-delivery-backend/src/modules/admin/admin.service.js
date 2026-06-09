@@ -147,7 +147,7 @@ export const getUsers = async ({ page = 1, limit = 20, role, search } = {}) => {
       skip: (page - 1) * limit,
       take: Number(limit),
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, createdAt: true },
+      select: { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, isBlocked: true, isSuspended: true, createdAt: true },
     }),
     prisma.user.count({ where }),
   ])
@@ -407,7 +407,7 @@ export const getAuditLog = async ({ page = 1, limit = 50, userId, action } = {})
 
 // ─── User management (admin) ──────────────────────────────────────────────────
 
-const USER_SELECT = { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, isBlocked: true };
+const USER_SELECT = { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, isBlocked: true, isSuspended: true };
 
 export const updateUser = async (id, data) => {
   const update = {};
@@ -438,4 +438,31 @@ export const changeUserRole = async (id, { role }) => {
     data: { roles, activeRole: role },
     select: USER_SELECT,
   });
+};
+
+export const grantRole = async (id, { role }) => {
+  const validRoles = ["CUSTOMER", "RESTAURANT", "DELIVERY", "ADMIN"];
+  if (!validRoles.includes(role)) throw new AppError("Invalid role", 400);
+  const user = await prisma.user.findUnique({ where: { id }, select: { roles: true } });
+  if (!user) throw new AppError("User not found", 404);
+  const roles = Array.from(new Set([...user.roles, role]));
+  return prisma.user.update({ where: { id }, data: { roles }, select: USER_SELECT });
+};
+
+export const revokeRole = async (id, { role }) => {
+  if (role === "CUSTOMER") throw new AppError("Cannot revoke CUSTOMER role", 400);
+  const user = await prisma.user.findUnique({ where: { id }, select: { roles: true, activeRole: true } });
+  if (!user) throw new AppError("User not found", 404);
+  const roles = user.roles.filter((r) => r !== role);
+  const activeRole = roles.includes(user.activeRole) ? user.activeRole : (roles[0] ?? "CUSTOMER");
+  return prisma.user.update({ where: { id }, data: { roles, activeRole }, select: USER_SELECT });
+};
+
+export const deleteUserById = async (id) => {
+  await prisma.user.delete({ where: { id } });
+};
+
+export const suspendUser = async (id, { suspend }) => {
+  const isSuspended = suspend === true || suspend === "true";
+  return prisma.user.update({ where: { id }, data: { isSuspended }, select: USER_SELECT });
 };

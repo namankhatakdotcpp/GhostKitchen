@@ -330,9 +330,48 @@ export const changeUserRole = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Cannot change your own role via admin" });
     }
     const user = await adminService.changeUserRole(req.params.id, req.body);
-    try {
-      await auditLog({ userId: req.user.userId, action: "ADMIN_CHANGE_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req });
-    } catch { /* non-fatal */ }
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_CHANGE_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const grantRole = async (req, res, next) => {
+  try {
+    const user = await adminService.grantRole(req.params.id, req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_GRANT_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const revokeRole = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot revoke your own roles via admin" });
+    }
+    const user = await adminService.revokeRole(req.params.id, req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_REVOKE_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const deleteUser = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot delete your own account via admin" });
+    }
+    await adminService.deleteUserById(req.params.id);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_USER", entityType: "User", entityId: req.params.id, req }); } catch { /* non-fatal */ }
+    res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+export const suspendUser = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot suspend your own account" });
+    }
+    const user = await adminService.suspendUser(req.params.id, req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_SUSPEND_USER", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
     res.json({ success: true, user });
   } catch (error) { next(error); }
 };

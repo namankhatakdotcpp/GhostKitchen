@@ -28,6 +28,10 @@ import {
   updateUser,
   blockUser,
   changeUserRole,
+  grantRole,
+  revokeRole,
+  deleteUser,
+  suspendUser,
   suspendRestaurant,
   getMenuItems,
   createMenuItem,
@@ -102,7 +106,11 @@ router.put("/coupons/:id", updateAdminCoupon);
 router.delete("/coupons/:id", deleteAdminCoupon);
 router.patch("/users/:id/role", updateUserRole);
 router.patch("/users/:id/block", blockUser);
+router.patch("/users/:id/suspend", suspendUser);
 router.patch("/users/:id/change-role", changeUserRole);
+router.post("/users/:id/grant-role", grantRole);
+router.post("/users/:id/revoke-role", revokeRole);
+router.delete("/users/:id", deleteUser);
 router.patch("/users/:id", updateUser);
 router.get("/restaurants/:id", getRestaurantDetail);
 router.patch("/restaurants/:id/suspend", suspendRestaurant);

@@ -54,6 +54,7 @@ model User {
   isOnDuty        Boolean   @default(false)
 
   isBlocked       Boolean   @default(false)
+  isSuspended     Boolean   @default(false)
 
   // Legacy location tracking (for delivery agents)
   isAvailable     Boolean   @default(false)
