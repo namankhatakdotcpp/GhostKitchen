@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
+import { RestaurantDetailDrawer } from "@/components/admin/restaurant-detail-drawer";
 import { DataTable } from "@/components/ui/data-table";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function AdminRestaurantsPage() {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<(typeof statuses)[number]>("All");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ["admin-restaurants"],
@@ -93,6 +95,13 @@ export function AdminRestaurantsPage() {
       header: "Actions",
       cell: ({ row }) => (
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedId(row.original.id)}
+            className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[#FAFAFA] transition"
+          >
+            View
+          </button>
           {row.original.status !== "Suspended" && (
             <button
               type="button"
@@ -151,6 +160,13 @@ export function AdminRestaurantsPage() {
         </div>
       ) : (
         <DataTable columns={columns} data={filtered} emptyLabel="No restaurants match the current filters." />
+      )}
+
+      {selectedId && (
+        <RestaurantDetailDrawer
+          restaurantId={selectedId}
+          onClose={() => setSelectedId(null)}
+        />
       )}
     </div>
   );

@@ -17,13 +17,23 @@ import {
   assignDeliveryPartner,
   getUsers,
   getRestaurants,
+  getRestaurantDetail,
+  updateRestaurant,
   getAdminPayments,
   getAdminCoupons,
   createAdminCoupon,
   updateAdminCoupon,
   deleteAdminCoupon,
   updateUserRole,
+  updateUser,
   suspendRestaurant,
+  getMenuItems,
+  createMenuItem,
+  updateMenuItem,
+  deleteMenuItem,
+  getReviews,
+  deleteReview,
+  getAuditLogEntries,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -89,6 +99,16 @@ router.post("/coupons", createAdminCoupon);
 router.put("/coupons/:id", updateAdminCoupon);
 router.delete("/coupons/:id", deleteAdminCoupon);
 router.patch("/users/:id/role", updateUserRole);
+router.patch("/users/:id", updateUser);
+router.get("/restaurants/:id", getRestaurantDetail);
 router.patch("/restaurants/:id/suspend", suspendRestaurant);
+router.patch("/restaurants/:id", updateRestaurant);
+router.get("/menu-items", getMenuItems);
+router.post("/menu-items", createMenuItem);
+router.patch("/menu-items/:id", updateMenuItem);
+router.delete("/menu-items/:id", deleteMenuItem);
+router.get("/reviews", getReviews);
+router.delete("/reviews/:id", deleteReview);
+router.get("/audit-log", getAuditLogEntries);
 
 export default router;

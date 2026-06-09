@@ -273,3 +273,149 @@ export const assignDeliveryPartner = async (orderId, agentId) => {
   logger.info("Admin assigned delivery partner", { orderId, agentId });
   return updatedOrder;
 };
+
+// ─── Restaurant Detail ────────────────────────────────────────────────────────
+
+export const getRestaurantDetail = async (id) => {
+  const restaurant = await prisma.restaurant.findFirst({
+    where: { OR: [{ id }, { slug: id }] },
+    include: {
+      owner: { select: { id: true, name: true, email: true, phone: true } },
+      menuItems: { orderBy: { sortOrder: "asc" } },
+      orders: {
+        take: 50,
+        orderBy: { createdAt: "desc" },
+        include: {
+          customer: { select: { id: true, name: true, email: true } },
+          agent: { select: { id: true, name: true, phone: true } },
+        },
+      },
+      _count: { select: { orders: true, menuItems: true } },
+    },
+  });
+  if (!restaurant) throw new AppError("Restaurant not found", 404);
+  return restaurant;
+};
+
+export const updateRestaurant = async (id, data) => {
+  const update = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.description !== undefined) update.description = data.description;
+  if (data.isOpen !== undefined) update.isOpen = data.isOpen;
+  if (data.cuisines !== undefined) update.cuisines = data.cuisines;
+  if (data.suspended !== undefined) update.suspended = data.suspended;
+  return prisma.restaurant.update({ where: { id }, data: update });
+};
+
+// ─── Menu Items ───────────────────────────────────────────────────────────────
+
+export const getMenuItems = async ({ restaurantId, page = 1, limit = 50 } = {}) => {
+  const where = {};
+  if (restaurantId) where.restaurantId = restaurantId;
+  const [items, total] = await prisma.$transaction([
+    prisma.menuItem.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+      include: { restaurant: { select: { name: true } } },
+    }),
+    prisma.menuItem.count({ where }),
+  ]);
+  return { items, total, page: Number(page), limit: Number(limit) };
+};
+
+export const createMenuItem = async (data) => {
+  return prisma.menuItem.create({
+    data: {
+      restaurantId: data.restaurantId,
+      name: data.name,
+      description: data.description,
+      price: parseFloat(data.price),
+      category: data.category,
+      imageUrl: data.imageUrl || "",
+      isVeg: data.isVeg ?? false,
+      isAvailable: data.isAvailable ?? true,
+      isBestseller: data.isBestseller ?? false,
+      sortOrder: Number(data.sortOrder) || 0,
+    },
+  });
+};
+
+export const updateMenuItem = async (id, data) => {
+  const update = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.description !== undefined) update.description = data.description;
+  if (data.price !== undefined) update.price = parseFloat(data.price);
+  if (data.category !== undefined) update.category = data.category;
+  if (data.imageUrl !== undefined) update.imageUrl = data.imageUrl;
+  if (data.isVeg !== undefined) update.isVeg = data.isVeg;
+  if (data.isAvailable !== undefined) update.isAvailable = data.isAvailable;
+  if (data.isBestseller !== undefined) update.isBestseller = data.isBestseller;
+  if (data.sortOrder !== undefined) update.sortOrder = Number(data.sortOrder);
+  return prisma.menuItem.update({ where: { id }, data: update });
+};
+
+export const deleteMenuItem = async (id) => {
+  await prisma.menuItem.delete({ where: { id } });
+};
+
+// ─── Reviews ─────────────────────────────────────────────────────────────────
+
+export const getReviews = async ({ page = 1, limit = 20 } = {}) => {
+  const [reviews, total] = await prisma.$transaction([
+    prisma.review.findMany({
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+      include: {
+        order: {
+          select: {
+            restaurantId: true,
+            customer: { select: { name: true, email: true } },
+            restaurant: { select: { name: true } },
+          },
+        },
+      },
+    }),
+    prisma.review.count(),
+  ]);
+  return { reviews, total, page: Number(page), limit: Number(limit) };
+};
+
+export const deleteReview = async (id) => {
+  await prisma.review.delete({ where: { id } });
+};
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+export const getAuditLog = async ({ page = 1, limit = 50, userId, action } = {}) => {
+  const where = {};
+  if (userId) where.userId = userId;
+  if (action) where.action = { contains: action, mode: "insensitive" };
+  const [entries, total] = await prisma.$transaction([
+    prisma.auditLog.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
+  return { entries, total, page: Number(page), limit: Number(limit) };
+};
+
+// ─── User update (admin) ──────────────────────────────────────────────────────
+
+export const updateUser = async (id, data) => {
+  const update = {};
+  if (data.name !== undefined) update.name = data.name;
+  if (data.phone !== undefined) update.phone = data.phone;
+  if (data.roles !== undefined) update.roles = data.roles;
+  if (data.activeRole !== undefined) update.activeRole = data.activeRole;
+  return prisma.user.update({
+    where: { id },
+    data: update,
+    select: { id: true, name: true, email: true, phone: true, roles: true, activeRole: true },
+  });
+};

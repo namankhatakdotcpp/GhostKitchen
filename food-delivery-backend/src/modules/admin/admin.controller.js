@@ -6,6 +6,7 @@
  */
 
 import * as adminService from "./admin.service.js";
+import { auditLog } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -215,4 +216,93 @@ export const assignDeliveryPartner = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+// ─── Restaurant Detail & Update ───────────────────────────────────────────────
+
+export const getRestaurantDetail = async (req, res, next) => {
+  try {
+    const restaurant = await adminService.getRestaurantDetail(req.params.id);
+    res.json({ success: true, data: restaurant });
+  } catch (error) { next(error); }
+};
+
+export const updateRestaurant = async (req, res, next) => {
+  try {
+    const restaurant = await adminService.updateRestaurant(req.params.id, req.body);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_RESTAURANT", entityType: "Restaurant", entityId: req.params.id, meta: req.body, req });
+    res.json({ success: true, data: restaurant });
+  } catch (error) { next(error); }
+};
+
+// ─── Menu Items ───────────────────────────────────────────────────────────────
+
+export const getMenuItems = async (req, res, next) => {
+  try {
+    const result = await adminService.getMenuItems(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+export const createMenuItem = async (req, res, next) => {
+  try {
+    const item = await adminService.createMenuItem(req.body);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_CREATE_MENU_ITEM", entityType: "MenuItem", entityId: item.id, meta: { restaurantId: item.restaurantId, name: item.name }, req });
+    res.status(201).json({ success: true, data: item });
+  } catch (error) { next(error); }
+};
+
+export const updateMenuItem = async (req, res, next) => {
+  try {
+    const item = await adminService.updateMenuItem(req.params.id, req.body);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_MENU_ITEM", entityType: "MenuItem", entityId: req.params.id, meta: req.body, req });
+    res.json({ success: true, data: item });
+  } catch (error) { next(error); }
+};
+
+export const deleteMenuItem = async (req, res, next) => {
+  try {
+    await adminService.deleteMenuItem(req.params.id);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_MENU_ITEM", entityType: "MenuItem", entityId: req.params.id, req });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+// ─── Reviews ─────────────────────────────────────────────────────────────────
+
+export const getReviews = async (req, res, next) => {
+  try {
+    const result = await adminService.getReviews(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+export const deleteReview = async (req, res, next) => {
+  try {
+    await adminService.deleteReview(req.params.id);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_REVIEW", entityType: "Review", entityId: req.params.id, req });
+    res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+export const getAuditLogEntries = async (req, res, next) => {
+  try {
+    const result = await adminService.getAuditLog(req.query);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+// ─── User update ─────────────────────────────────────────────────────────────
+
+export const updateUser = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot modify your own account via admin" });
+    }
+    const user = await adminService.updateUser(req.params.id, req.body);
+    await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_USER", entityType: "User", entityId: req.params.id, meta: req.body, req });
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
 };

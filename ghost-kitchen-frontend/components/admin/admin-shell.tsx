@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bike,
+  Database,
   LayoutDashboard,
   LogOut,
   Settings,
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/admin/payments", label: "Payments", icon: Wallet },
   { href: "/admin/coupons", label: "Coupons", icon: Tag },
   { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/admin/database", label: "Database", icon: Database },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
