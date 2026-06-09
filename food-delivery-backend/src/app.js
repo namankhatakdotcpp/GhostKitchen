@@ -148,6 +148,47 @@ app.get("/seed", async (req, res, next) => {
   }
 });
 
+// Bootstrap admin — one-time endpoint to grant ADMIN to a user.
+// Requires BOOTSTRAP_SECRET env var to be set on Render.
+// Remove BOOTSTRAP_SECRET from Render env vars after use.
+app.post("/bootstrap-admin", async (req, res) => {
+  const secret = process.env.BOOTSTRAP_SECRET;
+  if (!secret) {
+    return res.status(403).json({ success: false, message: "Bootstrap not enabled. Set BOOTSTRAP_SECRET env var on Render first." });
+  }
+  const { email, secret: provided } = req.body;
+  if (!provided || provided !== secret) {
+    return res.status(403).json({ success: false, message: "Invalid secret." });
+  }
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email is required." });
+  }
+  try {
+    const user = await prisma.user.findFirst({
+      where: { email: { equals: email.trim(), mode: "insensitive" } },
+    });
+    if (!user) {
+      const all = await prisma.user.findMany({ select: { email: true, name: true } });
+      return res.status(404).json({
+        success: false,
+        message: `User not found: ${email}. Register at the frontend first.`,
+        registeredUsers: all.map((u) => u.email),
+      });
+    }
+    const roles = user.roles.includes("ADMIN") ? user.roles : [...user.roles, "ADMIN"];
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { roles, activeRole: "ADMIN" },
+      select: { id: true, name: true, email: true, roles: true, activeRole: true },
+    });
+    logger.warn("Bootstrap admin used", { email: updated.email, id: updated.id });
+    return res.json({ success: true, message: "Admin role granted. Remove BOOTSTRAP_SECRET from Render env vars now.", user: updated });
+  } catch (err) {
+    logger.error("Bootstrap admin failed", { error: err.message });
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── 12. API routes ────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/cart", cartRoutes);
