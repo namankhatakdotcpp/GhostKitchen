@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { DataTable } from "@/components/ui/data-table";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 import type { AdminAlert, AdminMetric, AdminOrderRow } from "@/types";
 
 const metricIconMap = { ShoppingBag, Wallet, Store, Bike } as const;
@@ -60,21 +61,31 @@ async function fetchDashboard() {
 function MetricCard({ metric }: { metric: AdminMetric }) {
   const Icon = metricIconMap[metric.icon as keyof typeof metricIconMap] ?? TrendingUp;
   return (
-    <div className="rounded-[18px] border border-border bg-white p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-light text-brand">
+    <div className="group rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm transition hover:shadow-md hover:-translate-y-0.5">
+      <div className="flex items-center justify-between">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF3EE] text-[#FF5200]">
           <Icon className="h-5 w-5" />
         </div>
+        <TrendingUp className="h-4 w-4 text-[#D1D5DB] group-hover:text-[#FF5200] transition" />
       </div>
-      <p className="mt-4 text-sm text-text-muted">{metric.label}</p>
-      <p className="mt-2 text-2xl font-bold text-text-primary">{metric.value}</p>
+      <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#9CA3AF]">{metric.label}</p>
+      <p className="mt-1.5 text-3xl font-bold tracking-tight text-[#111827]">{metric.value}</p>
     </div>
   );
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 export function AdminDashboardPage() {
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderRow | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
+  const authUser = useAuthStore((s) => s.user);
+  const firstName = authUser?.name?.split(" ")[0] ?? "Admin";
 
   const query = useQuery({
     queryKey: ["admin-dashboard"],
@@ -140,10 +151,18 @@ export function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">Operations</p>
-        <h1 className="mt-2 text-3xl font-bold text-text-primary">Admin dashboard</h1>
-        <p className="mt-2 text-sm text-text-secondary">Monitor orders, restaurant health, and delivery flow in one place.</p>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#9CA3AF]">{getGreeting()}</p>
+          <h1 className="mt-1 text-3xl font-bold text-[#111827]">{firstName}</h1>
+          <p className="mt-1.5 text-sm text-[#6B7280]">
+            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </p>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#6B7280] shadow-sm">
+          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="font-medium text-[#111827]">All systems operational</span>
+        </div>
       </div>
 
       <section className="grid gap-4 lg:grid-cols-4">

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bike,
+  ChevronRight,
   Database,
   LayoutDashboard,
   LogOut,
@@ -18,85 +19,128 @@ import {
 } from "lucide-react";
 
 import RoleSwitcher from "@/components/ui/role-switcher";
+import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/restaurants", label: "Restaurants", icon: Store },
-  { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/delivery-agents", label: "Delivery Agents", icon: Bike },
-  { href: "/admin/payments", label: "Payments", icon: Wallet },
-  { href: "/admin/coupons", label: "Coupons", icon: Tag },
-  { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/admin/database", label: "Database", icon: Database },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+const navGroups = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/admin/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
+      { href: "/admin/analytics",      label: "Analytics",       icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/admin/restaurants",    label: "Restaurants",     icon: Store },
+      { href: "/admin/orders",         label: "Orders",          icon: ShoppingBag },
+      { href: "/admin/delivery-agents",label: "Delivery Agents", icon: Bike },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { href: "/admin/payments",       label: "Payments",        icon: Wallet },
+      { href: "/admin/coupons",        label: "Coupons",         icon: Tag },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/admin/users",          label: "Users",           icon: Users },
+      { href: "/admin/database",       label: "Database",        icon: Database },
+      { href: "/admin/settings",       label: "Settings",        icon: Settings },
+    ],
+  },
 ];
 
-type AdminShellProps = {
-  children: ReactNode;
-};
+function getInitials(name?: string | null) {
+  if (!name) return "AD";
+  return name.trim().split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+}
 
-export function AdminShell({ children }: AdminShellProps) {
+export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const authUser = useAuthStore((s) => s.user);
+
+  const userName = authUser?.name ?? "Administrator";
+  const userEmail = authUser?.email ?? "";
+  const initials = getInitials(authUser?.name);
 
   return (
-    <div className="min-h-screen bg-surface">
-      <aside className="fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-border bg-white">
-        <div className="border-b border-border px-5 py-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Link className="text-2xl font-extrabold tracking-[-0.04em]" href="/admin/dashboard">
-                <span className="text-text-primary">ghost</span>
-                <span className="text-brand">kitchen</span>
-              </Link>
-              <span className="rounded-pill bg-danger px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
-                Admin
-              </span>
+    <div className="min-h-screen bg-[#F4F5F7]">
+
+      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+      <aside className="fixed inset-y-0 left-0 z-30 flex w-[240px] flex-col bg-[#0C0C0E]">
+
+        {/* Logo */}
+        <div className="px-6 pt-7 pb-6">
+          <Link href="/admin/dashboard" className="block">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[22px] font-extrabold tracking-tight text-white">ghost</span>
+              <span className="text-[22px] font-extrabold tracking-tight text-[#FF5200]">kitchen</span>
             </div>
-            <RoleSwitcher />
-          </div>
+            <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/25">
+              Command Center
+            </p>
+          </Link>
         </div>
 
-        <nav className="flex-1 space-y-1 px-3 py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-
-            return (
-              <Link
-                className={cn(
-                  "flex items-center gap-3 rounded-r-xl border-l-2 px-4 py-3 text-sm font-medium transition",
-                  isActive
-                    ? "border-brand bg-brand-light text-brand"
-                    : "border-transparent text-text-secondary hover:bg-[#FAFAFA] hover:text-text-primary",
-                )}
-                href={item.href}
-                key={item.href}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-6">
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/25">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
+                        isActive
+                          ? "bg-[#FF5200]/15 text-[#FF5200]"
+                          : "text-white/50 hover:bg-white/5 hover:text-white/85",
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-[#FF5200]" : "text-white/35 group-hover:text-white/70")} />
+                      <span className="flex-1">{item.label}</span>
+                      {isActive && <ChevronRight className="h-3 w-3 opacity-60" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
-        <div className="border-t border-border px-4 py-4">
-          <div className="flex items-center gap-3 rounded-2xl bg-[#FAFAFA] p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-sm font-bold text-brand">
-              AK
+        {/* User profile */}
+        <div className="border-t border-white/[0.06] px-3 py-4">
+          {/* Role switcher row */}
+          <div className="mb-3 flex items-center justify-between px-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/25">Active role</span>
+            <RoleSwitcher />
+          </div>
+
+          {/* Identity card */}
+          <div className="flex items-center gap-3 rounded-xl bg-white/[0.05] px-3 py-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FF5200] to-[#FF8C00] text-xs font-bold text-white shadow-lg shadow-[#FF5200]/20">
+              {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="line-clamp-1 text-sm font-semibold text-text-primary">
-                Aditi Khanna
-              </p>
-              <p className="line-clamp-1 text-xs text-text-secondary">
-                Operations Admin
-              </p>
+              <p className="truncate text-sm font-semibold text-white/90">{userName}</p>
+              <p className="truncate text-[11px] text-white/35">{userEmail || "Administrator"}</p>
             </div>
             <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border text-text-secondary transition hover:border-brand/30 hover:text-brand"
               type="button"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-white/70"
+              title="Sign out"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -104,8 +148,26 @@ export function AdminShell({ children }: AdminShellProps) {
         </div>
       </aside>
 
-      <div className="pl-60">
-        <main className="min-h-screen p-6">{children}</main>
+      {/* ── Main ─────────────────────────────────────────────────────────────── */}
+      <div className="pl-[240px]">
+        {/* Top bar */}
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-[#E5E7EB] bg-white/80 px-8 backdrop-blur-md">
+          <div className="flex items-center gap-2 text-sm text-[#6B7280]">
+            <span className="font-semibold text-[#111827]">
+              {navGroups.flatMap((g) => g.items).find((i) => pathname === i.href || pathname.startsWith(i.href + "/"))?.label ?? "Admin"}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="rounded-full bg-[#0C0C0E] px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#FF5200]">
+              Admin
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-[#FF5200] to-[#FF8C00] text-[11px] font-bold text-white shadow shadow-[#FF5200]/30">
+              {initials}
+            </div>
+          </div>
+        </header>
+
+        <main className="min-h-[calc(100vh-3.5rem)] p-7">{children}</main>
       </div>
     </div>
   );
