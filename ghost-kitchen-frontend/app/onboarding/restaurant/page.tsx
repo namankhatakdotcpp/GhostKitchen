@@ -279,8 +279,8 @@ export default function RestaurantOnboarding() {
                   <FieldError msg={errors.branch} />
                   {selectedBranch && (
                     <div className="rounded-xl bg-[#F5F5F5] p-3 text-xs text-[#686B78]">
-                      The new branch will use <strong>{selectedBranch.name}</strong>'s name and branding.
-                      You'll only set a new city and delivery details in the next step.
+                      The new branch will use <strong>{selectedBranch.name}</strong>&apos;s name and branding.
+                      You&apos;ll only set a new city and delivery details in the next step.
                     </div>
                   )}
                 </div>
