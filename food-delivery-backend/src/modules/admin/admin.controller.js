@@ -302,7 +302,37 @@ export const updateUser = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Cannot modify your own account via admin" });
     }
     const user = await adminService.updateUser(req.params.id, req.body);
-    await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_USER", entityType: "User", entityId: req.params.id, meta: req.body, req });
+    try {
+      await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_USER", entityType: "User", entityId: req.params.id, meta: req.body, req });
+    } catch (auditErr) {
+      logger.warn("Admin updateUser audit log failed (non-fatal)", { error: auditErr.message });
+    }
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const blockUser = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot block your own account" });
+    }
+    const user = await adminService.blockUser(req.params.id, req.body);
+    try {
+      await auditLog({ userId: req.user.userId, action: "ADMIN_BLOCK_USER", entityType: "User", entityId: req.params.id, meta: req.body, req });
+    } catch { /* non-fatal */ }
+    res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const changeUserRole = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user.userId) {
+      return res.status(400).json({ success: false, message: "Cannot change your own role via admin" });
+    }
+    const user = await adminService.changeUserRole(req.params.id, req.body);
+    try {
+      await auditLog({ userId: req.user.userId, action: "ADMIN_CHANGE_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req });
+    } catch { /* non-fatal */ }
     res.json({ success: true, user });
   } catch (error) { next(error); }
 };

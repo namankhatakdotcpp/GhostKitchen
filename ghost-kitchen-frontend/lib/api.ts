@@ -39,7 +39,7 @@ api.interceptors.request.use((config) => {
 // ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<{ code?: string; message?: string }>) => {
+  async (error: AxiosError<{ code?: string; message?: string; error?: string }>) => {
     const originalConfig = error.config as typeof error.config & { _retry?: boolean };
 
     if (
@@ -98,6 +98,7 @@ api.interceptors.response.use(
     const payload: ApiErrorPayload = {
       error:
         error.response?.data?.message ??
+        error.response?.data?.error ??
         error.message ??
         "Something went wrong.",
       code: error.response?.status ?? 500,

@@ -405,17 +405,37 @@ export const getAuditLog = async ({ page = 1, limit = 50, userId, action } = {})
   return { entries, total, page: Number(page), limit: Number(limit) };
 };
 
-// ─── User update (admin) ──────────────────────────────────────────────────────
+// ─── User management (admin) ──────────────────────────────────────────────────
+
+const USER_SELECT = { id: true, name: true, email: true, phone: true, roles: true, activeRole: true, isBlocked: true };
 
 export const updateUser = async (id, data) => {
   const update = {};
-  if (data.name !== undefined) update.name = data.name;
-  if (data.phone !== undefined) update.phone = data.phone;
-  if (data.roles !== undefined) update.roles = data.roles;
-  if (data.activeRole !== undefined) update.activeRole = data.activeRole;
+  if (data.name !== undefined) update.name = String(data.name).trim();
+  if (data.phone !== undefined) update.phone = data.phone || null;
+  return prisma.user.update({ where: { id }, data: update, select: USER_SELECT });
+};
+
+export const blockUser = async (id, { block }) => {
+  const isBlocked = block === true || block === "true";
   return prisma.user.update({
     where: { id },
-    data: update,
-    select: { id: true, name: true, email: true, phone: true, roles: true, activeRole: true },
+    data: { isBlocked },
+    select: USER_SELECT,
+  });
+};
+
+export const changeUserRole = async (id, { role }) => {
+  const validRoles = ["CUSTOMER", "RESTAURANT", "DELIVERY", "ADMIN"];
+  if (!validRoles.includes(role)) throw new AppError("Invalid role", 400);
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { roles: true } });
+  if (!user) throw new AppError("User not found", 404);
+
+  const roles = Array.from(new Set([...user.roles, role]));
+  return prisma.user.update({
+    where: { id },
+    data: { roles, activeRole: role },
+    select: USER_SELECT,
   });
 };

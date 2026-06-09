@@ -53,6 +53,8 @@ model User {
   vehicleNumber   String?
   isOnDuty        Boolean   @default(false)
 
+  isBlocked       Boolean   @default(false)
+
   // Legacy location tracking (for delivery agents)
   isAvailable     Boolean   @default(false)
   currentLat      Float?

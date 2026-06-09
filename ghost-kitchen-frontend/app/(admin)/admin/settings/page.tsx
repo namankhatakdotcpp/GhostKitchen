@@ -1,11 +1,5 @@
-import { PagePlaceholder } from "@/components/ui/page-placeholder";
+import { AdminSettingsPage } from "@/components/admin/admin-settings-page";
 
-export default function AdminSettingsPage() {
-  return (
-    <PagePlaceholder
-      description="Role policies, default SLAs, and operations preferences belong here."
-      eyebrow="Admin"
-      title="Settings"
-    />
-  );
+export default function SettingsPage() {
+  return <AdminSettingsPage />;
 }

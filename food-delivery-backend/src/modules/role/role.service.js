@@ -113,7 +113,7 @@ export async function registerRestaurant(userId, restaurantData) {
       where: { id: userId },
       data: {
         secondRole: "RESTAURANT",
-        roles: { set: ["CUSTOMER", "RESTAURANT"] },
+        roles: Array.from(new Set([...(user.roles || []), "CUSTOMER", "RESTAURANT"])),
         restaurantId: restaurant.id,
       },
       select: USER_ROLE_SELECT,
