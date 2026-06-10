@@ -5,6 +5,7 @@ import {
   createRestaurant,
   updateRestaurant,
   toggleRestaurantStatus,
+  setRestaurantStatusAndNote,
   addMenuItem,
   updateMenuItem,
   toggleMenuItemAvailability,
@@ -224,6 +225,24 @@ export const toggleStatus = async (req, res) => {
     return res.status(200).json({ message: "Restaurant status updated", restaurant: updated });
   } catch (error) {
     console.error("Error toggling restaurant status:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const setRestaurantStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOpen, statusNote } = req.body;
+
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    }
+
+    const updated = await setRestaurantStatusAndNote(id, isOpen, statusNote ?? null);
+    return res.json({ success: true, restaurant: updated });
+  } catch (error) {
+    console.error("Error setting restaurant status:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };

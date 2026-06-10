@@ -171,6 +171,17 @@ export function AdminSettingsPage() {
                 <SettingRow label="Maintenance mode" description="Takes the platform offline for all non-admin users — they see a maintenance page">
                   <Toggle enabled={local.maintenanceMode ?? false} onToggle={() => set("maintenanceMode", !local.maintenanceMode)} />
                 </SettingRow>
+                {(local.maintenanceMode) && (
+                  <SettingRow label="Maintenance reason" description="Shown to users on the maintenance page">
+                    <input
+                      type="text"
+                      value={local.maintenanceReason ?? ""}
+                      onChange={(e) => set("maintenanceReason", e.target.value || null)}
+                      placeholder="e.g. Scheduled upgrade — back in 2 hours"
+                      className="w-72 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none"
+                    />
+                  </SettingRow>
+                )}
                 <SettingRow label="New restaurant registrations" description="Allow new restaurant owners to register on the platform">
                   <Toggle enabled={local.newRestaurantReg ?? true} onToggle={() => set("newRestaurantReg", !local.newRestaurantReg)} />
                 </SettingRow>

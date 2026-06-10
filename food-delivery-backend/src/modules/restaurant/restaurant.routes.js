@@ -8,6 +8,7 @@ import {
   createNewRestaurant,
   updateExistingRestaurant,
   toggleStatus,
+  setRestaurantStatus,
   addNewMenuItem,
   updateExistingMenuItem,
   toggleMenuItemStatus,
@@ -29,6 +30,7 @@ router.get("/:id/menu", getMenu);
 router.post("/", authenticate, authorize(["RESTAURANT"]), createNewRestaurant);
 router.put("/:id", authenticate, authorize(["RESTAURANT", "ADMIN"]), updateExistingRestaurant);
 router.patch("/:id/status", authenticate, authorize(["RESTAURANT", "ADMIN"]), toggleStatus);
+router.patch("/:id/set-status", authenticate, authorize(["RESTAURANT", "ADMIN"]), setRestaurantStatus);
 
 // Analytics (owner or admin)
 router.get("/:id/analytics", authenticate, authorize(["RESTAURANT", "ADMIN"]), getRestaurantAnalytics);

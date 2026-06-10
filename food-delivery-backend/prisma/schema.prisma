@@ -115,6 +115,7 @@ model Restaurant {
   lat            Float?
   lng            Float?
   isOpen         Boolean    @default(true)
+  statusNote     String?
   suspended      Boolean    @default(false)
   isApproved     Boolean    @default(true)
   deliveryRadius Float      @default(5)
@@ -281,5 +282,6 @@ model SiteConfig {
   maxMenuItems       Int      @default(200)
   requireEmailVerify Boolean  @default(false)
   autoConfirmOrders  Boolean  @default(false)
+  maintenanceReason  String?
   updatedAt          DateTime @updatedAt
 }

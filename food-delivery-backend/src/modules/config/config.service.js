@@ -28,7 +28,8 @@ export function invalidateConfigCache() {
 
 export async function updateSiteConfig(data) {
   const allowed = [
-    "maintenanceMode", "newRestaurantReg", "riderRegistrations",
+    "maintenanceMode", "maintenanceReason",
+    "newRestaurantReg", "riderRegistrations",
     "cashOnDelivery", "codMinOrder", "maxDeliveryRadius", "defaultDeliveryFee",
     "requireApproval", "allowBranches", "maxMenuItems", "requireEmailVerify",
     "autoConfirmOrders",

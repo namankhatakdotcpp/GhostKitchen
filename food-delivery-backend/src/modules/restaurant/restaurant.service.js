@@ -134,6 +134,7 @@ export const getRestaurantWithCache = async (param) => {
     ownerId: restaurant.ownerId,
     address: restaurant.address,
     isOpen: restaurant.isOpen,
+    statusNote: restaurant.statusNote ?? null,
     deliveryRadius: restaurant.deliveryRadius,
   };
 
@@ -362,6 +363,19 @@ export const getMenuItemByIdAndRestaurant = async (itemId, restaurantId) => {
       restaurantId,
     },
   });
+};
+
+export const setRestaurantStatusAndNote = async (id, isOpen, statusNote) => {
+  const current = await prisma.restaurant.findUnique({ where: { id }, select: { slug: true } });
+  const updated = await prisma.restaurant.update({
+    where: { id },
+    data: {
+      isOpen: Boolean(isOpen),
+      statusNote: statusNote || null,
+    },
+  });
+  await invalidateRestaurantCache(id, current?.slug);
+  return updated;
 };
 
 export const getRestaurantByIdAndOwner = async (restaurantId, ownerId) => {

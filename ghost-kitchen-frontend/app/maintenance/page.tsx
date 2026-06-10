@@ -16,6 +16,8 @@ export default function MaintenancePage() {
     if (user?.roles?.includes("ADMIN")) router.replace("/admin/dashboard");
   }, [config, loaded, user, router]);
 
+  const reason = config.maintenanceReason;
+
   return (
     <div className="min-h-screen bg-[#0C0C0E] flex flex-col items-center justify-center text-center px-6">
       <div className="mb-8">
@@ -24,16 +26,21 @@ export default function MaintenancePage() {
         </div>
         <h1 className="text-4xl font-black text-white mb-3">Under Maintenance</h1>
         <p className="text-[#9CA3AF] text-lg max-w-sm">
-          GhostKitchen is currently undergoing scheduled maintenance. We&apos;ll be back shortly.
+          {reason || "GhostKitchen is currently undergoing scheduled maintenance. We’ll be back shortly."}
         </p>
       </div>
 
-      <div className="rounded-2xl border border-[#1F1F23] bg-[#111115] px-8 py-6 text-left max-w-sm w-full">
-        <div className="flex items-center gap-3 mb-1">
+      <div className="rounded-2xl border border-[#1F1F23] bg-[#111115] px-8 py-6 text-left max-w-sm w-full space-y-3">
+        <div className="flex items-center gap-3">
           <span className="h-2 w-2 rounded-full bg-yellow-400 animate-pulse" />
           <span className="text-sm font-semibold text-white">Maintenance in progress</span>
         </div>
         <p className="text-xs text-[#6B7280] ml-5">Platform services are temporarily unavailable</p>
+        {reason && (
+          <div className="ml-5 rounded-xl border border-[#2A2A2E] bg-[#18181B] px-4 py-3">
+            <p className="text-xs font-semibold text-[#D1D5DB]">{reason}</p>
+          </div>
+        )}
       </div>
 
       <p className="mt-8 text-xs text-[#4B5563]">GhostKitchen &copy; {new Date().getFullYear()}</p>

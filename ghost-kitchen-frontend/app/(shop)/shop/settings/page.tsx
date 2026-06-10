@@ -14,6 +14,7 @@ interface RestaurantSettings {
   cuisines: string[];
   imageUrl: string;
   isOpen: boolean;
+  statusNote: string | null;
   deliveryRadius: number;
   address: {
     line1?: string;
@@ -23,6 +24,13 @@ interface RestaurantSettings {
     minOrder?: number;
   };
 }
+
+const STATUS_OPTIONS = [
+  { label: "Open", isOpen: true, note: null, color: "border-green-400 bg-green-50 text-green-800" },
+  { label: "Busy — longer wait times", isOpen: true, note: "Busy right now — expect longer wait times", color: "border-yellow-400 bg-yellow-50 text-yellow-800" },
+  { label: "Temporarily Closed", isOpen: false, note: "Temporarily closed — will reopen shortly", color: "border-orange-400 bg-orange-50 text-orange-800" },
+  { label: "Closed for today", isOpen: false, note: null, color: "border-red-400 bg-red-50 text-red-700" },
+] as const;
 
 const CUISINES = [
   "Biryani","Pizza","Burger","Chinese","South Indian","North Indian",
@@ -51,6 +59,7 @@ export default function ShopSettingsPage() {
     api.get("/restaurants/mine")
       .then(r => {
         const rest = r.data?.data ?? r.data;
+        rest.statusNote = rest.statusNote ?? null;
         setRestaurant(rest);
         setName(rest.name ?? "");
         setDescription(rest.description ?? "");
@@ -91,12 +100,12 @@ export default function ShopSettingsPage() {
     }
   }
 
-  async function handleToggleOpen() {
+  async function handleSetStatus(isOpen: boolean, note: string | null) {
     if (!restaurant) return;
     try {
-      await api.patch(`/restaurants/${restaurant.id}/status`);
-      setRestaurant({ ...restaurant, isOpen: !restaurant.isOpen });
-      toast.success(restaurant.isOpen ? "Restaurant closed" : "Restaurant opened");
+      await api.patch(`/restaurants/${restaurant.id}/set-status`, { isOpen, statusNote: note });
+      setRestaurant({ ...restaurant, isOpen, statusNote: note });
+      toast.success(isOpen ? "Restaurant is now open" : "Restaurant closed");
     } catch {
       toast.error("Failed to update status");
     }
@@ -207,29 +216,46 @@ export default function ShopSettingsPage() {
         {saving ? "Saving…" : "Save changes"}
       </button>
 
+      {/* Status */}
+      <section className="rounded-2xl border border-[#E8E8E8] bg-white p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-[#1C1C1C]">Restaurant status</h2>
+          <p className="text-xs text-[#686B78] mt-1">
+            Current:&nbsp;
+            <span className={`font-semibold ${restaurant.isOpen ? "text-green-700" : "text-red-600"}`}>
+              {restaurant.isOpen ? "Open" : "Closed"}
+            </span>
+            {restaurant.statusNote && <span className="text-[#686B78]"> — {restaurant.statusNote}</span>}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {STATUS_OPTIONS.map((opt) => {
+            const isActive = restaurant.isOpen === opt.isOpen && restaurant.statusNote === opt.note;
+            return (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => handleSetStatus(opt.isOpen, opt.note)}
+                className={`rounded-xl border-2 px-4 py-3 text-sm font-semibold text-left transition ${isActive ? opt.color + " border-current" : "border-[#E8E8E8] bg-white text-[#1C1C1C] hover:border-[#FF5200]/40"}`}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       {/* Danger zone */}
       <section className="rounded-2xl border border-red-200 bg-red-50 p-6 space-y-4">
         <h2 className="text-base font-bold text-red-700">Danger zone</h2>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-[#1C1C1C]">
-              {restaurant.isOpen ? "Restaurant is open" : "Restaurant is closed"}
-            </p>
-            <p className="text-xs text-[#686B78]">Temporarily hide from customers</p>
-          </div>
-          <button onClick={handleToggleOpen}
-            className={`rounded-xl px-4 py-2 text-sm font-bold transition ${restaurant.isOpen ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200" : "bg-green-100 text-green-800 hover:bg-green-200"}`}>
-            {restaurant.isOpen ? "Close restaurant" : "Open restaurant"}
-          </button>
-        </div>
-        <div className="border-t border-red-200 pt-4">
+        <div>
           <p className="text-sm font-semibold text-red-700">Delete restaurant</p>
           <p className="text-xs text-red-600 mt-1">Type &quot;{restaurant.name}&quot; to confirm</p>
           <input value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
             className="mt-2 w-full rounded-xl border border-red-300 px-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
             placeholder={restaurant.name} />
           <button disabled={deleteInput !== restaurant.name}
-            className="mt-2 w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-400 transition">
+            className="mt-3 w-full rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white disabled:bg-gray-200 disabled:text-gray-400 transition">
             Permanently delete restaurant
           </button>
         </div>

@@ -295,7 +295,7 @@ export function ShopMenuPage() {
   async function handleToggleOpen() {
     if (!restaurantId) return;
     try {
-      await api.patch(`/restaurants/${restaurantId}/status`);
+      await api.patch(`/restaurants/${restaurantId}/set-status`, { isOpen: !isOpen, statusNote: null });
       queryClient.invalidateQueries({ queryKey: ["my-restaurant"] });
       toast.success(isOpen ? "Restaurant closed" : "Restaurant opened");
     } catch { toast.error("Failed to update status"); }

@@ -234,6 +234,20 @@ export function RestaurantMenuPage({
             {restaurant?.cuisines?.join(' • ') || "Cuisines not available"}
           </p>
 
+          {!restaurant?.isOpen && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+              <p className="text-[12px] font-semibold text-red-700">
+                {restaurant?.statusNote || "Currently closed — not accepting orders"}
+              </p>
+            </div>
+          )}
+          {restaurant?.isOpen && restaurant?.statusNote && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-yellow-500" />
+              <p className="text-[12px] font-semibold text-yellow-700">{restaurant.statusNote}</p>
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-text-secondary">
             <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
               <StarIcon />
