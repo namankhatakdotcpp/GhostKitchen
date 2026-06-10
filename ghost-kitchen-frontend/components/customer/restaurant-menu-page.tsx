@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/store/cartStore";
+import { useAuthStore } from "@/store/authStore";
+import toast from "react-hot-toast";
 
 type RestaurantMenuPageProps = {
   restaurantId: string;
@@ -64,8 +66,11 @@ export function RestaurantMenuPage({
 }: RestaurantMenuPageProps) {
   const router = useRouter();
   const [vegOnly, setVegOnly] = useState(false);
+  const { user } = useAuthStore();
   const { items, getRestaurantId, updateQuantity, clearCart } = useCartStore();
   const cartRestaurantId = getRestaurantId();
+  const [favorited, setFavorited] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const [activeCategory, setActiveCategory] = useState<string>("");
 
@@ -81,6 +86,28 @@ export function RestaurantMenuPage({
   });
 
   const isLoading = restaurantLoading || menuLoading;
+
+  // Fetch favorite status once restaurant data is loaded
+  useEffect(() => {
+    if (!user || !restaurantId) return;
+    api.get(`/user/favorites/${restaurantId}`)
+      .then((r) => setFavorited(r.data.favorited ?? false))
+      .catch(() => {});
+  }, [user, restaurantId]);
+
+  const handleFavoriteToggle = async () => {
+    if (!user) { toast.error("Sign in to save favorites"); return; }
+    setFavLoading(true);
+    try {
+      const res = await api.post(`/user/favorites/${restaurantId}`);
+      setFavorited(res.data.favorited);
+      toast.success(res.data.favorited ? "Added to favorites" : "Removed from favorites");
+    } catch {
+      toast.error("Could not update favorites");
+    } finally {
+      setFavLoading(false);
+    }
+  };
 
   // Transform menu data from { "Category": [ items ] } to array format
   const menu = useMemo(() => {
@@ -202,15 +229,37 @@ export function RestaurantMenuPage({
             </div>
           </div>
 
-          <Link
-            className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-brand/30 hover:bg-brand-light hover:text-brand"
-            href="/cart"
-          >
-            <CartIcon />
-            <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-              {totalQuantity}
-            </span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleFavoriteToggle}
+              disabled={favLoading}
+              aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-brand/30 hover:bg-brand-light disabled:opacity-60"
+            >
+              <svg
+                className="h-5 w-5"
+                fill={favorited ? "#FF5200" : "none"}
+                stroke={favorited ? "#FF5200" : "currentColor"}
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                />
+              </svg>
+            </button>
+            <Link
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-border text-text-primary transition hover:border-brand/30 hover:bg-brand-light hover:text-brand"
+              href="/cart"
+            >
+              <CartIcon />
+              <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
+                {totalQuantity}
+              </span>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -387,7 +436,7 @@ export function RestaurantMenuPage({
                             {item.menuItem.name}
                           </p>
                           <p className="mt-1 text-xs text-text-secondary">
-                            ₹{item.menuItem.price} each
+                            ₹{(item.menuItem.price / 100).toFixed(0)} each
                           </p>
                         </div>
                         <div className="flex items-center gap-2 rounded-pill border border-brand px-2 py-1">
@@ -421,17 +470,17 @@ export function RestaurantMenuPage({
                   <div className="space-y-2 text-sm text-text-secondary">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
-                      <span className="font-semibold text-text-primary">₹{subtotal}</span>
+                      <span className="font-semibold text-text-primary">₹{(subtotal / 100).toFixed(0)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Delivery fee</span>
                       <span className="font-semibold text-text-primary">
-                        ₹{deliveryFee}
+                        ₹{(deliveryFee / 100).toFixed(0)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between border-t border-border pt-3 text-base">
                       <span className="font-semibold text-text-primary">Total</span>
-                      <span className="font-bold text-text-primary">₹{total}</span>
+                      <span className="font-bold text-text-primary">₹{(total / 100).toFixed(0)}</span>
                     </div>
                   </div>
                   <Link href="/checkout">
@@ -464,11 +513,11 @@ export function RestaurantMenuPage({
                       {totalQuantity} items in cart
                     </p>
                     <p className="mt-1 text-xs text-text-secondary">
-                      Subtotal ₹{subtotal} + delivery ₹{deliveryFee}
+                      Subtotal ₹{(subtotal / 100).toFixed(0)} + delivery ₹{(deliveryFee / 100).toFixed(0)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-text-primary">₹{total}</p>
+                    <p className="text-lg font-bold text-text-primary">₹{(total / 100).toFixed(0)}</p>
                     <p className="text-xs text-text-secondary">Total</p>
                   </div>
                 </div>

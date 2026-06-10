@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
+import toast from "react-hot-toast";
 
 const FALLBACK = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80";
 
@@ -33,6 +36,7 @@ type RestaurantCardProps = {
   offer?: string;
   isNew?: boolean;
   index?: number;
+  isFavorited?: boolean;
 };
 
 export function RestaurantCard({
@@ -50,11 +54,29 @@ export function RestaurantCard({
   offer,
   isNew,
   index = 0,
+  isFavorited = false,
 }: RestaurantCardProps) {
-  // Use fallback immediately for untrusted/placeholder URLs — avoids Next.js optimization 404
+  const { user } = useAuthStore();
   const [imgSrc, setImgSrc] = useState(() =>
     imageUrl && isTrustedImage(imageUrl) ? imageUrl : FALLBACK
   );
+  const [favorited, setFavorited] = useState(isFavorited);
+  const [favLoading, setFavLoading] = useState(false);
+
+  const handleFavoriteToggle = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) { toast.error("Sign in to save favorites"); return; }
+    setFavLoading(true);
+    try {
+      const res = await api.post(`/user/favorites/${id}`);
+      setFavorited(res.data.favorited);
+    } catch {
+      toast.error("Could not update favorites");
+    } finally {
+      setFavLoading(false);
+    }
+  }, [id, user]);
 
   return (
     <motion.div
@@ -84,11 +106,33 @@ export function RestaurantCard({
             ) : (
               <span />
             )}
-            {offer ? (
-              <span className="rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold text-white">
-                {offer}
-              </span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {offer ? (
+                <span className="rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold text-white">
+                  {offer}
+                </span>
+              ) : null}
+              <button
+                onClick={handleFavoriteToggle}
+                disabled={favLoading}
+                aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 shadow-sm backdrop-blur-sm transition hover:scale-110 active:scale-95 disabled:opacity-60"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill={favorited ? "#FF5200" : "none"}
+                  stroke={favorited ? "#FF5200" : "#6b7280"}
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
           {/* Status overlay */}
           {!isOpen && (
@@ -140,11 +184,11 @@ export function RestaurantCard({
             <span>•</span>
             <span>{deliveryTime} mins</span>
             <span>•</span>
-            <span>{deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}</span>
+            <span>{deliveryFee === 0 ? "FREE" : `₹${Math.round(deliveryFee / 100)}`}</span>
           </div>
 
           <div className="mt-2 text-[12px] text-text-muted">
-            Min order ₹{minOrder}
+            Min order ₹{Math.round(minOrder / 100)}
           </div>
         </div>
       </Link>

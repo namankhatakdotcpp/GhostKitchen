@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { useCartStore } from "@/store/cartStore";
 
 const navItems = [
   {
@@ -47,19 +46,17 @@ const navItems = [
     ),
   },
   {
-    href: "/cart",
-    label: "Cart",
+    href: "/favorites",
+    label: "Saved",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <path
-          d="M4 5h2l1.6 8.2a1 1 0 0 0 1 .8h8.6a1 1 0 0 0 1-.76L20 7H7"
+          d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
           stroke="currentColor"
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth="1.8"
         />
-        <circle cx="10" cy="19" fill="currentColor" r="1.5" />
-        <circle cx="17" cy="19" fill="currentColor" r="1.5" />
       </svg>
     ),
   },
@@ -82,8 +79,6 @@ const navItems = [
 
 export function CustomerBottomNav() {
   const pathname = usePathname();
-  const { items } = useCartStore();
-  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
   if (!pathname || pathname.startsWith("/login") || pathname.startsWith("/register")) {
     return null;
@@ -98,7 +93,7 @@ export function CustomerBottomNav() {
           return (
             <Link
               className={cn(
-                "relative flex min-w-[68px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[11px] font-semibold transition",
+                "relative flex min-w-[60px] flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition",
                 isActive
                   ? "bg-brand-light text-brand"
                   : "text-text-secondary hover:text-text-primary",
@@ -108,11 +103,6 @@ export function CustomerBottomNav() {
             >
               {item.icon}
               <span>{item.label}</span>
-              {item.href === "/cart" && totalQuantity ? (
-                <span className="absolute right-2 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[9px] text-white">
-                  {totalQuantity}
-                </span>
-              ) : null}
             </Link>
           );
         })}

@@ -15,6 +15,9 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
+import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import type { FilterOption } from "@/types";
 
 function SearchIcon() {
@@ -56,6 +59,7 @@ function PinIcon() {
 
 export function CustomerHomePage() {
   const { location, setLocation, openLocationModal } = useUserStore();
+  const { user } = useAuthStore();
   const [category, setCategory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [bannerInput, setBannerInput] = useState("");
@@ -113,6 +117,32 @@ export function CustomerHomePage() {
   const restaurantPages = data?.pages ?? [];
   const restaurants = restaurantPages.flatMap((page) => page.restaurants ?? []);
   const restaurantCount = restaurantPages[0]?.total ?? 0;
+
+  // Personalized sections — only when logged in
+  const { data: favoritesData } = useQuery({
+    queryKey: ["home-favorites"],
+    queryFn: () => api.get("/user/favorites").then((r) => r.data.favorites ?? []),
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+  const { data: recentOrdersData } = useQuery({
+    queryKey: ["home-recent-orders"],
+    queryFn: () => api.get("/orders?limit=5").then((r) => {
+      const orders = r.data?.orders ?? r.data ?? [];
+      // Dedupe by restaurantId, keep most recent
+      const seen = new Set<string>();
+      return orders.filter((o: any) => {
+        if (seen.has(o.restaurantId)) return false;
+        seen.add(o.restaurantId);
+        return true;
+      }).slice(0, 4);
+    }),
+    enabled: !!user,
+    staleTime: 60_000,
+  });
+
+  const favoriteRestaurants = favoritesData ?? [];
+  const recentRestaurants = recentOrdersData ?? [];
 
   function toggleFilter(filter: FilterOption) {
     setActiveFilters((currentFilters) =>
@@ -295,6 +325,67 @@ export function CustomerHomePage() {
           ))}
         </div>
       </section>
+
+      {/* Buy Again */}
+      {user && recentRestaurants.length > 0 && (
+        <section className="mt-7">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-text-primary">Order Again</h2>
+            <Link href="/orders" className="text-sm font-semibold text-brand hover:underline">See all</Link>
+          </div>
+          <div className="scrollbar-none flex gap-3 overflow-x-auto pb-2">
+            {recentRestaurants.map((order: any) => (
+              <Link
+                key={order.id}
+                href={`/restaurant/${order.restaurantId}`}
+                className="flex shrink-0 items-center gap-3 rounded-[16px] border border-border bg-white px-4 py-3 shadow-sm hover:shadow-md transition hover:-translate-y-0.5 min-w-[200px] max-w-[240px]"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-brand font-bold text-sm shrink-0">
+                  {order.restaurant?.name?.charAt(0) ?? "R"}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-text-primary line-clamp-1">{order.restaurant?.name ?? "Restaurant"}</p>
+                  <p className="text-xs text-text-muted mt-0.5 line-clamp-1">
+                    {Array.isArray(order.items) && order.items.length > 0
+                      ? order.items.slice(0, 2).map((i: any) => i.name ?? i.menuItem?.name).filter(Boolean).join(", ")
+                      : "Previous order"}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Favorites */}
+      {user && favoriteRestaurants.length > 0 && (
+        <section className="mt-7">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-text-primary">Your Favorites</h2>
+            <Link href="/favorites" className="text-sm font-semibold text-brand hover:underline">See all</Link>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {favoriteRestaurants.slice(0, 4).map((r: any, i: number) => (
+              <RestaurantCard
+                key={r.id}
+                id={r.id}
+                name={r.name}
+                cuisines={r.cuisineType ?? r.cuisines ?? []}
+                rating={r.rating ?? 0}
+                deliveryTime={r.deliveryTime ?? 30}
+                deliveryFee={r.deliveryFee ?? r.address?.deliveryFee ?? 0}
+                minOrder={r.minOrder ?? r.address?.minOrder ?? 0}
+                imageUrl={r.imageUrl ?? r.image ?? ""}
+                isVeg={r.isVeg ?? false}
+                isOpen={r.isOpen ?? true}
+                statusNote={r.statusNote ?? null}
+                index={i}
+                isFavorited={true}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="mt-7">
         <div className="flex items-center justify-between gap-4">
