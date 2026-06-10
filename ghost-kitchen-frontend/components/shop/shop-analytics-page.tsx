@@ -19,16 +19,22 @@ import {
 } from "recharts";
 
 import { getShopAnalyticsData } from "@/lib/opsData";
+import { useAuthStore } from "@/store/authStore";
 
-const rangeOptions = ["Today", "Week", "Month", "Custom"] as const;
+const rangeOptions = ["Today", "Week", "Month"] as const;
 const pieColors = ["#FF5200", "#F4A000", "#1BA672", "#2E6BFF", "#7C4DFF"];
 
 export function ShopAnalyticsPage() {
   const [range, setRange] = useState<(typeof rangeOptions)[number]>("Week");
+  const restaurantId = useAuthStore((s) => s.user?.restaurantId);
 
   const analyticsQuery = useQuery({
-    queryKey: ["shop-analytics", range],
-    queryFn: getShopAnalyticsData,
+    queryKey: ["shop-analytics", restaurantId, range],
+    queryFn: () => {
+      if (!restaurantId) throw new Error("No restaurant");
+      return getShopAnalyticsData(restaurantId, range);
+    },
+    enabled: !!restaurantId,
   });
 
   const data = analyticsQuery.data;

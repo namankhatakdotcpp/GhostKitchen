@@ -150,31 +150,47 @@ export default function RestaurantOnboarding() {
 
       if (mode === "branch") {
         // Use the add-restaurant endpoint (no role change needed)
-        const res = await api.post("/role/add-restaurant", payload);
+        const res = await api.post("/role/add-restaurant", {
+          ...payload,
+          ...(s3.itemName && {
+            firstMenuItem: {
+              name: s3.itemName,
+              description: s3.itemDescription,
+              price: parseFloat(s3.itemPrice.toString()),
+              category: s3.itemCategory,
+              isVeg: s3.itemIsVeg,
+              imageUrl: s3.itemImageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
+              isBestseller: s3.itemIsBestseller,
+            },
+          }),
+        });
         restaurant = res.data.restaurant;
       } else {
-        const res = await api.post("/role/register-restaurant", payload);
+        // First menu item is embedded in the registration so no separate role-gated call is needed
+        const res = await api.post("/role/register-restaurant", {
+          ...payload,
+          ...(s3.itemName && {
+            firstMenuItem: {
+              name: s3.itemName,
+              description: s3.itemDescription,
+              price: parseFloat(s3.itemPrice.toString()),
+              category: s3.itemCategory,
+              isVeg: s3.itemIsVeg,
+              imageUrl: s3.itemImageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
+              isBestseller: s3.itemIsBestseller,
+            },
+          }),
+        });
         restaurant = res.data.restaurant;
         serverUser = res.data.user;
-        accessToken = res.data.accessToken;
+        accessToken = res.data.token ?? res.data.accessToken;
         if (accessToken) setTokens(accessToken);
       }
 
-      // Add first menu item
-      if (s3.itemName && restaurant?.id) {
-        await api.post(`/restaurants/${restaurant.id}/menu`, {
-          name: s3.itemName,
-          description: s3.itemDescription,
-          price: parseFloat(s3.itemPrice.toString()),
-          category: s3.itemCategory,
-          isVeg: s3.itemIsVeg,
-          imageUrl: s3.itemImageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
-          isBestseller: s3.itemIsBestseller,
-        });
-      }
-
       if (mode === "new") {
-        const updatedUser = serverUser ?? { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant?.id };
+        const updatedUser = serverUser
+          ? { ...serverUser, activeRole: "RESTAURANT" }
+          : { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant?.id };
         setUser(updatedUser as any);
         useAuthStore.setState({ user: updatedUser as any });
       }

@@ -372,3 +372,100 @@ export const getRestaurantByIdAndOwner = async (restaurantId, ownerId) => {
     },
   });
 };
+
+export const getRestaurantAnalyticsData = async (restaurantId, range) => {
+  const now = new Date();
+  let startDate = new Date(now);
+
+  if (range === "today") {
+    startDate.setHours(0, 0, 0, 0);
+  } else if (range === "month") {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else {
+    // week (default)
+    startDate.setDate(startDate.getDate() - 6);
+    startDate.setHours(0, 0, 0, 0);
+  }
+
+  const orders = await prisma.order.findMany({
+    where: {
+      restaurantId,
+      status: { not: "CANCELLED" },
+      createdAt: { gte: startDate },
+    },
+    select: {
+      id: true,
+      customerId: true,
+      total: true,
+      items: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const totalOrders = orders.length;
+  const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+  const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+
+  // Peak ordering hour
+  const hourCounts = {};
+  for (const o of orders) {
+    const h = new Date(o.createdAt).getHours();
+    hourCounts[h] = (hourCounts[h] || 0) + 1;
+  }
+  const peakEntry = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0];
+  let peakOrderingHour = "N/A";
+  if (peakEntry) {
+    const h = parseInt(peakEntry[0]);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    peakOrderingHour = `${h12}:00 ${ampm}`;
+  }
+
+  // Repeat customer rate
+  const customerCounts = {};
+  for (const o of orders) {
+    if (o.customerId) customerCounts[o.customerId] = (customerCounts[o.customerId] || 0) + 1;
+  }
+  const uniqueCustomers = Object.keys(customerCounts).length;
+  const repeats = Object.values(customerCounts).filter((c) => c > 1).length;
+  const repeatCustomerRate = uniqueCustomers > 0 ? `${Math.round((repeats / uniqueCustomers) * 100)}%` : "0%";
+
+  // Timeline grouped by day
+  const byDate = {};
+  for (const o of orders) {
+    const d = new Date(o.createdAt);
+    const label =
+      range === "month"
+        ? d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+        : d.toLocaleDateString("en-IN", { weekday: "short" });
+    if (!byDate[label]) byDate[label] = { orders: 0, revenue: 0 };
+    byDate[label].orders++;
+    byDate[label].revenue += o.total || 0;
+  }
+  const timeline = Object.entries(byDate).map(([label, v]) => ({
+    label,
+    orders: v.orders,
+    revenue: Math.round(v.revenue),
+  }));
+
+  // Top items by quantity sold (from JSON items array on each order)
+  const itemCounts = {};
+  for (const o of orders) {
+    const items = Array.isArray(o.items) ? o.items : [];
+    for (const item of items) {
+      const name = item.name || "Item";
+      if (!itemCounts[name]) itemCounts[name] = { name, value: 0 };
+      itemCounts[name].value += item.quantity || 1;
+    }
+  }
+  const topItems = Object.values(itemCounts)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
+
+  return {
+    keyMetrics: { avgOrderValue, peakOrderingHour, repeatCustomerRate },
+    timeline,
+    topItems,
+  };
+};

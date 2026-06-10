@@ -454,17 +454,20 @@ export async function getShopMenuData() {
   return shopMenuSeed;
 }
 
-export async function getShopAnalyticsData() {
-  await wait();
+export async function getShopAnalyticsData(restaurantId: string, range: string): Promise<ShopAnalyticsData> {
+  const { data } = await api.get(`/restaurants/${restaurantId}/analytics`, {
+    params: { range: range.toLowerCase() },
+  });
+  const result = data.data ?? data;
   return {
     keyMetrics: {
-      avgOrderValue: 612,
-      peakOrderingHour: "8:30 PM",
-      repeatCustomerRate: "38%",
+      avgOrderValue: result.keyMetrics?.avgOrderValue ?? 0,
+      peakOrderingHour: result.keyMetrics?.peakOrderingHour ?? "N/A",
+      repeatCustomerRate: result.keyMetrics?.repeatCustomerRate ?? "0%",
     },
-    timeline,
-    topItems,
-  } satisfies ShopAnalyticsData;
+    timeline: result.timeline ?? [],
+    topItems: result.topItems ?? [],
+  };
 }
 
 export async function getDeliveryAssignmentSeed() {

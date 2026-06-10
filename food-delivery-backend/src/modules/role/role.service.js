@@ -124,11 +124,30 @@ export async function registerRestaurant(userId, restaurantData) {
       where: { id: userId },
       data: {
         secondRole: "RESTAURANT",
+        activeRole: "RESTAURANT",
         roles: Array.from(new Set([...(user.roles || []), "CUSTOMER", "RESTAURANT"])),
         restaurantId: restaurant.id,
       },
       select: USER_ROLE_SELECT,
     });
+
+    // Embed first menu item so no separate API call is needed (avoids role-check 403)
+    const fi = restaurantData.firstMenuItem;
+    if (fi?.name?.trim() && Number(fi.price) > 0) {
+      await tx.menuItem.create({
+        data: {
+          restaurantId: restaurant.id,
+          name: fi.name.trim(),
+          description: fi.description || "",
+          price: parseFloat(fi.price),
+          category: fi.category || "Main Course",
+          imageUrl: fi.imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
+          isVeg: fi.isVeg ?? true,
+          isAvailable: true,
+          isBestseller: fi.isBestseller ?? false,
+        },
+      });
+    }
 
     return { restaurant, updated };
   });
@@ -192,6 +211,23 @@ export async function addRestaurant(userId, restaurantData) {
       isOpen: !cfg.requireApproval,
     },
   });
+
+  const fi2 = restaurantData.firstMenuItem;
+  if (fi2?.name?.trim() && Number(fi2.price) > 0) {
+    await prisma.menuItem.create({
+      data: {
+        restaurantId: restaurant.id,
+        name: fi2.name.trim(),
+        description: fi2.description || "",
+        price: parseFloat(fi2.price),
+        category: fi2.category || "Main Course",
+        imageUrl: fi2.imageUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
+        isVeg: fi2.isVeg ?? true,
+        isAvailable: true,
+        isBestseller: fi2.isBestseller ?? false,
+      },
+    });
+  }
 
   return restaurant;
 }

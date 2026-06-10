@@ -40,7 +40,7 @@ const ROLE_CONFIG: Record<AppRole, {
   },
 };
 
-export default function RoleSwitcher() {
+export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
   const router = useRouter();
   const { setUser, setActiveRole } = useUserStore();
   const authUser = useAuthStore((s) => s.user);
@@ -126,7 +126,7 @@ export default function RoleSwitcher() {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-xl">
+          <div className={`absolute right-0 ${openUp ? "bottom-full mb-2" : "top-full mt-2"} z-50 w-56 max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-xl`}>
             <div className="border-b border-[#F5F5F5] px-3 py-2">
               <p className="text-xs font-semibold text-[#93959F]">Switch view</p>
             </div>

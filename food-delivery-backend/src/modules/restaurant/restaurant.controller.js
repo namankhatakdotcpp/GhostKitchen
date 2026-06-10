@@ -12,6 +12,7 @@ import {
   getMenuItemByIdAndRestaurant,
   getRestaurantByIdAndOwner,
   getRestaurantWithCache,
+  getRestaurantAnalyticsData,
 } from "./restaurant.service.js";
 import { redis } from "../../lib/redis.js";
 import { prisma } from "../../config/prisma.js";
@@ -227,15 +228,33 @@ export const toggleStatus = async (req, res) => {
   }
 };
 
+export const getRestaurantAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { range = "week" } = req.query;
+
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    }
+
+    const data = await getRestaurantAnalyticsData(id, range);
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const addNewMenuItem = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, price, category, description, imageUrl, isVeg, isBestseller } = req.body;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    // ADMIN can manage any restaurant's menu
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
     }
 
     const validationError = validateMenuItem({ name, price, category, description, imageUrl, isVeg, isBestseller });
@@ -269,10 +288,9 @@ export const updateExistingMenuItem = async (req, res) => {
     const { id, itemId } = req.params;
     const updateData = req.body;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
     }
 
     const menuItem = await getMenuItemByIdAndRestaurant(itemId, id);
@@ -303,10 +321,9 @@ export const toggleMenuItemStatus = async (req, res) => {
   try {
     const { id, itemId } = req.params;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
     }
 
     const menuItem = await getMenuItemByIdAndRestaurant(itemId, id);
@@ -331,10 +348,9 @@ export const deleteExistingMenuItem = async (req, res) => {
   try {
     const { id, itemId } = req.params;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) return res.status(403).json({ message: "You are not the owner of this restaurant" });
     }
 
     const menuItem = await getMenuItemByIdAndRestaurant(itemId, id);

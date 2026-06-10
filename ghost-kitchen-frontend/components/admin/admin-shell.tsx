@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Bike,
@@ -62,7 +62,9 @@ function getInitials(name?: string | null) {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const authUser = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   const userName = authUser?.name ?? "Administrator";
   const userEmail = authUser?.email ?? "";
@@ -125,7 +127,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           {/* Role switcher row */}
           <div className="mb-3 flex items-center justify-between px-2">
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/25">Active role</span>
-            <RoleSwitcher />
+            <RoleSwitcher openUp />
           </div>
 
           {/* Identity card */}
@@ -139,6 +141,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </div>
             <button
               type="button"
+              onClick={() => { logout(); router.push("/login"); }}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/10 hover:text-white/70"
               title="Sign out"
             >
