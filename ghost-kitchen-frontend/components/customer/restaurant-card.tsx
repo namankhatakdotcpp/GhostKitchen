@@ -28,6 +28,8 @@ type RestaurantCardProps = {
   minOrder: number;
   imageUrl: string;
   isVeg: boolean;
+  isOpen?: boolean;
+  statusNote?: string | null;
   offer?: string;
   isNew?: boolean;
   index?: number;
@@ -43,6 +45,8 @@ export function RestaurantCard({
   minOrder,
   imageUrl,
   isVeg,
+  isOpen = true,
+  statusNote,
   offer,
   isNew,
   index = 0,
@@ -65,7 +69,7 @@ export function RestaurantCard({
         <div className="relative h-[180px] w-full overflow-hidden rounded-t-[20px]">
           <Image
             alt={name}
-            className="object-cover transition duration-300 group-hover:scale-[1.03]"
+            className={`object-cover transition duration-300 group-hover:scale-[1.03] ${!isOpen ? "brightness-50" : ""}`}
             fill
             onError={() => setImgSrc(FALLBACK)}
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 360px"
@@ -86,6 +90,21 @@ export function RestaurantCard({
               </span>
             ) : null}
           </div>
+          {/* Status overlay */}
+          {!isOpen && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="rounded-full bg-black/70 px-4 py-1.5 text-[12px] font-bold text-white backdrop-blur-sm">
+                {statusNote === "Temporarily Closed" ? "Temporarily Closed" : "Closed"}
+              </span>
+            </div>
+          )}
+          {isOpen && statusNote && (
+            <div className="absolute bottom-2 left-2">
+              <span className="rounded-full bg-yellow-500/90 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-sm">
+                Busy
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="rounded-b-[20px] bg-white p-3">

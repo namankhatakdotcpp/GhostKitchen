@@ -46,13 +46,9 @@ export const getMyRestaurant = async (req, res) => {
 
 export const listRestaurants = async (req, res) => {
   try {
-    const { search, city, isVeg, minRating, page = 1, limit = 12 } = req.query;
+    const { search, city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine } = req.query;
+    const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit), isOpen, cuisine);
 
-    console.log("📋 Fetching restaurants:", { search, city, minRating, page, limit });
-
-    const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit));
-
-    console.log(`✅ Found ${result?.restaurants?.length || 0} restaurants`);
     return res.json({ success: true, data: result });
   } catch (error) {
     console.error("ERROR:", error);

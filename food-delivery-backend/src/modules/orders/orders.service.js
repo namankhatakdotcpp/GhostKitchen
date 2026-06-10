@@ -49,6 +49,15 @@ export const createOrder = async (payload, customerId) => {
   // Ignore all client-provided price values
   // ============================================
 
+  // 0. Verify restaurant exists and is accepting orders
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: payload.restaurantId },
+    select: { isOpen: true, suspended: true, isApproved: true },
+  });
+  if (!restaurant) throw new Error("Restaurant not found");
+  if (restaurant.suspended || !restaurant.isApproved) throw new Error("Restaurant not found");
+  if (!restaurant.isOpen) throw new Error("Restaurant is not accepting orders right now");
+
   // 1. Extract menuItemIds from request
   const menuItemIds = payload.items.map((item) => item.menuItemId);
 
@@ -152,9 +161,6 @@ export const createOrder = async (payload, customerId) => {
         discount,
         total: finalTotal,
         deliveryAddress: payload.deliveryAddress,
-        estimatedDelivery: payload.estimatedDelivery
-          ? new Date(payload.estimatedDelivery)
-          : null,
       },
       include: {
         restaurant: true,

@@ -25,6 +25,7 @@ export const categoryOptions: CategoryOption[] = [
 ];
 
 export const filterOptions: FilterOption[] = [
+  "Open Now",
   "Rating 4.0+",
   "Pure Veg",
   "Offers",

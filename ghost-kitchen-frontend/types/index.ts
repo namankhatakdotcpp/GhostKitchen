@@ -113,6 +113,7 @@ export interface CategoryOption {
 }
 
 export type FilterOption =
+  | "Open Now"
   | "Rating 4.0+"
   | "Pure Veg"
   | "Offers"
@@ -318,6 +319,8 @@ export interface TopSellingItem {
 
 export interface ShopAnalyticsData {
   keyMetrics: {
+    totalOrders: number;
+    totalRevenue: number;
     avgOrderValue: number;
     peakOrderingHour: string;
     repeatCustomerRate: string;

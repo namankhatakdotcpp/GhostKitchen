@@ -264,6 +264,7 @@ export const setRestaurantApproval = async (id, approve) => {
   return prisma.restaurant.update({
     where: { id },
     data: { isApproved: !!approve },
+    include: { owner: { select: { email: true, name: true } } },
   });
 };
 
@@ -474,4 +475,40 @@ export const deleteUserById = async (id) => {
 export const suspendUser = async (id, { suspend }) => {
   const isSuspended = suspend === true || suspend === "true";
   return prisma.user.update({ where: { id }, data: { isSuspended }, select: USER_SELECT });
+};
+
+// ─── Restaurant management ─────────────────────────────────────────────────────
+
+export const deleteRestaurantById = async (id) => {
+  await prisma.restaurant.delete({ where: { id } });
+};
+
+// ─── Audit log export ─────────────────────────────────────────────────────────
+
+export const getAuditLogAll = async ({ userId, action } = {}) => {
+  const where = {};
+  if (userId) where.userId = userId;
+  if (action) where.action = { contains: action, mode: "insensitive" };
+  return prisma.auditLog.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 10000, // hard cap to avoid OOM
+  });
+};
+
+function escapeCsv(val) {
+  if (val === null || val === undefined) return "";
+  const str = String(val);
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export const auditLogToCsv = (entries) => {
+  const headers = ["id", "userId", "action", "entityType", "entityId", "ipAddress", "createdAt"];
+  const rows = entries.map((e) =>
+    headers.map((h) => escapeCsv(h === "createdAt" ? e[h]?.toISOString() : e[h])).join(",")
+  );
+  return [headers.join(","), ...rows].join("\n");
 };

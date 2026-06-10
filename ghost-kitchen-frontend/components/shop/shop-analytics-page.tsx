@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Clock3, Repeat2, ShoppingBag } from "lucide-react";
+import { BarChart3, Clock3, Repeat2, ShoppingBag, TrendingUp, Wallet } from "lucide-react";
 import { useState } from "react";
 import {
   Bar,
@@ -85,8 +85,18 @@ export function ShopAnalyticsPage() {
           </div>
         ) : (
           <>
-            <section className="grid gap-4 md:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {[
+                {
+                  label: "Total orders",
+                  value: String(data.keyMetrics.totalOrders),
+                  icon: TrendingUp,
+                },
+                {
+                  label: "Total revenue",
+                  value: `₹${data.keyMetrics.totalRevenue.toLocaleString("en-IN")}`,
+                  icon: Wallet,
+                },
                 {
                   label: "Avg order value",
                   value: `₹${data.keyMetrics.avgOrderValue}`,
@@ -98,7 +108,7 @@ export function ShopAnalyticsPage() {
                   icon: Clock3,
                 },
                 {
-                  label: "Repeat customer rate",
+                  label: "Repeat customers",
                   value: data.keyMetrics.repeatCustomerRate,
                   icon: Repeat2,
                 },

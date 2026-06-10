@@ -11,6 +11,8 @@ import { prisma } from "./config/prisma.js";
 import { connectRedis } from "./config/redis.js";
 import { initSocket } from "./socket/socketServer.js";
 import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
+import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
+import cron from "node-cron";
 import { logger } from "./utils/logger.js";
 
 // Global Async Error Safety
@@ -57,6 +59,16 @@ const startServer = async () => {
       } catch (jobError) {
         logger.error("❌ Job initialisation failed", { error: jobError.message });
       }
+
+      // Maintenance schedule cron — runs every minute, activates/deactivates independently of traffic
+      cron.schedule("* * * * *", async () => {
+        try {
+          const cfg = await getSiteConfigCached();
+          if (cfg.maintenanceScheduledAt || cfg.maintenanceEndsAt) {
+            await applyMaintenanceSchedule(cfg);
+          }
+        } catch { /* non-fatal */ }
+      });
     });
 
     process.on("SIGTERM", async () => {

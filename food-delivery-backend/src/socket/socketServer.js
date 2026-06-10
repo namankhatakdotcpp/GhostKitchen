@@ -170,3 +170,10 @@ export const emitToDeliveryRoom = (deliveryUserId, event, data) => {
   const ioInstance = getIO();
   ioInstance.to(`delivery:${deliveryUserId}`).emit(event, data);
 };
+
+// Broadcasts to every connected client — used for platform-wide events like maintenance
+export const emitToAll = (event, data) => {
+  try {
+    getIO().emit(event, data);
+  } catch { /* Socket not yet initialized — safe to ignore */ }
+};

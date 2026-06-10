@@ -3,6 +3,8 @@ import { create } from "zustand";
 export interface SiteConfig {
   maintenanceMode: boolean;
   maintenanceReason?: string | null;
+  maintenanceScheduledAt?: string | null;
+  maintenanceEndsAt?: string | null;
   cashOnDelivery: boolean;
   codMinOrder: number;
   maxDeliveryRadius: number;
@@ -17,6 +19,8 @@ export interface SiteConfig {
 const DEFAULT_CONFIG: SiteConfig = {
   maintenanceMode: false,
   maintenanceReason: null,
+  maintenanceScheduledAt: null,
+  maintenanceEndsAt: null,
   cashOnDelivery: true,
   codMinOrder: 0,
   maxDeliveryRadius: 20,

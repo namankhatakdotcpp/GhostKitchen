@@ -1,10 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bike, ShoppingBag, Store, TrendingUp, Wallet, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useEffect, useState } from "react";
+import { getSocket } from "@/lib/socket";
 
 import { DataTable } from "@/components/ui/data-table";
 import { api } from "@/lib/api";
@@ -86,12 +87,31 @@ export function AdminDashboardPage() {
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([]);
   const authUser = useAuthStore((s) => s.user);
   const firstName = authUser?.name?.split(" ")[0] ?? "Admin";
+  const qc = useQueryClient();
 
   const query = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: fetchDashboard,
     refetchInterval: 30000,
   });
+
+  // Real-time: refetch stats whenever any order event arrives on the admin socket room
+  useEffect(() => {
+    let socket: ReturnType<typeof getSocket> | null = null;
+    try { socket = getSocket(); } catch { return; }
+
+    const refresh = () => qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
+
+    socket.on("order:new", refresh);
+    socket.on("order:status-updated", refresh);
+    socket.on("agent:assigned", refresh);
+
+    return () => {
+      socket?.off("order:new", refresh);
+      socket?.off("order:status-updated", refresh);
+      socket?.off("agent:assigned", refresh);
+    };
+  }, [qc]);
 
   const columns = useMemo<ColumnDef<AdminOrderRow>[]>(() => [
     {

@@ -6,9 +6,10 @@
  */
 
 import * as adminService from "./admin.service.js";
-import { getSiteConfig, updateSiteConfig } from "../config/config.service.js";
+import { getSiteConfig, updateSiteConfig, broadcastMaintenanceNotification } from "../config/config.service.js";
 import { auditLog } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
+import { sendRestaurantApprovedEmail } from "../../services/email.service.js";
 
 /**
  * GET /admin/orders
@@ -375,8 +376,17 @@ export const getSettings = async (req, res, next) => {
 
 export const updateSettings = async (req, res, next) => {
   try {
+    const prev = await getSiteConfig();
     const config = await updateSiteConfig(req.body);
     try { await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_SETTINGS", entityType: "SiteConfig", entityId: "singleton", meta: req.body, req }); } catch { /* non-fatal */ }
+
+    const justEnabled = !prev.maintenanceMode && config.maintenanceMode;
+    const justScheduled = !prev.maintenanceScheduledAt && config.maintenanceScheduledAt;
+    if (justEnabled || justScheduled) {
+      // fire-and-forget — don't block the response
+      broadcastMaintenanceNotification(config).catch(() => {});
+    }
+
     res.json({ success: true, settings: config });
   } catch (error) { next(error); }
 };
@@ -387,6 +397,15 @@ export const approveRestaurant = async (req, res, next) => {
     const { approve = true } = req.body;
     const restaurant = await adminService.setRestaurantApproval(id, approve);
     try { await auditLog({ userId: req.user.userId, action: approve ? "ADMIN_APPROVE_RESTAURANT" : "ADMIN_UNAPPROVE_RESTAURANT", entityType: "Restaurant", entityId: id, req }); } catch { /* non-fatal */ }
+
+    if (approve && restaurant?.owner?.email) {
+      sendRestaurantApprovedEmail({
+        to: restaurant.owner.email,
+        name: restaurant.owner.name,
+        restaurantName: restaurant.name,
+      }).catch(() => {});
+    }
+
     res.json({ success: true, restaurant });
   } catch (error) { next(error); }
 };
@@ -399,5 +418,27 @@ export const suspendUser = async (req, res, next) => {
     const user = await adminService.suspendUser(req.params.id, req.body);
     try { await auditLog({ userId: req.user.userId, action: "ADMIN_SUSPEND_USER", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
     res.json({ success: true, user });
+  } catch (error) { next(error); }
+};
+
+export const deleteRestaurant = async (req, res, next) => {
+  try {
+    await adminService.deleteRestaurantById(req.params.id);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_RESTAURANT", entityType: "Restaurant", entityId: req.params.id, req }); } catch { /* non-fatal */ }
+    res.json({ success: true });
+  } catch (error) { next(error); }
+};
+
+export const exportAuditLog = async (req, res, next) => {
+  try {
+    const { userId, action, format = "json" } = req.query;
+    const entries = await adminService.getAuditLogAll({ userId, action });
+    if (format === "csv") {
+      const csv = adminService.auditLogToCsv(entries);
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="audit-log-${Date.now()}.csv"`);
+      return res.send(csv);
+    }
+    res.json({ success: true, entries });
   } catch (error) { next(error); }
 };

@@ -1,7 +1,7 @@
 import { prisma } from "../../config/prisma.js";
-import { redis } from "../../lib/redis.js";
 import AppError from "../../utils/AppError.js";
 import { getSiteConfigCached } from "../config/config.service.js";
+import { cacheGet, cacheSet, cacheDelete, CACHE_KEYS, CACHE_TTL } from "../../utils/cache.js";
 
 export const getRestaurants = async (
   search,
@@ -9,7 +9,9 @@ export const getRestaurants = async (
   isVeg,
   minRating,
   page = 1,
-  limit = 12
+  limit = 12,
+  isOpen,
+  cuisine
 ) => {
   try {
     const where = {
@@ -19,9 +21,13 @@ export const getRestaurants = async (
         OR: [
           { name: { contains: search, mode: "insensitive" } },
           { description: { contains: search, mode: "insensitive" } },
+          { cuisines: { has: search } },
         ],
       }),
       ...(minRating && { rating: { gte: parseFloat(minRating) } }),
+      ...(isOpen === "true" && { isOpen: true }),
+      ...(isVeg === "true" && { isVeg: true }),
+      ...(cuisine && { cuisines: { has: cuisine } }),
     };
 
     const [restaurants, total] = await Promise.all([
@@ -72,38 +78,14 @@ export const getRestaurantById = async (param) => {
 };
 
 export const getRestaurantWithCache = async (param) => {
-  // Normalize cache key to prevent collision between ID and slug lookups
-  const normalizedKey = isNaN(Number(param))
-    ? `slug:${param}`
-    : `id:${param}`;
-  const cacheKey = `restaurant:${normalizedKey}`;
-
-  // 1. CHECK CACHE WITH ERROR HANDLING
-  let cached = null;
-  try {
-    cached = await redis.get(cacheKey);
-    if (cached) {
-      console.log("⚡ CACHE HIT:", cacheKey);
-      return cached;
-    }
-  } catch (redisError) {
-    console.warn("[Cache] Redis read failed:", redisError.message);
-    // Continue with DB query if cache fails
-  }
-
-  console.log("🐢 CACHE MISS:", cacheKey);
-
-  const conditions = [];
-
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param);
-  if (isUUID) {
-    conditions.push({ id: param });
-  } else {
-    conditions.push({ slug: param });
-  }
+  const cacheKey = `restaurant:${isUUID ? "id" : "slug"}:${param}`;
+
+  const cached = await cacheGet(cacheKey);
+  if (cached) return cached;
 
   const restaurant = await prisma.restaurant.findFirst({
-    where: { OR: conditions },
+    where: { OR: isUUID ? [{ id: param }] : [{ slug: param }] },
     include: {
       menuItems: {
         select: {
@@ -138,27 +120,15 @@ export const getRestaurantWithCache = async (param) => {
     deliveryRadius: restaurant.deliveryRadius,
   };
 
-  // 2. CACHE RESULT WITH ERROR HANDLING
-  try {
-    await redis.set(cacheKey, formatted, { ex: 60 });
-  } catch (redisError) {
-    console.warn("[Cache] Redis write failed:", redisError.message);
-    // Still return data even if cache write fails
-  }
-
+  await cacheSet(cacheKey, formatted, 60);
   return formatted;
 };
 
-// CACHE INVALIDATION helper
 const invalidateRestaurantCache = async (id, slug) => {
-  try {
-    if (id) await redis.del(`restaurant:id:${id}`);
-    if (slug) await redis.del(`restaurant:slug:${slug}`);
-    await redis.del("restaurants:all");
-  } catch (redisError) {
-    console.warn("[Cache] Invalidation failed:", redisError.message);
-    // Don't crash if cache invalidation fails
-  }
+  const keys = [];
+  if (id) keys.push(`restaurant:id:${id}`);
+  if (slug) keys.push(`restaurant:slug:${slug}`);
+  if (keys.length) await cacheDelete(...keys);
 };
 
 export const getRestaurantMenu = async (id, isOwner = false) => {
@@ -388,6 +358,9 @@ export const getRestaurantByIdAndOwner = async (restaurantId, ownerId) => {
 };
 
 export const getRestaurantAnalyticsData = async (restaurantId, range) => {
+  const cacheKey = CACHE_KEYS.ANALYTICS(restaurantId, range ?? "week");
+  const cached = await cacheGet(cacheKey);
+  if (cached) return cached;
   const now = new Date();
   let startDate = new Date(now);
 
@@ -477,9 +450,17 @@ export const getRestaurantAnalyticsData = async (restaurantId, range) => {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  return {
-    keyMetrics: { avgOrderValue, peakOrderingHour, repeatCustomerRate },
+  const result = {
+    keyMetrics: {
+      totalOrders,
+      totalRevenue: Math.round(totalRevenue),
+      avgOrderValue,
+      peakOrderingHour,
+      repeatCustomerRate,
+    },
     timeline,
     topItems,
   };
+  await cacheSet(cacheKey, result, CACHE_TTL.ANALYTICS);
+  return result;
 };

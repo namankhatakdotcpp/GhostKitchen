@@ -308,6 +308,7 @@ const RESTAURANT_EDIT_FIELDS: FieldDef[] = [
 function RestaurantsView({ search }: { search: string }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-db-restaurants"],
@@ -328,6 +329,14 @@ function RestaurantsView({ search }: { search: string }) {
     toast.success("Restaurant updated");
     qc.invalidateQueries({ queryKey: ["admin-db-restaurants"] });
     setEditing(null);
+  }
+
+  async function handleDelete() {
+    if (!confirmDelete) return;
+    await api.delete(`/admin/restaurants/${confirmDelete.id}`);
+    toast.success("Restaurant deleted");
+    qc.invalidateQueries({ queryKey: ["admin-db-restaurants"] });
+    setConfirmDelete(null);
   }
 
   const columns = useMemo<ColumnDef<any>[]>(() => [
@@ -356,13 +365,22 @@ function RestaurantsView({ search }: { search: string }) {
       id: "actions",
       header: "Actions",
       cell: ({ row }) => (
-        <button
-          type="button"
-          onClick={() => setEditing(row.original)}
-          className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[#FAFAFA] flex items-center gap-1 transition"
-        >
-          <Pencil className="h-3 w-3" /> Edit
-        </button>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setEditing(row.original)}
+            className="rounded-full border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[#FAFAFA] flex items-center gap-1 transition"
+          >
+            <Pencil className="h-3 w-3" /> Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete({ id: row.original.id, name: row.original.name })}
+            className={dangerBtnCls + " flex items-center gap-1"}
+          >
+            <Trash2 className="h-3 w-3" /> Delete
+          </button>
+        </div>
       ),
     },
   ], []);
@@ -379,6 +397,13 @@ function RestaurantsView({ search }: { search: string }) {
           initial={{ name: editing.name, description: editing.description ?? "", isOpen: editing.isOpen, suspended: editing.suspended }}
           onClose={() => setEditing(null)}
           onSave={(form) => handleEdit(editing, form)}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          message={`Permanently delete "${confirmDelete.name}"? This will also remove all associated menu items and may affect orders.`}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(null)}
         />
       )}
     </>
@@ -787,6 +812,8 @@ function CouponsView({ search }: { search: string }) {
 // ─── Audit Log View (read-only) ───────────────────────────────────────────────
 
 function AuditLogView({ search }: { search: string }) {
+  const [exporting, setExporting] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["admin-db-audit-log"],
     queryFn: async () => {
@@ -802,6 +829,26 @@ function AuditLogView({ search }: { search: string }) {
       !q || e.action?.toLowerCase().includes(q) || e.entityType?.toLowerCase().includes(q) || e.userId?.toLowerCase().includes(q),
     );
   }, [data, search]);
+
+  async function handleExportCsv() {
+    setExporting(true);
+    try {
+      const response = await api.get("/admin/audit-log/export", {
+        params: { format: "csv" },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-log-${Date.now()}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const columns = useMemo<ColumnDef<any>[]>(() => [
     {
@@ -828,7 +875,17 @@ function AuditLogView({ search }: { search: string }) {
   ], []);
 
   if (isLoading) return <Skeleton />;
-  return <DataTable columns={columns} data={filtered} emptyLabel="No audit log entries." />;
+
+  return (
+    <>
+      <div className="mb-4 flex justify-end">
+        <button type="button" onClick={handleExportCsv} disabled={exporting} className={primaryBtnCls}>
+          {exporting ? "Exporting…" : "Export CSV"}
+        </button>
+      </div>
+      <DataTable columns={columns} data={filtered} emptyLabel="No audit log entries." />
+    </>
+  );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────

@@ -33,6 +33,8 @@ import {
   deleteUser,
   suspendUser,
   suspendRestaurant,
+  deleteRestaurant,
+  exportAuditLog,
   getMenuItems,
   createMenuItem,
   updateMenuItem,
@@ -117,6 +119,7 @@ router.delete("/users/:id", deleteUser);
 router.patch("/users/:id", updateUser);
 router.get("/restaurants/:id", getRestaurantDetail);
 router.patch("/restaurants/:id/suspend", suspendRestaurant);
+router.delete("/restaurants/:id", deleteRestaurant);
 router.patch("/restaurants/:id", updateRestaurant);
 router.get("/menu-items", getMenuItems);
 router.post("/menu-items", createMenuItem);
@@ -125,6 +128,7 @@ router.delete("/menu-items/:id", deleteMenuItem);
 router.get("/reviews", getReviews);
 router.delete("/reviews/:id", deleteReview);
 router.get("/audit-log", getAuditLogEntries);
+router.get("/audit-log/export", exportAuditLog);
 router.get("/settings", getSettings);
 router.patch("/settings", updateSettings);
 router.patch("/restaurants/:id/approve", approveRestaurant);

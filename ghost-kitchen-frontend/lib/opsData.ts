@@ -461,6 +461,8 @@ export async function getShopAnalyticsData(restaurantId: string, range: string):
   const result = data.data ?? data;
   return {
     keyMetrics: {
+      totalOrders: result.keyMetrics?.totalOrders ?? 0,
+      totalRevenue: result.keyMetrics?.totalRevenue ?? 0,
       avgOrderValue: result.keyMetrics?.avgOrderValue ?? 0,
       peakOrderingHour: result.keyMetrics?.peakOrderingHour ?? "N/A",
       repeatCustomerRate: result.keyMetrics?.repeatCustomerRate ?? "0%",

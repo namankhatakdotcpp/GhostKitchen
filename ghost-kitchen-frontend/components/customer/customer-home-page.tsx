@@ -78,11 +78,11 @@ export function CustomerHomePage() {
           cuisine: category !== null ? category : undefined,
           page: pageParam,
           limit: 12,
+          isOpen: activeFilters.includes("Open Now") ? "true" : undefined,
+          minRating: activeFilters.includes("Rating 4.0+") ? "4" : undefined,
+          isVeg: activeFilters.includes("Pure Veg") ? "true" : undefined,
         }
-      }).then(r => {
-        console.log("Restaurant API response:", r.data);
-        return r.data?.data ?? r.data;
-      }),
+      }).then(r => r.data?.data ?? r.data),
     getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
     initialPageParam: 1,
   });
@@ -327,11 +327,13 @@ export function CustomerHomePage() {
                 imageUrl={restaurant?.image || restaurant?.imageUrl || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80"}
                 index={index}
                 isNew={false}
+                isOpen={restaurant?.isOpen ?? true}
                 isVeg={false}
                 key={restaurant?.id || index}
                 minOrder={restaurant?.address?.minOrder || 0}
                 name={restaurant?.name || restaurant?.title || "Unknown Restaurant"}
                 rating={restaurant?.rating || 0}
+                statusNote={restaurant?.statusNote ?? null}
               />
             ))
           )}

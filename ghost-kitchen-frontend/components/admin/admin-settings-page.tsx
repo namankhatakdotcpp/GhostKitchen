@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import { Bell, Globe, Lock, Shield, Store, Truck, CheckCircle } from "lucide-react";
+import { Bell, Globe, Lock, Shield, Store, Truck, CheckCircle, Calendar, Clock, X } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
 import { useConfigStore } from "@/store/configStore";
@@ -73,6 +73,9 @@ export function AdminSettingsPage() {
   const user = useAuthStore((s) => s.user);
   const setGlobalConfig = useConfigStore((s) => s.setConfig);
   const [active, setActive] = useState<SectionId>("platform");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [durationMin, setDurationMin] = useState<number | "custom">(60);
+  const [customEndDate, setCustomEndDate] = useState("");
 
   const { data: remote, isLoading } = useQuery({
     queryKey: ["admin-settings"],
@@ -103,6 +106,34 @@ export function AdminSettingsPage() {
 
   function save() {
     mutation.mutate(local);
+  }
+
+  function handleScheduleMaintenance() {
+    if (!scheduleDate) return;
+    const startMs = new Date(scheduleDate).getTime();
+    const scheduledAt = new Date(scheduleDate).toISOString();
+    const endsAt =
+      durationMin !== "custom"
+        ? new Date(startMs + durationMin * 60_000).toISOString()
+        : customEndDate
+        ? new Date(customEndDate).toISOString()
+        : null;
+    mutation.mutate({ maintenanceScheduledAt: scheduledAt, maintenanceEndsAt: endsAt });
+  }
+
+  function handleCancelScheduled() {
+    mutation.mutate({ maintenanceScheduledAt: null, maintenanceEndsAt: null });
+  }
+
+  function handleSetImmediateEnd(value: string) {
+    set("maintenanceEndsAt", value ? new Date(value).toISOString() : null);
+  }
+
+  function isoToLocal(iso: string | null | undefined) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   const saving = mutation.isPending;
@@ -165,29 +196,163 @@ export function AdminSettingsPage() {
                 <p className="text-xs text-[#9CA3AF] mb-5">Global switches that affect all users and restaurants. Changes take effect immediately.</p>
 
                 <div className="mb-4 rounded-xl border border-yellow-200 bg-yellow-50 p-3">
-                  <p className="text-xs font-semibold text-yellow-800">⚠️ Maintenance mode blocks all non-admin API calls instantly (cached for 30s on server). Admins always get through.</p>
+                  <p className="text-xs font-semibold text-yellow-800">⚠️ Maintenance mode blocks all non-admin API calls (cached for 30s on server). Admins always bypass. Notifies all users on activation.</p>
                 </div>
 
-                <SettingRow label="Maintenance mode" description="Takes the platform offline for all non-admin users — they see a maintenance page">
-                  <Toggle enabled={local.maintenanceMode ?? false} onToggle={() => set("maintenanceMode", !local.maintenanceMode)} />
-                </SettingRow>
-                {(local.maintenanceMode) && (
-                  <SettingRow label="Maintenance reason" description="Shown to users on the maintenance page">
-                    <input
-                      type="text"
-                      value={local.maintenanceReason ?? ""}
-                      onChange={(e) => set("maintenanceReason", e.target.value || null)}
-                      placeholder="e.g. Scheduled upgrade — back in 2 hours"
-                      className="w-72 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none"
-                    />
-                  </SettingRow>
+                {/* Upcoming scheduled window */}
+                {local.maintenanceScheduledAt && !local.maintenanceMode && (
+                  <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-bold text-blue-800">Maintenance scheduled</p>
+                        <p className="text-xs text-blue-700 mt-0.5">
+                          Starts: {new Date(local.maintenanceScheduledAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                        </p>
+                        {local.maintenanceEndsAt && (
+                          <p className="text-xs text-blue-700">
+                            Ends: {new Date(local.maintenanceEndsAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCancelScheduled}
+                      disabled={saving}
+                      className="flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                    >
+                      <X className="h-3.5 w-3.5" /> Cancel
+                    </button>
+                  </div>
                 )}
-                <SettingRow label="New restaurant registrations" description="Allow new restaurant owners to register on the platform">
-                  <Toggle enabled={local.newRestaurantReg ?? true} onToggle={() => set("newRestaurantReg", !local.newRestaurantReg)} />
+
+                {/* Immediate maintenance toggle */}
+                <SettingRow label="Maintenance mode" description="Takes the platform offline for all non-admin users now">
+                  <Toggle enabled={local.maintenanceMode ?? false} onToggle={() => { set("maintenanceMode", !local.maintenanceMode); if (local.maintenanceMode) { set("maintenanceEndsAt", null); } }} />
                 </SettingRow>
-                <SettingRow label="Rider registrations" description="Allow new delivery agents to sign up">
-                  <Toggle enabled={local.riderRegistrations ?? true} onToggle={() => set("riderRegistrations", !local.riderRegistrations)} />
-                </SettingRow>
+
+                {/* Active maintenance config */}
+                {local.maintenanceMode && (
+                  <>
+                    <SettingRow label="Reason" description="Shown to users on the maintenance page">
+                      <input
+                        type="text"
+                        value={local.maintenanceReason ?? ""}
+                        onChange={(e) => set("maintenanceReason", e.target.value || null)}
+                        placeholder="e.g. Scheduled upgrade — back in 2 hours"
+                        className="w-72 rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none"
+                      />
+                    </SettingRow>
+                    <SettingRow label="Expected end time" description="Optional — shows a countdown on the maintenance page">
+                      <input
+                        type="datetime-local"
+                        value={isoToLocal(local.maintenanceEndsAt)}
+                        onChange={(e) => handleSetImmediateEnd(e.target.value)}
+                        className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none"
+                      />
+                    </SettingRow>
+                  </>
+                )}
+
+                {/* Schedule future maintenance */}
+                {!local.maintenanceMode && (
+                  <div className="mt-5 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-[#6B7280]" />
+                      <p className="text-sm font-bold text-[#374151]">Schedule maintenance</p>
+                    </div>
+                    <p className="text-xs text-[#9CA3AF]">Set a future start time and duration. The platform will activate maintenance automatically and notify all users.</p>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-semibold text-[#374151] mb-1 block">Start date &amp; time</label>
+                        <input
+                          type="datetime-local"
+                          value={scheduleDate}
+                          min={isoToLocal(new Date().toISOString())}
+                          onChange={(e) => setScheduleDate(e.target.value)}
+                          className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none bg-white w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-[#374151] mb-1 block">Duration</label>
+                        <div className="flex flex-wrap gap-2">
+                          {([30, 60, 120, 240] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setDurationMin(m)}
+                              className={cn(
+                                "rounded-xl border px-3 py-1.5 text-xs font-bold transition",
+                                durationMin === m ? "border-[#FF5200] bg-[#FFF3EE] text-[#FF5200]" : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#FF5200]"
+                              )}
+                            >
+                              {m < 60 ? `${m}m` : `${m / 60}h`}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setDurationMin("custom")}
+                            className={cn(
+                              "rounded-xl border px-3 py-1.5 text-xs font-bold transition",
+                              durationMin === "custom" ? "border-[#FF5200] bg-[#FFF3EE] text-[#FF5200]" : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#FF5200]"
+                            )}
+                          >
+                            Custom
+                          </button>
+                        </div>
+                        {durationMin === "custom" && (
+                          <div className="mt-2">
+                            <label className="text-xs font-semibold text-[#374151] mb-1 block">End date &amp; time</label>
+                            <input
+                              type="datetime-local"
+                              value={customEndDate}
+                              min={scheduleDate || isoToLocal(new Date().toISOString())}
+                              onChange={(e) => setCustomEndDate(e.target.value)}
+                              className="rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none bg-white w-full"
+                            />
+                          </div>
+                        )}
+                        {durationMin !== "custom" && scheduleDate && (
+                          <p className="mt-1.5 text-xs text-[#9CA3AF]">
+                            Ends at {new Date(new Date(scheduleDate).getTime() + durationMin * 60_000).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: true })}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-[#374151] mb-1 block">Reason (optional)</label>
+                        <input
+                          type="text"
+                          value={local.maintenanceReason ?? ""}
+                          onChange={(e) => set("maintenanceReason", e.target.value || null)}
+                          placeholder="e.g. Database migration"
+                          className="w-full rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm focus:border-[#FF5200] focus:outline-none bg-white"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleScheduleMaintenance}
+                        disabled={!scheduleDate || saving}
+                        className="w-full rounded-xl bg-[#111827] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#374151] transition disabled:opacity-40"
+                      >
+                        {saving ? "Saving…" : "Schedule maintenance"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-5 pt-5 border-t border-[#F3F4F6] space-y-0">
+                  <SettingRow label="New restaurant registrations" description="Allow new restaurant owners to register on the platform">
+                    <Toggle enabled={local.newRestaurantReg ?? true} onToggle={() => set("newRestaurantReg", !local.newRestaurantReg)} />
+                  </SettingRow>
+                  <SettingRow label="Rider registrations" description="Allow new delivery agents to sign up">
+                    <Toggle enabled={local.riderRegistrations ?? true} onToggle={() => set("riderRegistrations", !local.riderRegistrations)} />
+                  </SettingRow>
+                </div>
               </div>
             )}
 

@@ -26,7 +26,7 @@ import {
 } from "./middlewares/rateLimiter.js";
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { redisHealthCheck } from "./config/redis.js";
-import { getSiteConfigCached } from "./modules/config/config.service.js";
+import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
 import { verifyAccessToken } from "./utils/jwt.js";
 
 const app = express();
@@ -196,16 +196,19 @@ app.get("/api/config", async (_req, res, next) => {
   try {
     const cfg = await getSiteConfigCached();
     res.json({
-      maintenanceMode:    cfg.maintenanceMode,
-      cashOnDelivery:     cfg.cashOnDelivery,
-      codMinOrder:        cfg.codMinOrder,
-      maxDeliveryRadius:  cfg.maxDeliveryRadius,
-      defaultDeliveryFee: cfg.defaultDeliveryFee,
-      newRestaurantReg:   cfg.newRestaurantReg,
-      riderRegistrations: cfg.riderRegistrations,
-      allowBranches:      cfg.allowBranches,
-      maxMenuItems:       cfg.maxMenuItems,
-      requireApproval:    cfg.requireApproval,
+      maintenanceMode:         cfg.maintenanceMode,
+      maintenanceReason:       cfg.maintenanceReason ?? null,
+      maintenanceScheduledAt:  cfg.maintenanceScheduledAt ?? null,
+      maintenanceEndsAt:       cfg.maintenanceEndsAt ?? null,
+      cashOnDelivery:          cfg.cashOnDelivery,
+      codMinOrder:             cfg.codMinOrder,
+      maxDeliveryRadius:       cfg.maxDeliveryRadius,
+      defaultDeliveryFee:      cfg.defaultDeliveryFee,
+      newRestaurantReg:        cfg.newRestaurantReg,
+      riderRegistrations:      cfg.riderRegistrations,
+      allowBranches:           cfg.allowBranches,
+      maxMenuItems:            cfg.maxMenuItems,
+      requireApproval:         cfg.requireApproval,
     });
   } catch (err) { next(err); }
 });
@@ -217,7 +220,8 @@ app.use("/api", async (req, res, next) => {
   // Skip admin routes — admins always get through
   if (req.path.startsWith("/admin")) return next();
   try {
-    const cfg = await getSiteConfigCached();
+    let cfg = await getSiteConfigCached();
+    cfg = await applyMaintenanceSchedule(cfg);
     if (!cfg.maintenanceMode) return next();
     // Peek at the token — if they are an ADMIN, let them through
     let token = req.cookies?.access_token;

@@ -8,6 +8,7 @@ import {
 import { validateCreateOrder, validateStatusUpdate } from "./orders.validation.js";
 import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "../../socket/socket.server.js";
 import { createNotification } from "../notification/notification.service.js";
+import { sendOrderPlacedEmail, sendOrderStatusEmail } from "../../services/email.service.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -85,6 +86,24 @@ export const placeOrder = async (req, res) => {
       });
     }
 
+    // Fire-and-forget order placed email
+    (async () => {
+      try {
+        const { prisma } = await import("../../config/prisma.js");
+        const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { email: true, name: true } });
+        if (user?.email) {
+          await sendOrderPlacedEmail({
+            to: user.email,
+            name: user.name,
+            orderId: order.id,
+            restaurantName: order.restaurant?.name ?? "Restaurant",
+            items: Array.isArray(order.items) ? order.items : [],
+            total: order.total,
+          });
+        }
+      } catch { /* non-fatal */ }
+    })();
+
     return res.status(201).json({ order });
   } catch (error) {
     // Handle specific validation errors
@@ -92,9 +111,11 @@ export const placeOrder = async (req, res) => {
       error.message?.includes("Invalid items") ||
       error.message?.includes("Invalid coupon") ||
       error.message?.includes("Coupon") ||
-      error.message?.includes("Not found")
+      error.message?.includes("Not found") ||
+      error.message?.includes("not accepting orders") ||
+      error.message?.includes("Restaurant not found")
     ) {
-      return res.status(400).json({ message: error.message });
+      return res.status(400).json({ success: false, message: error.message });
     }
 
     console.error("Order creation error:", error);
@@ -158,6 +179,25 @@ export const updateOrderStatusHTTP = async (req, res) => {
       createNotification({ userId: customerId, title: "Rider assigned", body: `${updatedOrder.agent.name} is on the way.`, type: "ORDER_UPDATE", entityId: orderId });
     } else if (newStatus === "DELIVERED") {
       createNotification({ userId: customerId, title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", type: "REVIEW_REQUEST", entityId: orderId });
+    }
+
+    // Fire-and-forget order status email
+    if (["CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"].includes(newStatus)) {
+      (async () => {
+        try {
+          const { prisma } = await import("../../config/prisma.js");
+          const user = await prisma.user.findUnique({ where: { id: customerId }, select: { email: true, name: true } });
+          if (user?.email) {
+            await sendOrderStatusEmail({
+              to: user.email,
+              name: user.name,
+              orderId,
+              status: newStatus,
+              restaurantName: updatedOrder.restaurant?.name ?? "Restaurant",
+            });
+          }
+        } catch { /* non-fatal */ }
+      })();
     }
 
     return res.json({
