@@ -53,6 +53,7 @@ export function RoleBanner() {
       router.push(role === "RESTAURANT" ? "/shop/orders" : "/delivery/home");
     } catch (err: any) {
       toast.error(err?.error ?? `Could not switch to ${role} mode`);
+    } finally {
       setLoading(false);
     }
   }

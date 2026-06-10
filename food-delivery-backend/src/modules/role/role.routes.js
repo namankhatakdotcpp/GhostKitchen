@@ -1,34 +1,40 @@
 import express from "express";
 import { authenticate } from "../../middlewares/auth.middleware.js";
-import { setAuthCookies } from "../auth/auth.controller.js";
+import { setAccessTokenCookie } from "../auth/auth.controller.js";
 import {
   switchRole, registerRestaurant, addRestaurant, registerRider,
   getMyRestaurants, updateMyRestaurant,
 } from "./role.service.js";
 import { prisma } from "../../config/prisma.js";
 import { auditLog } from "../../utils/audit.js";
+import { logger } from "../../utils/logger.js";
 
 const router = express.Router();
 
 // POST /api/role/switch
 // Issues a new access_token cookie with updated activeRole
 router.post("/switch", authenticate, async (req, res, next) => {
+  const { role } = req.body;
+  const prevRole = req.user?.activeRole;
   try {
-    const { role } = req.body;
     if (!role) return res.status(400).json({ message: "role is required" });
-    const prevRole = req.user.activeRole
+    logger.info("[RoleSwitch] attempt", { userId: req.user.userId, from: prevRole, to: role });
     const result = await switchRole(req.user.userId, role);
-    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
-    await auditLog({ userId: req.user.userId, action: 'ROLE_SWITCHED', meta: { from: prevRole, to: role }, req })
+    setAccessTokenCookie(res, result.token);
+    await auditLog({ userId: req.user.userId, action: "ROLE_SWITCHED", meta: { from: prevRole, to: role }, req });
+    logger.info("[RoleSwitch] success", { userId: req.user.userId, from: prevRole, to: role });
     res.json({ activeRole: result.activeRole, user: result.user, accessToken: result.token });
-  } catch (e) { next(e); }
+  } catch (e) {
+    logger.warn("[RoleSwitch] failed", { userId: req.user?.userId, from: prevRole, to: role, error: e.message, status: e.statusCode });
+    next(e);
+  }
 });
 
 // POST /api/role/register-restaurant
 router.post("/register-restaurant", authenticate, async (req, res, next) => {
   try {
     const result = await registerRestaurant(req.user.userId, req.body);
-    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
+    setAccessTokenCookie(res, result.token);
     // Audit logging is best-effort — never let a logging failure crash the
     // registration response. The user must always get a clean 201 with their
     // new restaurant + healed user record.
@@ -80,7 +86,7 @@ router.post("/add-restaurant", authenticate, async (req, res, next) => {
 router.post("/register-rider", authenticate, async (req, res, next) => {
   try {
     const result = await registerRider(req.user.userId, req.body);
-    setAuthCookies(res, result.token, req.cookies?.refresh_token ?? "");
+    setAccessTokenCookie(res, result.token);
     res.status(201).json({ user: result.user, accessToken: result.token });
   } catch (e) { next(e); }
 });

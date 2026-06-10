@@ -46,7 +46,6 @@ function FieldError({ msg }: { msg?: string }) {
 export default function RestaurantOnboarding() {
   const router = useRouter();
   const { user, setUser } = useUserStore();
-  const { setTokens } = useAuthStore();
 
   const [mode, setMode] = useState<"new" | "branch">("new");
   const [existingRestaurants, setExistingRestaurants] = useState<ExistingRestaurant[]>([]);
@@ -184,15 +183,15 @@ export default function RestaurantOnboarding() {
         restaurant = res.data.restaurant;
         serverUser = res.data.user;
         accessToken = res.data.token ?? res.data.accessToken;
-        if (accessToken) setTokens(accessToken);
       }
 
       if (mode === "new") {
         const updatedUser = serverUser
           ? { ...serverUser, activeRole: "RESTAURANT" }
           : { ...(user ?? {}), roles: ["CUSTOMER", "RESTAURANT"], secondRole: "RESTAURANT", activeRole: "RESTAURANT", restaurantId: restaurant?.id };
+        // Single atomic update — avoids a window where token and user are mismatched
+        useAuthStore.setState({ ...(accessToken ? { accessToken } : {}), user: updatedUser as any });
         setUser(updatedUser as any);
-        useAuthStore.setState({ user: updatedUser as any });
       }
 
       setSuccess(true);

@@ -32,6 +32,19 @@ export function setAuthCookies(res, accessToken, refreshToken) {
   });
 }
 
+// Use this instead of setAuthCookies when you only have a new access token.
+// The refresh_token cookie has path "/api/auth/refresh" and is never sent to
+// role routes, so calling setAuthCookies there overwrites it with "".
+export function setAccessTokenCookie(res, accessToken) {
+  res.cookie("access_token", accessToken, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: SAME_SITE,
+    maxAge: 15 * 60 * 1000,
+    path: "/",
+  });
+}
+
 function clearAuthCookies(res) {
   const base = { httpOnly: true, secure: isProd, sameSite: SAME_SITE };
   res.clearCookie("access_token", { ...base, path: "/" });

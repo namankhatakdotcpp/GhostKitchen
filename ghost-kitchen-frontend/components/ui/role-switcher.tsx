@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+import toast from "react-hot-toast";
 import api from "@/lib/api";
 import { joinRoleRooms } from "@/lib/socket";
 import { useUserStore, type AppRole } from "@/store/userStore";
@@ -82,6 +83,7 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
   async function switchRole(role: AppRole) {
     if (role === user!.activeRole) { setOpen(false); return; }
     setSwitching(true);
+    setOpen(false); // close immediately — prevents double-click retries
     try {
       const res = await api.post("/role/switch", { role });
       // Use server-returned user (has correct roles, not stale frontend state)
@@ -90,12 +92,13 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
         useAuthStore.setState({ accessToken: res.data.accessToken });
       }
       setUser(serverUser as any);
+      setActiveRole(role);
       useAuthStore.setState({ user: serverUser as any });
       joinRoleRooms(role, serverUser.id, serverUser.restaurantId ?? null);
-      setOpen(false);
       router.push(ROLE_CONFIG[role].href);
-    } catch (err) {
-      console.error("Role switch failed", err);
+    } catch (err: any) {
+      const msg = err?.error ?? err?.message ?? "Role switch failed. Please try again.";
+      toast.error(msg);
     } finally {
       setSwitching(false);
     }
