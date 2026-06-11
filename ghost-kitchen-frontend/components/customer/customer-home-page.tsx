@@ -1,8 +1,9 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 import { RestaurantCard } from "@/components/customer/RestaurantCard";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,6 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/store/userStore";
 import { useAuthStore } from "@/store/authStore";
-import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
 import type { FilterOption } from "@/types";
 
 function SearchIcon() {

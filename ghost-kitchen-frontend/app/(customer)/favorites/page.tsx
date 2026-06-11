@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { RestaurantCard } from "@/components/customer/restaurant-card";
 import { Heart } from "lucide-react";
@@ -9,15 +9,12 @@ import Link from "next/link";
 interface FavoriteRestaurant {
   id: string;
   name: string;
-  cuisineType: string[];
+  cuisines: string[];
   rating: number;
-  deliveryTime: number;
-  deliveryFee: number;
-  minOrder: number;
   imageUrl: string;
-  isVeg: boolean;
   isOpen: boolean;
   statusNote: string | null;
+  address?: { deliveryFee?: number; deliveryTime?: number; minOrder?: number };
 }
 
 export default function FavoritesPage() {
@@ -64,13 +61,13 @@ export default function FavoritesPage() {
               key={r.id}
               id={r.id}
               name={r.name}
-              cuisines={r.cuisineType}
+              cuisines={r.cuisines ?? []}
               rating={r.rating}
-              deliveryTime={r.deliveryTime}
-              deliveryFee={r.deliveryFee}
-              minOrder={r.minOrder}
+              deliveryTime={r.address?.deliveryTime ?? 30}
+              deliveryFee={r.address?.deliveryFee ?? 0}
+              minOrder={r.address?.minOrder ?? 0}
               imageUrl={r.imageUrl}
-              isVeg={r.isVeg}
+              isVeg={false}
               isOpen={r.isOpen}
               statusNote={r.statusNote}
               index={i}
