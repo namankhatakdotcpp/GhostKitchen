@@ -30,6 +30,7 @@ export const getAllOrders = async (filters = {}) => {
       where,
       include: ORDER_INCLUDE,
       orderBy: { createdAt: "desc" },
+      take: 500, // hard cap — an unbounded scan here OOMs once order volume grows
     });
 
     logger.info("Fetched all orders", { count: orders.length, filters });
@@ -185,15 +186,31 @@ export const getAdminPayments = async ({ page = 1, limit = 20, status } = {}) =>
     }),
     prisma.payment.count({ where }),
   ]);
-  // Enrich with customer/restaurant names
-  const enriched = await Promise.all(
-    payments.map(async (p) => {
-      const customer = await prisma.user.findUnique({ where: { id: p.customerId }, select: { name: true } });
-      const restaurant = await prisma.restaurant.findUnique({ where: { id: p.restaurantId }, select: { name: true } });
-      const order = await prisma.order.findFirst({ where: { cfOrderId: p.cfOrderId }, select: { id: true } });
-      return { ...p, customerName: customer?.name, restaurantName: restaurant?.name, orderId: order?.id };
-    })
-  );
+  // Batched enrichment — the per-payment lookups were 3 queries × page size
+  const [customers, restaurants, orders] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: [...new Set(payments.map((p) => p.customerId))] } },
+      select: { id: true, name: true },
+    }),
+    prisma.restaurant.findMany({
+      where: { id: { in: [...new Set(payments.map((p) => p.restaurantId))] } },
+      select: { id: true, name: true },
+    }),
+    prisma.order.findMany({
+      where: { cfOrderId: { in: payments.map((p) => p.cfOrderId) } },
+      select: { id: true, cfOrderId: true },
+    }),
+  ]);
+  const customerById = new Map(customers.map((c) => [c.id, c.name]));
+  const restaurantById = new Map(restaurants.map((r) => [r.id, r.name]));
+  const orderByCfId = new Map(orders.map((o) => [o.cfOrderId, o.id]));
+
+  const enriched = payments.map((p) => ({
+    ...p,
+    customerName: customerById.get(p.customerId),
+    restaurantName: restaurantById.get(p.restaurantId),
+    orderId: orderByCfId.get(p.cfOrderId),
+  }));
   return { payments: enriched, total, page: Number(page), limit: Number(limit) };
 };
 
@@ -428,11 +445,14 @@ export const updateUser = async (id, data) => {
 
 export const blockUser = async (id, { block }) => {
   const isBlocked = block === true || block === "true";
-  return prisma.user.update({
+  const user = await prisma.user.update({
     where: { id },
     data: { isBlocked },
     select: USER_SELECT,
   });
+  // Revoke all sessions so the block takes effect immediately, not after token expiry
+  if (isBlocked) await prisma.refreshToken.deleteMany({ where: { userId: id } });
+  return user;
 };
 
 export const changeUserRole = async (id, { role }) => {
@@ -474,7 +494,9 @@ export const deleteUserById = async (id) => {
 
 export const suspendUser = async (id, { suspend }) => {
   const isSuspended = suspend === true || suspend === "true";
-  return prisma.user.update({ where: { id }, data: { isSuspended }, select: USER_SELECT });
+  const user = await prisma.user.update({ where: { id }, data: { isSuspended }, select: USER_SELECT });
+  if (isSuspended) await prisma.refreshToken.deleteMany({ where: { userId: id } });
+  return user;
 };
 
 // ─── Restaurant management ─────────────────────────────────────────────────────

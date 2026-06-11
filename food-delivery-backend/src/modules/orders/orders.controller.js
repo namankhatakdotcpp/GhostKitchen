@@ -5,6 +5,7 @@ import {
   listOrders,
   updateOrderStatus,
 } from "./orders.service.js";
+import { prisma } from "../../config/prisma.js";
 import { validateCreateOrder, validateStatusUpdate } from "./orders.validation.js";
 import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "../../socket/socket.server.js";
 import { createNotification } from "../notification/notification.service.js";
@@ -47,12 +48,34 @@ export const getOrders = async (req, res) => {
   }
 };
 
+// Only participants may see an order: the customer, the restaurant owner,
+// the assigned delivery agent, or an admin. Without this check any logged-in
+// user could read any order (address, items, phone) by guessing IDs.
+async function canAccessOrder(order, user) {
+  if (user.role === "ADMIN") return true;
+  if (order.customerId === user.userId) return true;
+  if (order.agentId && order.agentId === user.userId) return true;
+  if (user.roles?.includes("RESTAURANT")) {
+    const { prisma } = await import("../../config/prisma.js");
+    const owned = await prisma.restaurant.findFirst({
+      where: { id: order.restaurantId, ownerId: user.userId },
+      select: { id: true },
+    });
+    if (owned) return true;
+  }
+  return false;
+}
+
 export const getOrder = async (req, res) => {
   try {
     const order = await getOrderById(req.params.id);
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (!(await canAccessOrder(order, req.user))) {
+      return res.status(403).json({ message: "Not authorized to view this order" });
     }
 
     return res.json({ order });
@@ -136,6 +159,25 @@ export const updateOrderStatusHTTP = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Ownership enforcement — role alone is not enough:
+    // a restaurant owner may only manage their own restaurant's orders, a
+    // customer may only cancel their own order, and a delivery agent may only
+    // update orders assigned to them.
+    if (req.user.role === "CUSTOMER" && currentOrder.customerId !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized for this order" });
+    }
+    if (req.user.role === "DELIVERY" && currentOrder.agentId && currentOrder.agentId !== req.user.userId) {
+      return res.status(403).json({ message: "Order is assigned to another agent" });
+    }
+    if (req.user.role === "RESTAURANT") {
+      const { prisma } = await import("../../config/prisma.js");
+      const owned = await prisma.restaurant.findFirst({
+        where: { id: currentOrder.restaurantId, ownerId: req.user.userId },
+        select: { id: true },
+      });
+      if (!owned) return res.status(403).json({ message: "Not authorized for this restaurant's orders" });
+    }
+
     // Validate status transition based on user role
     const validationError = validateStatusUpdate(
       req.body,
@@ -207,5 +249,56 @@ export const updateOrderStatusHTTP = async (req, res) => {
   } catch (error) {
     console.error("Order status update error:", error);
     return res.status(500).json({ message: "Unable to update order status" });
+  }
+};
+
+// POST /api/orders/:id/reorder
+// Builds a new cart payload from a past order, with availability checks.
+export const reorderHTTP = async (req, res) => {
+  try {
+    const originalOrder = await getOrderById(req.params.id);
+    if (!originalOrder) return res.status(404).json({ message: "Order not found" });
+    if (originalOrder.customerId !== req.user.userId) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const items = Array.isArray(originalOrder.items) ? originalOrder.items : [];
+    if (items.length === 0) return res.status(400).json({ message: "Original order has no items" });
+
+    const menuItemIds = items.map((i) => i.menuItemId);
+    const available = await prisma.menuItem.findMany({
+      where: { id: { in: menuItemIds }, restaurantId: originalOrder.restaurantId, isAvailable: true },
+      select: { id: true, name: true, price: true, imageUrl: true },
+    });
+    const availableIds = new Set(available.map((m) => m.id));
+
+    const reorderItems = items
+      .filter((i) => availableIds.has(i.menuItemId))
+      .map((i) => {
+        const live = available.find((m) => m.id === i.menuItemId);
+        return {
+          menuItemId: i.menuItemId,
+          name: i.name,
+          quantity: i.quantity,
+          price: Number(live.price),   // live price — may differ from original
+          originalPrice: i.price,
+          priceChanged: Number(live.price) !== i.price,
+          imageUrl: live.imageUrl,
+        };
+      });
+
+    const unavailable = items
+      .filter((i) => !availableIds.has(i.menuItemId))
+      .map((i) => i.name);
+
+    res.json({
+      restaurantId: originalOrder.restaurantId,
+      restaurantName: originalOrder.restaurant?.name,
+      items: reorderItems,
+      unavailableItems: unavailable,
+      partial: unavailable.length > 0,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Unable to process reorder" });
   }
 };

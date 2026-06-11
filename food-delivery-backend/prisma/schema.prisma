@@ -67,6 +67,8 @@ model User {
   refreshTokens   RefreshToken[]
   cartItems       CartItem[]     @relation("UserCart")
   notifications   Notification[]
+  addresses       Address[]
+  favorites       Favorite[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -101,6 +103,37 @@ model CartItem {
   @@index([userId])
 }
 
+model Address {
+  id         String   @id @default(uuid())
+  userId     String
+  label      String   @default("Home")
+  line1      String
+  line2      String?
+  city       String
+  state      String?
+  pincode    String?
+  lat        Float?
+  lng        Float?
+  isDefault  Boolean  @default(false)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Favorite {
+  id           String     @id @default(uuid())
+  userId       String
+  restaurantId String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, restaurantId])
+  @@index([userId])
+}
+
 model Restaurant {
   id             String     @id @default(uuid())
   name           String
@@ -122,6 +155,7 @@ model Restaurant {
   owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   menuItems      MenuItem[]
   orders         Order[]
+  favorites      Favorite[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -236,6 +270,21 @@ model PaymentWebhook {
   createdAt DateTime @default(now())
 
   @@index([eventId])
+}
+
+model Refund {
+  id            String   @id @default(uuid())
+  cfOrderId     String
+  cfRefundId    String?  @unique
+  amount        Int      // paise
+  status        String   @default("PENDING")
+  reason        String?
+  initiatedBy   String   // admin userId
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([cfOrderId])
+  @@index([status])
 }
 
 model Notification {

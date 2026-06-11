@@ -26,7 +26,12 @@ export const getRestaurants = async (
       }),
       ...(minRating && { rating: { gte: parseFloat(minRating) } }),
       ...(isOpen === "true" && { isOpen: true }),
-      ...(isVeg === "true" && { isVeg: true }),
+      // Restaurant has no isVeg column — "pure veg" means every available
+      // menu item is vegetarian. (`isVeg: true` in this WHERE threw a Prisma
+      // validation error and 500'd the whole browse page.)
+      ...(isVeg === "true" && {
+        menuItems: { some: {} , none: { isVeg: false, isAvailable: true } },
+      }),
       ...(cuisine && { cuisines: { has: cuisine } }),
     };
 
@@ -158,14 +163,15 @@ export const getRestaurantMenu = async (id, isOwner = false) => {
 };
 
 export const createRestaurant = async (data, ownerId) => {
-  // Generate slug from restaurant name
+  // Generate slug from restaurant name — suffix keeps it unique so two
+  // restaurants with the same name don't collide on the unique constraint
   const slug = data.name
     .toLowerCase()
     .trim()
     .replace(/[^\w\s-]/g, "") // Remove special characters
     .replace(/\s+/g, "-") // Replace spaces with hyphens
     .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
-    .slice(0, 50); // Limit slug length
+    .slice(0, 50) + "-" + Date.now().toString(36);
 
   return prisma.restaurant.create({
     data: {
@@ -199,15 +205,14 @@ export const updateRestaurant = async (id, data) => {
 
   if (data.name !== undefined) {
     updateData.name = data.name;
-    // Generate slug when name changes
-    const slug = data.name
+    // Generate slug when name changes (unique suffix avoids collisions)
+    updateData.slug = data.name
       .toLowerCase()
       .trim()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
-      .slice(0, 50);
-    updateData.slug = slug;
+      .slice(0, 50) + "-" + Date.now().toString(36);
   }
   
   if (data.description !== undefined) updateData.description = data.description;

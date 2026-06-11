@@ -81,7 +81,7 @@ export function MenuItemCard({
             Customizable
           </p>
         ) : null}
-        <div className="mt-3 text-[15px] font-bold text-text-primary">₹{price}</div>
+        <div className="mt-3 text-[15px] font-bold text-text-primary">₹{(price / 100).toFixed(0)}</div>
       </div>
 
       <div className="flex w-[120px] flex-col items-center gap-3">

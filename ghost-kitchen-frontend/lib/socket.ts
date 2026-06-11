@@ -12,13 +12,20 @@ export function getSocket() {
       process.env.NEXT_PUBLIC_API_URL?.replace(/\/api\/?$/, "") ??
       "http://localhost:5000";
 
+    // Cookie auth fails on browsers that block third-party cookies (Safari),
+    // so also pass the stored token via the handshake auth payload — the
+    // server checks the cookie first and falls back to auth.token.
+    let authToken: string | null = null;
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("gk-auth") : null;
+      authToken = raw ? JSON.parse(raw)?.state?.accessToken ?? null : null;
+    } catch { /* ignore */ }
+
     socket = io(
       backendUrl,
       {
-        // The access_token cookie is sent automatically with the WebSocket
-        // handshake because withCredentials:true is set below.
-        // No token needs to be read from localStorage or injected manually.
         withCredentials: true,
+        auth: authToken ? { token: authToken } : undefined,
 
         transports: ["websocket", "polling"],
         reconnection: true,

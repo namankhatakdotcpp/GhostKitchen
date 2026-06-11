@@ -1,19 +1,32 @@
 import express from "express";
 import { authenticate } from "../../middlewares/auth.middleware.js";
+import { roleMiddleware } from "../../middlewares/role.middleware.js";
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 
 const router = express.Router();
 
+// Every delivery route requires the DELIVERY role — previously any logged-in
+// customer could toggle availability and read order/customer details.
+router.use(authenticate, roleMiddleware(["DELIVERY", "ADMIN"]));
+
 // PATCH /api/delivery/status
-router.patch("/status", authenticate, async (req, res, next) => {
+router.patch("/status", async (req, res, next) => {
   try {
     const { isAvailable, currentLat, currentLng, isOnDuty } = req.body;
     const data = {};
-    if (isAvailable !== undefined) data.isAvailable = isAvailable;
-    if (isOnDuty !== undefined) data.isOnDuty = isOnDuty;
-    if (currentLat !== undefined) data.currentLat = currentLat;
-    if (currentLng !== undefined) data.currentLng = currentLng;
+    if (isAvailable !== undefined) data.isAvailable = Boolean(isAvailable);
+    if (isOnDuty !== undefined) data.isOnDuty = Boolean(isOnDuty);
+    if (currentLat !== undefined) {
+      const lat = Number(currentLat);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new AppError("Invalid latitude", 400);
+      data.currentLat = lat;
+    }
+    if (currentLng !== undefined) {
+      const lng = Number(currentLng);
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180) throw new AppError("Invalid longitude", 400);
+      data.currentLng = lng;
+    }
 
     const user = await prisma.user.update({
       where: { id: req.user.userId },
@@ -25,10 +38,21 @@ router.patch("/status", authenticate, async (req, res, next) => {
 });
 
 // POST /api/delivery/accept-order/:orderId
-router.post("/accept-order/:orderId", authenticate, async (req, res, next) => {
+// Atomically claims the order for this agent if it is unassigned.
+router.post("/accept-order/:orderId", async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const agentId = req.user.userId;
+
+    // Claim: only succeeds when the order is unassigned or already ours.
+    const claimed = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        status: { in: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"] },
+        OR: [{ agentId: null }, { agentId }],
+      },
+      data: { agentId },
+    });
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -39,7 +63,9 @@ router.post("/accept-order/:orderId", authenticate, async (req, res, next) => {
     });
 
     if (!order) throw new AppError("Order not found", 404);
-    if (order.agentId && order.agentId !== agentId) throw new AppError("Order assigned to another agent", 403);
+    if (order.agentId !== agentId) {
+      throw new AppError(claimed.count === 0 ? "Order assigned to another agent" : "Could not claim order", 403);
+    }
 
     // Mask customer phone — show only last 4 digits
     const maskedPhone = order.customer?.phone
@@ -56,7 +82,7 @@ router.post("/accept-order/:orderId", authenticate, async (req, res, next) => {
 });
 
 // GET /api/delivery/earnings
-router.get("/earnings", authenticate, async (req, res, next) => {
+router.get("/earnings", async (req, res, next) => {
   try {
     const agentId = req.user.userId;
     const { period = "today" } = req.query;
@@ -82,8 +108,11 @@ router.get("/earnings", authenticate, async (req, res, next) => {
       orderBy: { deliveredAt: "desc" },
     });
 
-    const BASE_PAY = 40;
-    const total = orders.reduce((sum, o) => sum + BASE_PAY + Math.round(Number(o.deliveryFee) * 0.1), 0);
+    // All earnings figures returned in RUPEES (display-only endpoint).
+    // deliveryFee is stored in paise, so the 10% share is fee/10/100.
+    const BASE_PAY = 40; // ₹40 per delivery
+    const payoutFor = (o) => BASE_PAY + Math.round(Number(o.deliveryFee) * 0.1) / 100;
+    const total = Math.round(orders.reduce((sum, o) => sum + payoutFor(o), 0));
     const deliveries = orders.length;
     const avgPerDelivery = deliveries > 0 ? Math.round(total / deliveries) : 0;
 
@@ -103,7 +132,7 @@ router.get("/earnings", authenticate, async (req, res, next) => {
       if (dailyMap.has(key)) {
         const entry = dailyMap.get(key);
         entry.orders += 1;
-        entry.earnings += BASE_PAY + Math.round(Number(o.deliveryFee) * 0.1);
+        entry.earnings += Math.round(payoutFor(o));
       }
     }
 
@@ -119,7 +148,7 @@ router.get("/earnings", authenticate, async (req, res, next) => {
         date: o.deliveredAt,
         basePay: BASE_PAY,
         tip: 0,
-        total: BASE_PAY + Math.round(Number(o.deliveryFee) * 0.1),
+        total: Math.round(payoutFor(o)),
       })),
     });
   } catch (e) { next(e); }

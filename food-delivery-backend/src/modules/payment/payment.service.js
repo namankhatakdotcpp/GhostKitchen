@@ -3,6 +3,103 @@ import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../utils/logger.js";
+import { calculateOrderTotal } from "../orders/orders.service.js";
+import { emitOrderNew } from "../../socket/socket.server.js";
+import { createNotification } from "../notification/notification.service.js";
+
+/**
+ * Create the Order record for a successfully-paid Payment.
+ * Idempotent: safe to call from both the webhook and /payments/verify —
+ * the unique constraint on Order.cfOrderId guarantees a single order.
+ */
+export const createOrderFromPayment = async (payment) => {
+  const existing = await prisma.order.findFirst({ where: { cfOrderId: payment.cfOrderId } });
+  if (existing) return existing;
+
+  // Preferred: the priced snapshot captured at payment-creation time, so menu
+  // edits between payment and verification can never change what was charged.
+  let snapshot = null;
+  try {
+    const parsed = JSON.parse(payment.itemsSnapshot);
+    if (parsed && Array.isArray(parsed.orderItems)) snapshot = parsed;
+  } catch { /* legacy format handled below */ }
+
+  let orderItems, subtotal, deliveryFee, discount, total;
+  if (snapshot) {
+    ({ orderItems, subtotal, deliveryFee, discount, total } = snapshot);
+  } else {
+    // Legacy snapshot ([{menuItemId, quantity}]) — recalculate from the menu
+    const items = JSON.parse(payment.itemsSnapshot);
+    ({ orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+      restaurantId: payment.restaurantId,
+      items,
+      couponCode: payment.couponCode,
+    }));
+  }
+
+  // Honor the admin autoConfirmOrders setting for paid orders too
+  let initialStatus = "PLACED";
+  try {
+    const { getSiteConfigCached } = await import("../config/config.service.js");
+    const cfg = await getSiteConfigCached();
+    if (cfg?.autoConfirmOrders) initialStatus = "CONFIRMED";
+  } catch { /* default to PLACED */ }
+
+  let order;
+  try {
+    order = await prisma.order.create({
+      data: {
+        customerId: payment.customerId,
+        restaurantId: payment.restaurantId,
+        status: initialStatus,
+        items: orderItems,
+        subtotal,
+        deliveryFee,
+        discount,
+        total,
+        deliveryAddress: JSON.parse(payment.deliveryAddress),
+        cfOrderId: payment.cfOrderId,
+      },
+      include: { restaurant: true },
+    });
+  } catch (err) {
+    if (err.code === "P2002") {
+      // Concurrent webhook + verify both tried to create — return the winner's order
+      return prisma.order.findFirst({ where: { cfOrderId: payment.cfOrderId } });
+    }
+    throw err;
+  }
+
+  // Count the coupon redemption now that the money is actually captured.
+  // (The payment flow intentionally claims usage at capture, not at intent.)
+  if (payment.couponCode) {
+    prisma.coupon.updateMany({
+      where: { code: payment.couponCode.toUpperCase() },
+      data: { usedCount: { increment: 1 } },
+    }).catch(() => {});
+  }
+
+  emitOrderNew({ restaurantId: payment.restaurantId, order });
+
+  createNotification({
+    userId: payment.customerId,
+    title: "Order placed!",
+    body: "Your order is being prepared.",
+    type: "ORDER_UPDATE",
+    entityId: order.id,
+  });
+  if (order.restaurant?.ownerId) {
+    createNotification({
+      userId: order.restaurant.ownerId,
+      title: "New order!",
+      body: `Order #${order.id.slice(-6).toUpperCase()} received.`,
+      type: "ORDER_UPDATE",
+      entityId: order.id,
+    });
+  }
+
+  return order;
+};
 
 /**
  * Payment Service - Cashfree Integration
@@ -33,22 +130,23 @@ import { logger } from "../../utils/logger.js";
  * @returns {object} Cashfree session data
  */
 export const createPaymentSession = async (orderId, user) => {
-  // 1️⃣ FETCH ORDER WITH DETAILS
-  // New schema: Order has customerId (not userId) and total (not totalAmount)
+  // auth middleware exposes userId; older callers passed id — accept both
+  const requesterId = user.userId ?? user.id;
+
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { customer: true },
   });
 
   if (!order) {
-    logger.warn("Order not found for payment", { orderId, userId: user.id });
+    logger.warn("Order not found for payment", { orderId, userId: requesterId });
     throw new AppError("Order not found", 404);
   }
 
-  if (order.customerId !== user.id) {
+  if (order.customerId !== requesterId) {
     logger.error("Unauthorized payment session attempt", {
       orderId,
-      requestedBy: user.id,
+      requestedBy: requesterId,
       orderBelongsTo: order.customerId,
     });
     throw new AppError("Unauthorized to create payment for this order", 403);
@@ -56,12 +154,12 @@ export const createPaymentSession = async (orderId, user) => {
 
   const request = {
     order_id: orderId,
-    order_amount: (order.total / 100).toFixed(2),
+    order_amount: (order.total / 100).toFixed(2), // paise → rupees
     order_currency: "INR",
     customer_details: {
-      customer_id: user.id,
-      customer_email: user.email || "noemail@example.com",
-      customer_phone: user.phone || "9999999999",
+      customer_id: requesterId,
+      customer_email: order.customer?.email || "noemail@example.com",
+      customer_phone: order.customer?.phone || "9999999999",
     },
     order_meta: {
       return_url: `${env.FRONTEND_URL || "http://localhost:3000"}/payment-success?order_id=${orderId}`,
@@ -112,173 +210,85 @@ export const createPaymentSession = async (orderId, user) => {
  */
 export const handlePaymentWebhook = async (webhookData) => {
   try {
-    // 1️⃣ EXTRACT PAYMENT DATA FROM WEBHOOK
-    const orderId = webhookData.order_id;
-    const paymentStatus = webhookData.payment?.payment_status;
-    const cfPaymentId = webhookData.cf_payment_id;
-    // 🔑 IDEMPOTENCY KEY: Include status to distinguish different payment states
-    const eventId = `${cfPaymentId}_${paymentStatus}` || webhookData.order_id;
+    // Cashfree webhook payload (2023+ schema): data.order.order_id, data.payment.payment_status
+    // Older/test payloads may carry these at the top level — accept both.
+    const data = webhookData.data ?? webhookData;
+    const cfOrderId = data.order?.order_id ?? data.order_id;
+    const paymentStatus = data.payment?.payment_status ?? webhookData.payment?.payment_status;
+    const cfPaymentId = data.payment?.cf_payment_id ?? webhookData.cf_payment_id;
+    const webhookAmount = data.order?.order_amount ?? data.order_amount; // rupees
 
-    logger.info("Webhook received from Cashfree", {
-      orderId,
-      eventId,
-      paymentStatus,
-      cfPaymentId,
-      timestamp: webhookData.payment?.payment_time,
-    });
+    const eventId = cfPaymentId
+      ? `${cfPaymentId}_${paymentStatus}`
+      : `${cfOrderId}_${paymentStatus}`;
 
-    if (!orderId || !paymentStatus) {
-      logger.warn("Invalid webhook data received", {
-        missingOrderId: !orderId,
-        missingPaymentStatus: !paymentStatus,
-        webhookKeys: Object.keys(webhookData),
-      });
+    logger.info("Webhook received from Cashfree", { cfOrderId, eventId, paymentStatus, cfPaymentId });
+
+    if (!cfOrderId || !paymentStatus) {
+      logger.warn("Invalid webhook data received", { webhookKeys: Object.keys(webhookData) });
       throw new AppError("Invalid webhook data", 400);
     }
 
-    // 2️⃣ & 3️⃣ ATOMIC TRANSACTION - Check idempotency + Record webhook + Update order
-    // ⚠️ Idempotency check moved INSIDE transaction for row-level locking
+    let becameSuccess = false;
     await prisma.$transaction(async (tx) => {
-      // Check for duplicate webhook (with transaction locking)
-      const existingWebhook = await tx.paymentWebhook.findUnique({
-        where: { eventId },
-      });
-
+      // Idempotency: record each event exactly once
+      const existingWebhook = await tx.paymentWebhook.findUnique({ where: { eventId } });
       if (existingWebhook) {
-        logger.info("Duplicate webhook detected and ignored", {
-          orderId,
-          eventId,
-          paymentStatus,
-          firstSeenAt: existingWebhook.createdAt,
-          duplicateDeliveredAt: new Date(),
-        });
-        return; // Exit transaction, no duplicate processing
+        logger.info("Duplicate webhook ignored", { cfOrderId, eventId });
+        return;
+      }
+      await tx.paymentWebhook.create({ data: { eventId } });
+
+      // The webhook's order_id is OUR cfOrderId — orders are created later by
+      // /payments/verify, so the source of truth here is the Payment record.
+      const payment = await tx.payment.findUnique({ where: { cfOrderId } });
+      if (!payment) {
+        logger.warn("Webhook for unknown payment", { cfOrderId, eventId });
+        return;
       }
 
-      // Record the webhook to prevent duplicates
-      await tx.paymentWebhook.create({
-        data: { eventId },
-      });
-
-      // 4️⃣ FETCH ORDER
-      const order = await tx.order.findUnique({
-        where: { id: orderId },
-      });
-
-      if (!order) {
-        logger.warn("Webhook received for non-existent order", {
-          orderId,
-          eventId,
-          paymentStatus,
-          cfPaymentId,
+      // Amount check: Cashfree reports rupees, Payment.amount is paise
+      if (webhookAmount && Math.abs(Math.round(Number(webhookAmount) * 100) - payment.amount) > 1) {
+        logger.error("CRITICAL: webhook amount mismatch — payment NOT updated", {
+          cfOrderId, expectedPaise: payment.amount, receivedRupees: webhookAmount, cfPaymentId,
         });
         return;
       }
 
-      // 4️⃣.1 🔥 GAP 3 FIX: VALIDATE PAYMENT AMOUNT (CRITICAL SECURITY CHECK)
-      // Prevent amount manipulation attacks
-      const webhookAmount = webhookData.order_amount;
-      if (webhookAmount && Math.abs(webhookAmount - order.total) > 0.01) {
-        logger.error("CRITICAL: Payment amount mismatch detected", {
-          orderId,
-          userId: order.customerId,
-          expected: order.total,
-          received: webhookAmount,
-          difference: Math.abs(webhookAmount - order.total),
-          cfPaymentId,
-          severity: "CRITICAL",
-          action: "Order NOT updated - amount mismatch",
-        });
-        return; // Stop processing - amount mismatch
-      }
-
-      // 5️⃣ UPDATE BASED ON PAYMENT STATUS (CONDITIONAL)
-      // ⚠️ Only update if payment status is still PENDING to prevent override
       if (paymentStatus === "SUCCESS") {
-        // 🟢 PAYMENT SUCCESSFUL
-        // Only update if still PENDING (prevent override of later status changes)
-        const updated = await tx.order.updateMany({
-          where: {
-            id: orderId,
-            paymentStatus: "PENDING", // Only update if still PENDING
-          },
-          data: {
-            paymentStatus: "SUCCESS",
-            status: "CONFIRMED", // Auto-move to CONFIRMED
-          },
+        await tx.payment.updateMany({
+          where: { cfOrderId, status: "PENDING" },
+          data: { status: "SUCCESS", cfPaymentId: cfPaymentId ? String(cfPaymentId) : undefined },
         });
-
-        if (updated.count > 0) {
-          logger.info("Order payment confirmed successfully", {
-            orderId,
-            userId: order.customerId,
-            amount: order.total,
-            previousStatus: order.paymentStatus,
-            newPaymentStatus: "SUCCESS",
-            newOrderStatus: "CONFIRMED",
-            cfPaymentId,
-          });
-        } else {
-          logger.warn("Order payment status already changed (race condition detected)", {
-            orderId,
-            userId: order.customerId,
-            incomingPaymentStatus: paymentStatus,
-            currentPaymentStatus: order.paymentStatus,
-            cfPaymentId,
-          });
-        }
-      } else if (paymentStatus === "FAILED" || paymentStatus === "CANCELLED") {
-        // 🔴 PAYMENT FAILED
-        // Only update if still PENDING
-        const updated = await tx.order.updateMany({
-          where: {
-            id: orderId,
-            paymentStatus: "PENDING", // Only update if still PENDING
-          },
-          data: {
-            paymentStatus: "FAILED",
-            status: "CANCELLED", // Auto-cancel if payment fails
-          },
+        becameSuccess = true;
+        logger.info("Payment marked SUCCESS via webhook", { cfOrderId, cfPaymentId });
+      } else if (["FAILED", "CANCELLED", "USER_DROPPED", "VOID"].includes(paymentStatus)) {
+        await tx.payment.updateMany({
+          where: { cfOrderId, status: "PENDING" },
+          data: { status: "FAILED" },
         });
-
-        if (updated.count > 0) {
-          logger.warn("Order payment failed, auto-cancelled", {
-            orderId,
-            userId: order.customerId,
-            amount: order.total,
-            paymentStatus,
-            newStatus: "CANCELLED",
-            cfPaymentId,
-          });
-        } else {
-          logger.warn("Order payment failed but already processed", {
-            orderId,
-            userId: order.customerId,
-            incomingPaymentStatus: paymentStatus,
-            currentPaymentStatus: order.paymentStatus,
-            cfPaymentId,
-          });
-        }
+        logger.warn("Payment marked FAILED via webhook", { cfOrderId, paymentStatus });
       } else {
-        // ⚪ UNKNOWN STATUS
-        logger.warn("Unknown payment status received", {
-          orderId,
-          userId: order.customerId,
-          paymentStatus,
-          cfPaymentId,
-          validStatuses: ["SUCCESS", "FAILED", "CANCELLED"],
-        });
+        logger.warn("Unknown payment status in webhook", { cfOrderId, paymentStatus });
       }
     });
+
+    // Create the order even if the customer never returns to the app
+    // (closed browser after paying). Idempotent with /payments/verify.
+    if (becameSuccess) {
+      const payment = await prisma.payment.findUnique({ where: { cfOrderId } });
+      if (payment) {
+        await createOrderFromPayment(payment).catch((err) =>
+          logger.error("Order creation from webhook failed", { cfOrderId, error: err.message })
+        );
+      }
+    }
 
     return true;
   } catch (error) {
     logger.error("Payment webhook processing failed", {
-      orderId: webhookData?.order_id,
-      cfPaymentId: webhookData?.cf_payment_id,
-      paymentStatus: webhookData?.payment?.payment_status,
+      cfOrderId: webhookData?.data?.order?.order_id ?? webhookData?.order_id,
       errorMessage: error.message,
-      errorStack: error.stack?.substring(0, 200),
     });
     throw error;
   }

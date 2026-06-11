@@ -43,7 +43,8 @@ function wrap(content) {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function sendOrderPlacedEmail({ to, name, orderId, restaurantName, items, total }) {
-  const itemList = (items || []).map((i) => `<p><strong>${i.name}</strong> × ${i.quantity} — ₹${(i.price * i.quantity).toFixed(0)}</p>`).join("");
+  // Prices/total arrive in paise — convert for display
+  const itemList = (items || []).map((i) => `<p><strong>${i.name}</strong> × ${i.quantity} — ₹${((i.price * i.quantity) / 100).toFixed(0)}</p>`).join("");
   await send({
     to,
     subject: `Order confirmed – #${orderId.slice(0, 8).toUpperCase()}`,
@@ -51,7 +52,7 @@ export async function sendOrderPlacedEmail({ to, name, orderId, restaurantName, 
       <div class="header"><h1>Order Placed!</h1></div>
       <div class="body">
         <p>Hi ${name}, your order from <strong>${restaurantName}</strong> has been placed successfully.</p>
-        <div class="meta">${itemList}<p style="margin-top:12px;border-top:1px solid #E5E7EB;padding-top:12px"><strong>Total: ₹${total}</strong></p></div>
+        <div class="meta">${itemList}<p style="margin-top:12px;border-top:1px solid #E5E7EB;padding-top:12px"><strong>Total: ₹${(Number(total) / 100).toFixed(2)}</strong></p></div>
         <p>We'll notify you when the restaurant accepts your order.</p>
       </div>
       <div class="footer">GhostKitchen &copy; ${new Date().getFullYear()}</div>

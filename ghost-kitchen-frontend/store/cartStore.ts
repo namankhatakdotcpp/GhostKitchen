@@ -15,7 +15,7 @@
 "use client";
 
 import { create } from "zustand";
-import axiosInstance from "./authStore";
+import { api } from "@/lib/api";
 
 type CartItem = {
   id: string;
@@ -62,11 +62,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   fetchCart: async () => {
     set({ isLoading: true, error: null });
     try {
-      const response = await axiosInstance.get("/cart");
+      const response = await api.get("/cart");
       const { items, total } = response.data.data;
       set({ items, total, isLoading: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to fetch cart";
+      const errorMsg = error.response?.data?.message || error?.error || "Failed to fetch cart";
       set({ error: errorMsg, isLoading: false, items: [] });
       throw error;
     }
@@ -78,11 +78,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   addToCart: async (menuItemId: string, quantity = 1) => {
     set({ isLoading: true, error: null });
     try {
-      await axiosInstance.post("/cart/add", { menuItemId, quantity });
+      await api.post("/cart/add", { menuItemId, quantity });
       // Fetch updated cart
       await get().fetchCart();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to add to cart";
+      const errorMsg = error.response?.data?.message || error?.error || "Failed to add to cart";
       set({ error: errorMsg, isLoading: false });
       throw error;
     }
@@ -94,11 +94,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   removeFromCart: async (cartItemId: string) => {
     set({ isLoading: true, error: null });
     try {
-      await axiosInstance.delete(`/cart/${cartItemId}`);
+      await api.delete(`/cart/${cartItemId}`);
       // Fetch updated cart
       await get().fetchCart();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to remove from cart";
+      const errorMsg = error.response?.data?.message || error?.error || "Failed to remove from cart";
       set({ error: errorMsg, isLoading: false });
       throw error;
     }
@@ -115,11 +115,11 @@ export const useCartStore = create<CartState>((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      await axiosInstance.patch(`/cart/${cartItemId}`, { quantity });
+      await api.patch(`/cart/${cartItemId}`, { quantity });
       // Fetch updated cart
       await get().fetchCart();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to update quantity";
+      const errorMsg = error.response?.data?.message || error?.error || "Failed to update quantity";
       set({ error: errorMsg, isLoading: false });
       throw error;
     }
@@ -131,10 +131,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   clearCart: async () => {
     set({ isLoading: true, error: null });
     try {
-      await axiosInstance.delete("/cart");
+      await api.delete("/cart");
       set({ items: [], total: 0, isLoading: false });
     } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to clear cart";
+      const errorMsg = error.response?.data?.message || error?.error || "Failed to clear cart";
       set({ error: errorMsg, isLoading: false });
       throw error;
     }

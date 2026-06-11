@@ -143,7 +143,7 @@ function OrderCard({
             <p className="mt-1 text-xs text-text-secondary">{minutesSince(order.placedAt)}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm font-bold text-text-primary">₹{order.totalAmount}</p>
+            <p className="text-sm font-bold text-text-primary">₹{(order.totalAmount / 100).toFixed(0)}</p>
             {order.status === "new" && countdown.secondsLeft !== null ? (
               <p className="mt-1 text-xs font-semibold text-danger">
                 {Math.max(Math.floor(countdown.secondsLeft / 60), 0)}:

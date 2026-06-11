@@ -6,8 +6,8 @@ export const createReview = async (req, res, next) => {
     const { orderId, rating, comment } = req.body;
     const userId = req.user.userId;
 
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: "Rating must be between 1 and 5" });
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
     }
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
@@ -169,8 +169,8 @@ export const updateReview = async (req, res, next) => {
       return res.status(403).json({ error: "Unauthorized to update this review" });
     }
 
-    if (rating && (rating < 1 || rating > 5)) {
-      return res.status(400).json({ error: "Rating must be between 1 and 5" });
+    if (rating !== undefined && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
+      return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
     }
 
     const updatedReview = await prisma.review.update({

@@ -52,7 +52,7 @@ router.post("/register-restaurant", authenticate, async (req, res, next) => {
     }
     res.status(201).json({ restaurant: result.restaurant, user: result.user, accessToken: result.token });
   } catch (e) {
-    // Surface the actual error to Render logs so future 500s are diagnosable.
+    // Log full details server-side; never leak raw Prisma/JS internals to clients.
     console.error("[register-restaurant] failed:", {
       userId: req.user?.userId,
       message: e?.message,
@@ -60,17 +60,7 @@ router.post("/register-restaurant", authenticate, async (req, res, next) => {
       code: e?.code,
       meta: e?.meta,
     });
-    // DIAGNOSTIC: return error details in the response body so the cause is
-    // visible from the browser without needing Render log access. If e is an
-    // operational AppError, defer to the global handler (it formats nicely).
-    // Otherwise return the raw Prisma/JS error so we can see what's happening.
-    if (e?.isOperational) return next(e);
-    return res.status(500).json({
-      error: e?.message ?? "Unknown error",
-      code: e?.code ?? null,
-      meta: e?.meta ?? null,
-      where: "register-restaurant",
-    });
+    return next(e);
   }
 });
 

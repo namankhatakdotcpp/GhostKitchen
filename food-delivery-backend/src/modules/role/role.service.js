@@ -247,7 +247,8 @@ export async function registerRider(userId, riderData) {
     where: { id: userId },
     data: {
       secondRole: "DELIVERY",
-      roles: { set: ["CUSTOMER", "DELIVERY"] },
+      // Union, not replacement — a hard set would silently strip ADMIN/RESTAURANT
+      roles: { set: Array.from(new Set([...(user.roles || []), "CUSTOMER", "DELIVERY"])) },
       vehicleType: riderData.vehicleType || "BIKE",
       vehicleNumber: riderData.vehicleNumber || null,
       isAvailable: false,

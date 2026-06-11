@@ -573,7 +573,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                             </p>
                           </div>
                           <span className="text-sm font-semibold text-text-primary">
-                            ₹{item.price * item.quantity}
+                            ₹{((item.price * item.quantity) / 100).toFixed(0)}
                           </span>
                         </div>
                       ))}
@@ -582,24 +582,24 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                         <div className="flex items-center justify-between">
                           <span>Subtotal</span>
                           <span className="font-semibold text-text-primary">
-                            ₹{order.subtotal ?? order.total - order.deliveryFee}
+                            ₹{(((order.subtotal ?? (order.total - order.deliveryFee))) / 100).toFixed(0)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Delivery fee</span>
                           <span className="font-semibold text-text-primary">
-                            ₹{order.deliveryFee}
+                            ₹{(order.deliveryFee / 100).toFixed(0)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span>Discount</span>
                           <span className="font-semibold text-success">
-                            -₹{order.discount ?? 0}
+                            -₹{((order.discount ?? 0) / 100).toFixed(0)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between border-t border-border pt-3 text-base">
                           <span className="font-semibold text-text-primary">Total</span>
-                          <span className="font-bold text-text-primary">₹{order.total}</span>
+                          <span className="font-bold text-text-primary">₹{(order.total / 100).toFixed(0)}</span>
                         </div>
                       </div>
                     </div>

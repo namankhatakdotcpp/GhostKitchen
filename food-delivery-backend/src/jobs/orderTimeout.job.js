@@ -3,59 +3,46 @@ import { prisma } from "../config/prisma.js";
 import { logger } from "../utils/logger.js";
 
 /**
- * Order Timeout Job
- * 
- * Runs every 5 minutes
- * Cancels orders that are:
- * - Status: PENDING
- * - Payment Status: PENDING
- * - Created more than 15 minutes ago
- * 
- * This prevents orders from hanging indefinitely if payment fails silently
+ * Housekeeping job — runs every 10 minutes.
+ *
+ * 1. Expire stale payment intents: Payment rows stuck in PENDING for >30 min
+ *    (user opened checkout and never paid). Keeps payment history clean and
+ *    stops them being picked up by /payments/verify later.
+ * 2. Purge expired refresh tokens so the table doesn't grow forever.
+ *
+ * NOTE: the previous version updated Order rows by a `paymentStatus` column
+ * that doesn't exist on the Order model — it threw a Prisma validation error
+ * on every run and never did anything.
  */
 
-const ORDER_TIMEOUT_MINUTES = 15;
+const PAYMENT_TIMEOUT_MINUTES = 30;
 
 export const startOrderTimeoutJob = () => {
-  // Run every 5 minutes
-  cron.schedule("*/5 * * * *", async () => {
+  cron.schedule("*/10 * * * *", async () => {
     try {
-      logger.info("Order timeout job started");
+      const cutoff = new Date(Date.now() - PAYMENT_TIMEOUT_MINUTES * 60 * 1000);
 
-      const timeoutTime = new Date(Date.now() - ORDER_TIMEOUT_MINUTES * 60 * 1000);
-
-      // Cancel all expired orders in a single atomic operation
-      // This is more efficient than finding IDs first then updating
-      const result = await prisma.order.updateMany({
-        where: {
-          status: "PENDING",
-          paymentStatus: "PENDING",
-          createdAt: {
-            lt: timeoutTime,
-          },
-        },
-        data: {
-          status: "CANCELLED",
-          paymentStatus: "FAILED", // Mark as failed since payment wasn't received
-        },
+      const stale = await prisma.payment.updateMany({
+        where: { status: "PENDING", createdAt: { lt: cutoff } },
+        data: { status: "FAILED" },
       });
 
-      if (result.count === 0) {
-        logger.info("No expired orders found");
-        return;
+      const tokens = await prisma.refreshToken.deleteMany({
+        where: { expiresAt: { lt: new Date() } },
+      });
+
+      if (stale.count > 0 || tokens.count > 0) {
+        logger.info("Housekeeping job completed", {
+          expiredPayments: stale.count,
+          purgedRefreshTokens: tokens.count,
+        });
       }
-
-      logger.info("Order timeout job completed", {
-        cancelledCount: result.count,
-      });
     } catch (error) {
-      logger.error("Order timeout job error", {
-        error: error.message,
-      });
+      logger.error("Housekeeping job error", { error: error.message });
     }
   });
 
-  logger.info("Order timeout job started (runs every 5 minutes)");
+  logger.info("Housekeeping job scheduled (every 10 minutes)");
 };
 
 export default startOrderTimeoutJob;

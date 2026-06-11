@@ -89,8 +89,8 @@ export default function RestaurantsPage() {
                   cuisines={restaurant.cuisines}
                   rating={restaurant.rating || 4.5}
                   deliveryTime={restaurant.deliveryTime || 25}
-                  deliveryFee={restaurant.deliveryFee || 40}
-                  minOrder={restaurant.minOrder || 299}
+                  deliveryFee={(restaurant as any)?.address?.deliveryFee ?? restaurant.deliveryFee ?? 4000}
+                  minOrder={(restaurant as any)?.address?.minOrder ?? restaurant.minOrder ?? 29900}
                   imageUrl={restaurant.imageUrl}
                   isVeg={false}
                   index={idx}

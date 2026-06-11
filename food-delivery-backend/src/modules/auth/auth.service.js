@@ -113,21 +113,41 @@ export const refreshAccessToken = async (rawRefreshToken) => {
   // 3. Fetch current user info (roles/restaurantId may have changed since login)
   const user = await prisma.user.findUnique({
     where: { id: decoded.userId },
-    select: USER_SELECT,
+    select: { ...USER_SELECT, isBlocked: true, isSuspended: true },
   });
   if (!user) throw new AppError("User not found", 404);
 
-  // 4. Rotate: delete old token, issue new pair
-  await prisma.refreshToken.delete({ where: { tokenHash } });
+  // Blocked/suspended users must not be able to mint new access tokens —
+  // otherwise a block only takes effect after the refresh token expires (7d).
+  if (user.isBlocked || user.isSuspended) {
+    await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+    throw new AppError("Account is blocked or suspended", 403);
+  }
 
-  const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(buildTokenPayload(user));
+  // 4. Rotate: delete old token, issue new pair.
+  // deleteMany (not delete) — two concurrent refreshes with the same token
+  // would make the second delete throw P2025 and surface as a 500.
+  const deleted = await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+  if (deleted.count === 0) {
+    // Token already rotated by a concurrent request — treat as revoked.
+    throw new AppError("Refresh token revoked or expired", 401);
+  }
+
+  const { isBlocked: _b, isSuspended: _s, ...safeUser } = user;
+  const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(buildTokenPayload(safeUser));
   await storeRefreshToken(user.id, newRefreshToken);
+
+  // Opportunistic cleanup: purge this user's expired tokens so the table
+  // doesn't grow unboundedly (no separate cron needed).
+  prisma.refreshToken
+    .deleteMany({ where: { userId: user.id, expiresAt: { lt: new Date() } } })
+    .catch(() => {});
 
   return {
     success: true,
     message: "Token refreshed",
     data: {
-      user: { ...user, role: user.activeRole },
+      user: { ...safeUser, role: safeUser.activeRole },
       tokens: { accessToken, refreshToken: newRefreshToken },
     },
   };

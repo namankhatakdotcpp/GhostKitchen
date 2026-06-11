@@ -37,6 +37,34 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Response interceptor ──────────────────────────────────────────────────────
+// Single-flight refresh: concurrent 401s share one refresh call. The backend
+// rotates refresh tokens, so parallel refreshes would invalidate each other
+// and randomly log users out (the second caller's token is already revoked).
+let refreshInFlight: Promise<{
+  accessToken?: string;
+  refreshToken?: string;
+  user?: unknown;
+}> | null = null;
+
+function performRefresh() {
+  if (!refreshInFlight) {
+    let refreshToken: string | undefined;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("gk-auth");
+        refreshToken = raw ? JSON.parse(raw)?.state?.refreshToken : undefined;
+      } catch { /* ignore */ }
+    }
+    refreshInFlight = api
+      .post("/auth/refresh", refreshToken ? { refreshToken } : {})
+      .then((res) => res.data?.data ?? {})
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<{ code?: string; message?: string; error?: string }>) => {
@@ -49,20 +77,8 @@ api.interceptors.response.use(
     ) {
       originalConfig._retry = true;
       try {
-        // Pass stored refreshToken in body as fallback for cross-origin environments
-        // where cookies may be blocked by the browser.
-        let refreshToken: string | undefined;
-        if (typeof window !== "undefined") {
-          try {
-            const raw = localStorage.getItem("gk-auth");
-            refreshToken = raw ? JSON.parse(raw)?.state?.refreshToken : undefined;
-          } catch { /* ignore */ }
-        }
-
-        const refreshRes = await api.post("/auth/refresh", refreshToken ? { refreshToken } : {});
-        const newToken = refreshRes.data?.data?.accessToken;
-        const newRefreshToken = refreshRes.data?.data?.refreshToken;
-        const refreshedUser = refreshRes.data?.data?.user;
+        const { accessToken: newToken, refreshToken: newRefreshToken, user: refreshedUser } =
+          await performRefresh();
 
         if (newToken && typeof window !== "undefined") {
           try {
@@ -80,7 +96,7 @@ api.interceptors.response.use(
           const storeUpdate: Record<string, unknown> = { accessToken: newToken };
           if (newRefreshToken) storeUpdate.refreshToken = newRefreshToken;
           if (refreshedUser) storeUpdate.user = refreshedUser;
-          useAuthStore.setState(storeUpdate);
+          useAuthStore.setState(storeUpdate as never);
         }
 
         // Replay the original request with the new token

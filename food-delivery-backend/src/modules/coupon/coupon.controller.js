@@ -5,54 +5,58 @@ import { cacheDelete, cacheOrFetch, cacheSet } from "../../utils/cache.js";
 /**
  * Validate and apply a coupon to an order total
  */
+// All monetary values (orderTotal, minOrder, FLAT discountValue, discountAmount,
+// finalAmount) are in PAISE — same unit the rest of the platform uses.
 export const validateCoupon = async (req, res, next) => {
   try {
-    const { code, orderTotal } = req.body;
+    const { code, orderTotal, restaurantId } = req.body;
 
-    if (!code || !orderTotal) {
-      return res.status(400).json({ error: "Code and orderTotal required" });
+    if (!code || typeof orderTotal !== "number" || orderTotal <= 0) {
+      return res.status(400).json({ error: "Code and orderTotal (paise) required" });
     }
 
-    // Check cache first
+    // Short cache — long TTLs served stale coupons after admin deactivation
     const cacheKey = `coupon:${code.toUpperCase()}`;
-    let coupon = await cacheOrFetch(
+    const coupon = await cacheOrFetch(
       cacheKey,
       async () => {
         return await prisma.coupon.findUnique({
           where: { code: code.toUpperCase() },
         });
       },
-      3600 // Cache for 1 hour
+      60
     );
 
-    if (!coupon) {
+    if (!coupon || !coupon.isActive) {
       return res.status(404).json({ error: "Invalid coupon code" });
     }
 
-    // Check expiry
     if (new Date(coupon.expiresAt) < new Date()) {
       return res.status(400).json({ error: "Coupon expired" });
     }
 
-    // Check max uses
     if (coupon.usedCount >= coupon.maxUses) {
       return res.status(400).json({ error: "Coupon usage limit exceeded" });
     }
 
-    // Check minimum order value
-    if (orderTotal < coupon.minOrder) {
+    if (coupon.restaurantId && restaurantId && coupon.restaurantId !== restaurantId) {
+      return res.status(400).json({ error: "Coupon is not valid for this restaurant" });
+    }
+
+    const minOrder = Number(coupon.minOrder);
+    if (orderTotal < minOrder) {
       return res.status(400).json({
-        error: `Minimum order value of ₹${coupon.minOrder} required`,
+        error: `Minimum order value of ₹${(minOrder / 100).toFixed(0)} required`,
       });
     }
 
-    // Calculate discount
     let discountAmount = 0;
     if (coupon.discountType === "PERCENTAGE") {
-      discountAmount = (orderTotal * coupon.discountValue) / 100;
+      discountAmount = Math.round((orderTotal * Number(coupon.discountValue)) / 100);
     } else if (coupon.discountType === "FLAT") {
-      discountAmount = coupon.discountValue;
+      discountAmount = Math.round(Number(coupon.discountValue));
     }
+    discountAmount = Math.min(discountAmount, orderTotal);
 
     const finalAmount = Math.max(0, orderTotal - discountAmount);
 
@@ -61,51 +65,11 @@ export const validateCoupon = async (req, res, next) => {
       coupon: {
         code: coupon.code,
         discountType: coupon.discountType,
-        discountValue: coupon.discountValue,
-        discountAmount: parseFloat(discountAmount.toFixed(2)),
+        discountValue: Number(coupon.discountValue),
+        discountAmount,
         originalTotal: orderTotal,
-        finalAmount: parseFloat(finalAmount.toFixed(2)),
+        finalAmount,
       },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Apply coupon (increment usage)
- * Called after order placement
- */
-export const applyCoupon = async (req, res, next) => {
-  try {
-    const { code } = req.body;
-
-    if (!code) {
-      return res.status(400).json({ error: "Coupon code required" });
-    }
-
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
-    });
-
-    if (!coupon) {
-      return res.status(404).json({ error: "Invalid coupon code" });
-    }
-
-    // Increment usage
-    const updated = await prisma.coupon.update({
-      where: { id: coupon.id },
-      data: { usedCount: coupon.usedCount + 1 },
-    });
-
-    // Invalidate cache
-    cacheDelete(`coupon:${code.toUpperCase()}`);
-
-    logger.info(`Coupon ${code} applied. Usage: ${updated.usedCount}/${coupon.maxUses}`);
-
-    res.json({
-      success: true,
-      message: "Coupon applied successfully",
     });
   } catch (error) {
     next(error);

@@ -17,6 +17,7 @@ import couponRoutes from "./modules/coupon/coupon.routes.js";
 import roleRoutes from "./modules/role/role.routes.js";
 import deliveryRoutes from "./modules/delivery/delivery.routes.js";
 import notificationRoutes from "./modules/notification/notification.routes.js";
+import userRoutes from "./modules/user/user.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -30,6 +31,10 @@ import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/
 import { verifyAccessToken } from "./utils/jwt.js";
 
 const app = express();
+
+// Behind Render's proxy — required so express-rate-limit and req.ip see the
+// real client IP instead of the proxy's (otherwise all users share one bucket).
+app.set("trust proxy", 1);
 
 // ── 1. Security headers (FIRST — before anything touches the response) ─────
 app.use(helmet({
@@ -76,8 +81,10 @@ app.use(cors({
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    // Allow all Vercel preview deployments
-    if (origin.endsWith(".vercel.app")) return cb(null, true);
+    // Allow this project's Vercel preview deployments only — a blanket
+    // *.vercel.app rule would let any attacker-deployed Vercel app make
+    // credentialed requests.
+    if (/^https:\/\/ghost-kitchen[a-z0-9-]*\.vercel\.app$/.test(origin)) return cb(null, true);
     cb(new Error(`CORS: origin '${origin}' not allowed`));
   },
   credentials: true,
@@ -91,7 +98,9 @@ app.use(cors({
 app.use(compression({ level: 6 }));
 
 // ── 5. Raw body for webhook signature verification (before express.json) ─────
-app.use("/api/payment/webhook", express.raw({ type: "application/json" }), (req, _res, next) => {
+// NOTE: must match the mounted route exactly (/api/payments/webhook, plural) —
+// signature verification needs the original bytes, not re-stringified JSON.
+app.use("/api/payments/webhook", express.raw({ type: "application/json" }), (req, _res, next) => {
   req.rawBody = req.body;
   next();
 });
@@ -125,7 +134,9 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/refresh", authLimiter);
 app.use("/api/role/switch", roleSwitchLimiter);
-app.use("/api/payments", paymentLimiter);
+// Webhook is exempt — Cashfree retries from shared IPs would trip the limiter
+app.use("/api/payments", (req, res, next) =>
+  req.path === "/webhook" ? next() : paymentLimiter(req, res, next));
 app.use("/api/restaurants", browseLimiter);
 
 // ── 11. Health / diagnostic endpoints ────────────────────────────────────────
@@ -133,15 +144,34 @@ app.get("/", (_req, res) => res.json({ status: "GhostKitchen API running" }));
 
 app.get("/health", async (_req, res) => {
   try {
-    const redisStatus = await redisHealthCheck();
-    res.json({ status: "OK", timestamp: new Date().toISOString(), environment: env.NODE_ENV, redis: redisStatus });
+    const [redisStatus, dbStatus] = await Promise.allSettled([
+      redisHealthCheck(),
+      (async () => {
+        const t0 = Date.now();
+        await prisma.$queryRaw`SELECT 1`;
+        return { status: "healthy", latencyMs: Date.now() - t0 };
+      })(),
+    ]);
+    const redis = redisStatus.status === "fulfilled" ? redisStatus.value : { status: "unhealthy", message: redisStatus.reason?.message };
+    const db = dbStatus.status === "fulfilled" ? dbStatus.value : { status: "unhealthy", message: dbStatus.reason?.message };
+    const overall = db.status === "healthy" ? "OK" : "DEGRADED";
+    res.status(overall === "OK" ? 200 : 503).json({
+      status: overall,
+      timestamp: new Date().toISOString(),
+      environment: env.NODE_ENV,
+      redis,
+      db,
+    });
   } catch (error) {
     res.status(503).json({ status: "UNHEALTHY", error: error.message });
   }
 });
 
-// Seed endpoint — protected by ALLOW_SEED env gate in seed.js
+// Seed endpoint — requires ALLOW_SEED=true in every environment
 app.get("/seed", async (req, res, next) => {
+  if (process.env.ALLOW_SEED !== "true") {
+    return res.status(403).json({ success: false, message: "Seeding disabled. Set ALLOW_SEED=true to enable." });
+  }
   try {
     await seedDatabase();
     res.json({ success: true, message: "DB seeded" });
@@ -255,6 +285,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/role", roleRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/user", userRoutes);
 
 // ── 15. 404 ───────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

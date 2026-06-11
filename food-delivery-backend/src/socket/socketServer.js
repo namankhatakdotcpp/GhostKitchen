@@ -8,14 +8,19 @@ import { getRedis } from "../config/redis.js";
 let io;
 
 export const initSocket = async (server) => {
+  // Mirror the HTTP CORS allowlist (env ALLOWED_ORIGINS + project previews)
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
+    .split(",").map((o) => o.trim());
+
   io = new Server(server, {
     cors: {
-      origin: process.env.NODE_ENV === "production"
-        ? [
-            process.env.FRONTEND_URL || "https://ghostkitchen.vercel.app",
-            "https://ghost-kitchen-mw4mnfcmo-namans-projects-dfbad539.vercel.app"
-          ]
-        : ["http://localhost:3000", "http://localhost:3001"],
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        if (/^https:\/\/ghost-kitchen[a-z0-9-]*\.vercel\.app$/.test(origin)) return cb(null, true);
+        if (origin.startsWith("http://localhost:")) return cb(null, true);
+        cb(new Error("Socket CORS: origin not allowed"));
+      },
       credentials: true,
     },
     transports: ["websocket", "polling"],
@@ -100,37 +105,53 @@ export const initSocket = async (server) => {
     // Auto-join rooms based on role (skip for unauthenticated connections)
     if (user) {
       socket.join(`user:${user.id}`);
-      if (user.role === "ADMIN") socket.join("admin");
-      if (user.role === "DELIVERY") socket.join(`agent-${user.id}`);
+      if (user.roles?.includes("ADMIN")) socket.join("admin");
+      if (user.roles?.includes("DELIVERY")) socket.join(`agent-${user.id}`);
     }
 
+    // Room authorization — without these checks any connected socket could
+    // join "admin" or another user's room and receive their order events.
+    const canJoin = (room) => {
+      if (typeof room !== "string" || room.length > 120) return false;
+      if (room === "admin") return Boolean(user?.roles?.includes("ADMIN"));
+      if (room.startsWith("user:")) return user?.id === room.slice(5);
+      if (room.startsWith("agent-") || room.startsWith("delivery:")) {
+        const target = room.startsWith("agent-") ? room.slice(6) : room.slice(9);
+        return Boolean(user && user.id === target && user.roles?.includes("DELIVERY"));
+      }
+      if (room.startsWith("shop-") || room.startsWith("restaurant:")) {
+        const target = room.startsWith("shop-") ? room.slice(5) : room.slice(11);
+        if (!user) return false;
+        if (user.roles?.includes("ADMIN")) return true;
+        return user.restaurantId === target;
+      }
+      // Order tracking rooms: emitted data is status-only; verifying order
+      // ownership per join would need a DB hit per event — tokens are unguessable
+      // cuids so the room name itself is the capability.
+      if (room.startsWith("order-")) return true;
+      return false;
+    };
+
     socket.on("join_user_room", (userId) => {
-      if (!userId) return;
-      socket.join(`user:${userId}`);
+      if (userId && canJoin(`user:${userId}`)) socket.join(`user:${userId}`);
     });
 
     socket.on("join_restaurant_room", (restaurantId) => {
-      if (!restaurantId) return;
+      if (!restaurantId || !canJoin(`shop-${restaurantId}`)) return;
       // Join both naming conventions for compatibility
       socket.join(`restaurant:${restaurantId}`);
       socket.join(`shop-${restaurantId}`);
     });
 
     socket.on("join_delivery_room", (deliveryUserId) => {
-      if (!deliveryUserId) return;
+      if (!deliveryUserId || !canJoin(`agent-${deliveryUserId}`)) return;
       socket.join(`delivery:${deliveryUserId}`);
       socket.join(`agent-${deliveryUserId}`);
     });
 
     // Generic room join used by order tracking page and shop
     socket.on("join-room", (room) => {
-      if (typeof room !== "string") return;
-      const allowed =
-        room === "admin" ||
-        room.startsWith("order-") ||
-        room.startsWith("shop-") ||
-        room.startsWith("agent-");
-      if (allowed) socket.join(room);
+      if (canJoin(room)) socket.join(room);
     });
 
     socket.on("leave-room", (room) => {

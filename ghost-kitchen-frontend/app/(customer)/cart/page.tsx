@@ -176,7 +176,7 @@ export default function CartPage() {
                           {item.menuItem.name}
                         </h3>
                         <p className="text-sm text-gray-600">
-                          ₹{price.toFixed(2)} each
+                          ₹{(price / 100).toFixed(2)} each
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
                           Restaurant: {item.menuItem.restaurantId}
@@ -186,7 +186,7 @@ export default function CartPage() {
                       {/* Quantity & Total */}
                       <div className="flex flex-col items-end gap-2">
                         <p className="font-bold text-gray-800">
-                          ₹{(price * item.quantity).toFixed(2)}
+                          ₹{((price * item.quantity) / 100).toFixed(2)}
                         </p>
                         
                         {/* Quantity Selector */}

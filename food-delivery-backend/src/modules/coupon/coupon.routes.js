@@ -1,6 +1,7 @@
 import express from "express";
 import * as couponController from "./coupon.controller.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
+import { roleMiddleware } from "../../middlewares/role.middleware.js";
 
 const router = express.Router();
 
@@ -35,17 +36,9 @@ const router = express.Router();
  */
 router.post("/validate", couponController.validateCoupon);
 
-/**
- * POST /api/coupons/apply
- * Apply coupon (increment usage counter)
- * Called after order is placed
- * 
- * Request:
- * {
- *   "code": "SUMMER50"
- * }
- */
-router.post("/apply", couponController.applyCoupon);
+// NOTE: the old public POST /apply endpoint is gone — it let anyone exhaust a
+// coupon's usage limit without ordering. Usage is now counted atomically
+// inside order creation / payment capture.
 
 /**
  * GET /api/coupons/active
@@ -108,7 +101,7 @@ router.get("/:code", couponController.getCouponByCode);
  *   "expiresAt": "2025-06-30"
  * }
  */
-router.post("/admin/create", authenticate, couponController.createCoupon);
+router.post("/admin/create", authenticate, roleMiddleware(["ADMIN"]), couponController.createCoupon);
 
 /**
  * PUT /api/coupons/admin/:code
@@ -120,12 +113,12 @@ router.post("/admin/create", authenticate, couponController.createCoupon);
  *   "expiresAt": "2025-07-31"
  * }
  */
-router.put("/admin/:code", authenticate, couponController.updateCoupon);
+router.put("/admin/:code", authenticate, roleMiddleware(["ADMIN"]), couponController.updateCoupon);
 
 /**
  * DELETE /api/coupons/admin/:code
  * Delete coupon (admin only)
  */
-router.delete("/admin/:code", authenticate, couponController.deleteCoupon);
+router.delete("/admin/:code", authenticate, roleMiddleware(["ADMIN"]), couponController.deleteCoupon);
 
 export default router;

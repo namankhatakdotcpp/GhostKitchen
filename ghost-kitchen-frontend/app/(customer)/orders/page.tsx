@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Clock, CheckCircle, Truck, AlertCircle, Package, Star } from "lucide-react";
+import { Clock, CheckCircle, Truck, AlertCircle, Package, Star, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ReviewForm from "@/components/customer/ReviewForm";
+import { useCartStore } from "@/store/cartStore";
 
 interface OrderItemJSON {
   menuItemId: string;
@@ -33,11 +35,38 @@ interface Order {
 }
 
 export default function OrdersPage() {
+  const router = useRouter();
+  const { clearCart, addToCart } = useCartStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [reviewingOrderId, setReviewingOrderId] = useState<string | null>(null);
   const [reviewedOrderIds, setReviewedOrderIds] = useState<Set<string>>(new Set());
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+
+  const handleReorder = async (orderId: string) => {
+    setReorderingId(orderId);
+    try {
+      const { data } = await api.post(`/orders/${orderId}/reorder`);
+      if (data.items.length === 0) {
+        toast.error("None of the original items are available anymore.");
+        return;
+      }
+      if (data.partial) {
+        toast(`${data.unavailableItems.join(", ")} no longer available — adding rest to cart.`, { icon: "⚠️" });
+      }
+      // Clear existing cart then add each reorder item
+      await clearCart();
+      for (const item of data.items) {
+        await addToCart(item.menuItemId, item.quantity);
+      }
+      router.push("/cart");
+    } catch {
+      toast.error("Could not reorder. Please try again.");
+    } finally {
+      setReorderingId(null);
+    }
+  };
 
   useEffect(() => {
     fetchOrders();
@@ -160,7 +189,7 @@ export default function OrdersPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-gray-900">₹{order.total.toFixed(2)}</p>
+                      <p className="font-semibold text-gray-900">₹{(order.total / 100).toFixed(2)}</p>
                       <p className="text-xs text-gray-600">{order.items?.length ?? 0} items</p>
                     </div>
                   </div>
@@ -178,7 +207,7 @@ export default function OrdersPage() {
                               <p className="text-gray-600">Qty: {item.quantity}</p>
                             </div>
                             <p className="text-gray-900 font-semibold">
-                              ₹{(item.price * item.quantity).toFixed(2)}
+                              ₹{((item.price * item.quantity) / 100).toFixed(2)}
                             </p>
                           </div>
                         ))}
@@ -187,18 +216,18 @@ export default function OrdersPage() {
 
                     <div className="border-t pt-3 text-sm space-y-1">
                       <div className="flex justify-between text-gray-600">
-                        <span>Subtotal</span><span>₹{order.subtotal.toFixed(2)}</span>
+                        <span>Subtotal</span><span>₹{(order.subtotal / 100).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-gray-600">
-                        <span>Delivery fee</span><span>₹{order.deliveryFee.toFixed(2)}</span>
+                        <span>Delivery fee</span><span>₹{(order.deliveryFee / 100).toFixed(2)}</span>
                       </div>
                       {order.discount > 0 && (
                         <div className="flex justify-between text-green-600">
-                          <span>Discount</span><span>-₹{order.discount.toFixed(2)}</span>
+                          <span>Discount</span><span>-₹{(order.discount / 100).toFixed(2)}</span>
                         </div>
                       )}
                       <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t">
-                        <span>Total</span><span>₹{order.total.toFixed(2)}</span>
+                        <span>Total</span><span>₹{(order.total / 100).toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -209,6 +238,17 @@ export default function OrdersPage() {
                       >
                         Track Order
                       </Link>
+                    )}
+
+                    {["DELIVERED", "CANCELLED"].includes(order.status) && (
+                      <button
+                        onClick={() => handleReorder(order.id)}
+                        disabled={reorderingId === order.id}
+                        className="flex items-center justify-center gap-2 w-full py-2 px-4 border border-orange-500 text-orange-600 rounded-lg hover:bg-orange-50 font-medium transition text-sm disabled:opacity-50"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        {reorderingId === order.id ? "Adding to cart..." : "Reorder"}
+                      </button>
                     )}
 
                     {order.status === "DELIVERED" && !reviewedOrderIds.has(order.id) && (

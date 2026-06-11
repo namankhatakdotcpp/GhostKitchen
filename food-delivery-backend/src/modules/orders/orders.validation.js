@@ -16,14 +16,24 @@ export const validateCreateOrder = (payload) => {
     return "At least one order item is required";
   }
 
+  if (payload.items.length > 50) {
+    return "Too many distinct items in one order (max 50)";
+  }
+
   // Validate each item has menuItemId and quantity
+  const seen = new Set();
   for (const item of payload.items) {
     if (!item.menuItemId || typeof item.menuItemId !== "string") {
       return "Each item must have a valid menuItemId";
     }
 
-    if (typeof item.quantity !== "number" || item.quantity <= 0) {
-      return "Each item must have a valid quantity greater than 0";
+    if (seen.has(item.menuItemId)) {
+      return "Duplicate menu items in order — combine quantities instead";
+    }
+    seen.add(item.menuItemId);
+
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0 || item.quantity > 99) {
+      return "Each item must have an integer quantity between 1 and 99";
     }
   }
 

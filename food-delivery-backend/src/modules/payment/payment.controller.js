@@ -7,8 +7,6 @@ import { env } from "../../config/env.js";
 import cashfree from "../../config/cashfree.js";
 import { v4 as uuid } from "uuid";
 import { calculateOrderTotal } from "../orders/orders.service.js";
-import { emitOrderNew } from "../../socket/socket.server.js";
-import { createNotification } from "../notification/notification.service.js";
 
 /**
  * Payment Controller - HTTP Handlers
@@ -98,10 +96,13 @@ export const webhook = async (req, res, next) => {
       rawBodyString = JSON.stringify(rawBody);
     }
 
+    // Cashfree signs webhooks with the API secret key; CASHFREE_CLIENT_SECRET
+    // is an optional override (was defaulting to "" — every signature failed).
+    const webhookSecret = env.CASHFREE_CLIENT_SECRET || env.CASHFREE_SECRET_KEY;
     const isValid = verifyCashfreeSignature(
       rawBodyString,
       signature,
-      env.CASHFREE_CLIENT_SECRET
+      webhookSecret
     );
 
     if (!isValid) {
@@ -211,7 +212,7 @@ export const createPaymentOrder = async (req, res, next) => {
     });
     if (!customer) return res.status(404).json({ message: "User not found" });
 
-    const { subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+    const { orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
       restaurantId,
       items,
       couponCode,
@@ -252,7 +253,9 @@ export const createPaymentOrder = async (req, res, next) => {
         restaurantId,
         amount: total,
         status: "PENDING",
-        itemsSnapshot: JSON.stringify(items),
+        // Full priced snapshot — order creation after payment must use exactly
+        // these amounts, never a recalculation against a menu that may have changed.
+        itemsSnapshot: JSON.stringify({ orderItems, subtotal, deliveryFee, discount, total }),
         deliveryAddress: JSON.stringify(deliveryAddress),
         couponCode: couponCode || null,
       },
@@ -308,55 +311,14 @@ export const verifyPaymentAndCreateOrder = async (req, res, next) => {
       return res.status(400).json({ message: "Payment not completed", status: cfOrderStatus });
     }
 
-    const parsedItems = JSON.parse(pendingPayment.itemsSnapshot);
-    const parsedAddress = JSON.parse(pendingPayment.deliveryAddress);
-
-    const { orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
-      restaurantId: pendingPayment.restaurantId,
-      items: parsedItems,
-      couponCode: pendingPayment.couponCode,
-    });
-
-    const order = await prisma.order.create({
-      data: {
-        customerId,
-        restaurantId: pendingPayment.restaurantId,
-        status: "PLACED",
-        items: orderItems,
-        subtotal,
-        deliveryFee,
-        discount,
-        total,
-        deliveryAddress: parsedAddress,
-        cfOrderId,
-      },
-      include: { restaurant: true },
-    });
-
-    await prisma.payment.update({
-      where: { cfOrderId },
+    await prisma.payment.updateMany({
+      where: { cfOrderId, status: "PENDING" },
       data: { status: "SUCCESS" },
     });
 
-    emitOrderNew({ restaurantId: pendingPayment.restaurantId, order });
-
-    // Notify customer and restaurant owner
-    createNotification({
-      userId: customerId,
-      title: "Order placed!",
-      body: "Your order is being prepared.",
-      type: "ORDER_UPDATE",
-      entityId: order.id,
-    });
-    if (order.restaurant?.ownerId) {
-      createNotification({
-        userId: order.restaurant.ownerId,
-        title: "New order!",
-        body: `Order #${order.id.slice(-6).toUpperCase()} received.`,
-        type: "ORDER_UPDATE",
-        entityId: order.id,
-      });
-    }
+    // Shared, idempotent order creation (also used by the webhook) — uses the
+    // priced snapshot so the order always matches what was actually charged.
+    const order = await paymentService.createOrderFromPayment(pendingPayment);
 
     return res.json({ orderId: order.id, success: true });
   } catch (error) {
@@ -378,25 +340,31 @@ export const getPaymentHistory = async (req, res, next) => {
       take: 50,
     });
 
-    // Enrich with order data via cfOrderId
-    const enriched = await Promise.all(
-      payments.map(async (p) => {
-        const order = await prisma.order.findFirst({
-          where: { cfOrderId: p.cfOrderId },
-          include: { restaurant: { select: { name: true } } },
-        });
-        return {
-          id: p.id,
-          cfOrderId: p.cfOrderId,
-          amount: p.amount,
-          status: p.status,
-          createdAt: p.createdAt,
-          orderId: order?.id ?? null,
-          restaurantName: order?.restaurant?.name ?? null,
-          items: order?.items ?? JSON.parse(p.itemsSnapshot || "[]"),
-        };
-      })
-    );
+    // Single batched lookup instead of one order query per payment (N+1)
+    const orders = await prisma.order.findMany({
+      where: { cfOrderId: { in: payments.map((p) => p.cfOrderId) } },
+      select: { id: true, cfOrderId: true, items: true, restaurant: { select: { name: true } } },
+    });
+    const orderByCfId = new Map(orders.map((o) => [o.cfOrderId, o]));
+
+    const enriched = payments.map((p) => {
+      const order = orderByCfId.get(p.cfOrderId);
+      let snapshotItems = [];
+      try {
+        const parsed = JSON.parse(p.itemsSnapshot || "[]");
+        snapshotItems = Array.isArray(parsed) ? parsed : parsed.orderItems ?? [];
+      } catch { /* ignore malformed snapshots */ }
+      return {
+        id: p.id,
+        cfOrderId: p.cfOrderId,
+        amount: p.amount,
+        status: p.status,
+        createdAt: p.createdAt,
+        orderId: order?.id ?? null,
+        restaurantName: order?.restaurant?.name ?? null,
+        items: order?.items ?? snapshotItems,
+      };
+    });
 
     res.json({ payments: enriched });
   } catch (error) {
@@ -418,7 +386,9 @@ export const getPaymentHistory = async (req, res, next) => {
 export const retryPayment = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user.id;
+    // auth middleware exposes userId (req.user.id was always undefined,
+    // which made every retry fail the ownership check)
+    const userId = req.user.userId;
 
     if (!orderId) {
       return res.status(400).json({

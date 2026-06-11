@@ -1,8 +1,11 @@
 import dotenv from "dotenv";
 import http from "http";
 
-// 1. Load env before EVERYTHING
+// 1. Load env before EVERYTHING (must be before Sentry init)
 dotenv.config({ path: ".env" });
+
+import { initSentry } from "./config/sentry.js";
+initSentry();
 
 import app from "./app.js";
 
@@ -14,13 +17,16 @@ import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
 import cron from "node-cron";
 import { logger } from "./utils/logger.js";
+import { captureException } from "./config/sentry.js";
 
 // Global Async Error Safety
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled Promise Rejection", { reason, promise });
+  captureException(reason instanceof Error ? reason : new Error(String(reason)));
 });
 process.on("uncaughtException", (error) => {
   logger.error("Uncaught Exception", { error: error.message, stack: error.stack });
+  captureException(error);
 });
 
 const startServer = async () => {

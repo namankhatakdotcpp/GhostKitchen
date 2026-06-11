@@ -15,8 +15,20 @@ import {
   getRestaurantWithCache,
   getRestaurantAnalyticsData,
 } from "./restaurant.service.js";
-import { redis } from "../../lib/redis.js";
+import { cacheDelete } from "../../utils/cache.js";
 import { prisma } from "../../config/prisma.js";
+
+// Invalidate the read-through cache used by getRestaurantWithCache.
+// (The previous redis.del("restaurant:<id>") calls hit keys that never
+// existed, and the raw Upstash client threw when env vars were unset.)
+async function invalidateRestaurant(id) {
+  try {
+    const r = await prisma.restaurant.findUnique({ where: { id }, select: { slug: true } });
+    const keys = [`restaurant:id:${id}`];
+    if (r?.slug) keys.push(`restaurant:slug:${r.slug}`);
+    await cacheDelete(...keys);
+  } catch { /* cache invalidation is best-effort */ }
+}
 import {
   validateRestaurant,
   validateMenuItem,
@@ -165,7 +177,6 @@ export const createNewRestaurant = async (req, res) => {
       req.user.userId
     );
 
-    await redis.del("restaurants:all");
 
     return res.status(201).json({ message: "Restaurant created successfully", restaurant });
   } catch (error) {
@@ -179,10 +190,11 @@ export const updateExistingRestaurant = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) {
+        return res.status(403).json({ message: "You are not the owner of this restaurant" });
+      }
     }
 
     const validationError = validateUpdateRestaurant(updateData);
@@ -193,8 +205,7 @@ export const updateExistingRestaurant = async (req, res) => {
 
     const updated = await updateRestaurant(id, updateData);
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(200).json({ message: "Restaurant updated successfully", restaurant: updated });
   } catch (error) {
@@ -207,16 +218,16 @@ export const toggleStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
-
-    if (!restaurant) {
-      return res.status(403).json({ message: "You are not the owner of this restaurant" });
+    if (req.user.role !== "ADMIN") {
+      const restaurant = await getRestaurantByIdAndOwner(id, req.user.userId);
+      if (!restaurant) {
+        return res.status(403).json({ message: "You are not the owner of this restaurant" });
+      }
     }
 
     const updated = await toggleRestaurantStatus(id);
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(200).json({ message: "Restaurant status updated", restaurant: updated });
   } catch (error) {
@@ -288,8 +299,7 @@ export const addNewMenuItem = async (req, res) => {
       isBestseller,
     });
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(201).json({ message: "Menu item added successfully", menuItem });
   } catch (error) {
@@ -322,8 +332,7 @@ export const updateExistingMenuItem = async (req, res) => {
 
     const updated = await updateMenuItem(id, itemId, updateData);
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(200).json({ message: "Menu item updated successfully", menuItem: updated });
   } catch (error) {
@@ -349,8 +358,7 @@ export const toggleMenuItemStatus = async (req, res) => {
 
     const updated = await toggleMenuItemAvailability(itemId);
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(200).json({ message: "Menu item availability toggled", menuItem: updated });
   } catch (error) {
@@ -376,8 +384,7 @@ export const deleteExistingMenuItem = async (req, res) => {
 
     await deleteMenuItem(itemId);
 
-    await redis.del(`restaurant:${id}`);
-    await redis.del("restaurants:all");
+    await invalidateRestaurant(id);
 
     return res.status(200).json({ message: "Menu item deleted successfully" });
   } catch (error) {
