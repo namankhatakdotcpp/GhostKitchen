@@ -86,7 +86,8 @@ export async function applyMaintenanceSchedule(cfg) {
 // Fire-and-forget — caller must NOT await this in the request cycle.
 export async function broadcastMaintenanceNotification(cfg) {
   try {
-    const users = await prisma.user.findMany({ select: { id: true, email: true, name: true } });
+    // Cap at 10 000 to avoid OOM — at higher scale use a background job queue
+    const users = await prisma.user.findMany({ select: { id: true, email: true, name: true }, take: 10_000 });
     if (users.length === 0) return;
 
     const isScheduled = !!cfg.maintenanceScheduledAt;

@@ -1,5 +1,5 @@
 import express from "express";
-import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
+import { authenticate, authorize, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
 import {
   listRestaurants,
   getRestaurant,
@@ -23,8 +23,8 @@ const router = express.Router();
 // Authenticated shop owner route — must come before /:id to avoid conflict
 router.get("/mine", authenticate, authorize(["RESTAURANT", "ADMIN"]), getMyRestaurant);
 
-// Recommendations — auth optional (degraded to trending when not logged in)
-router.get("/recommendations", authenticate, getRecommendations);
+// Recommendations — auth optional (degrades to trending when not logged in)
+router.get("/recommendations", optionalAuthenticate, getRecommendations);
 router.get("/trending", getTrending);
 
 // Public routes (no authentication required)

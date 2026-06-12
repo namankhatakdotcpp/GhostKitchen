@@ -42,4 +42,32 @@ export const authenticate = (req, res, next) => {
   }
 };
 
+// Like authenticate but never blocks — sets req.user if token is valid, otherwise continues
+export const optionalAuthenticate = (req, res, next) => {
+  try {
+    let token = req.cookies?.access_token;
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) token = authHeader.slice(7);
+    }
+    if (!token) return next();
+    try {
+      const decoded = verifyAccessToken(token);
+      req.user = {
+        userId: decoded.userId,
+        roles: decoded.roles ?? [decoded.role ?? "CUSTOMER"],
+        activeRole: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
+        role: decoded.activeRole ?? decoded.role ?? "CUSTOMER",
+        secondRole: decoded.secondRole ?? null,
+        restaurantId: decoded.restaurantId ?? null,
+      };
+    } catch {
+      // Invalid or expired — treat as unauthenticated
+    }
+    next();
+  } catch {
+    next();
+  }
+};
+
 export const authorize = roleMiddleware;
