@@ -24,6 +24,7 @@ import { requestTracingMiddleware } from "./middlewares/requestTracing.middlewar
 import {
   generalLimiter, authLimiter, paymentLimiter,
   roleSwitchLimiter, browseLimiter,
+  orderCreationLimiter, couponValidateLimiter, roleRegistrationLimiter,
 } from "./middlewares/rateLimiter.js";
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { redisHealthCheck } from "./config/redis.js";
@@ -139,6 +140,11 @@ app.use("/api/role/switch", roleSwitchLimiter);
 app.use("/api/payments", (req, res, next) =>
   req.path === "/webhook" ? next() : paymentLimiter(req, res, next));
 app.use("/api/restaurants", browseLimiter);
+app.use("/api/orders", (req, res, next) =>
+  req.method === "POST" && req.path === "/" ? orderCreationLimiter(req, res, next) : next());
+app.use("/api/coupons/validate", couponValidateLimiter);
+app.use("/api/role/register-restaurant", roleRegistrationLimiter);
+app.use("/api/role/register-rider", roleRegistrationLimiter);
 
 // ── 11. Health / diagnostic endpoints ────────────────────────────────────────
 app.get("/", (_req, res) => res.json({ status: "GhostKitchen API running" }));
@@ -168,8 +174,24 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// Extended health — admin-only platform health with socket + order metrics
-app.get("/health/extended", async (_req, res) => {
+// Extended health — admin-only: requires a valid ADMIN JWT
+app.get("/health/extended", (req, res, next) => {
+  let token = req.cookies?.access_token;
+  if (!token) {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) token = auth.slice(7);
+  }
+  if (!token) return res.status(401).json({ success: false, message: "Authentication required" });
+  try {
+    const decoded = verifyAccessToken(token);
+    if (!(decoded.roles ?? [decoded.role]).includes("ADMIN")) {
+      return res.status(403).json({ success: false, message: "Admin access required" });
+    }
+    next();
+  } catch {
+    return res.status(401).json({ success: false, message: "Invalid or expired token" });
+  }
+}, async (_req, res) => {
   try {
     const t0 = Date.now();
     const [redisStatus, dbStatus, activeOrders, onlineAgents] = await Promise.allSettled([

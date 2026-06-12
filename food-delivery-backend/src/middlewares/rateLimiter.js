@@ -45,3 +45,30 @@ export const browseLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// ── Order creation — prevent order-spam / cart-flooding ───────────────────────
+export const orderCreationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: { error: "Too many orders in a short period. Please wait." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ── Coupon validation — prevent brute-force enumeration ──────────────────────
+export const couponValidateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  max: 30,
+  message: { error: "Too many coupon validation attempts. Try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ── Role registration — restaurant / rider sign-up ────────────────────────────
+export const roleRegistrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // 1 hour
+  max: 5,
+  message: { error: "Too many registration attempts. Try again in an hour." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

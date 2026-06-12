@@ -85,6 +85,7 @@ const ROLE_PERMISSIONS = {
   RESTAURANT: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"],
   DELIVERY: ["OUT_FOR_DELIVERY", "DELIVERED"],
   CUSTOMER: ["CANCELLED"],
+  ADMIN: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
 };
 
 export const validateStatusUpdate = (payload, currentStatus, userRole) => {

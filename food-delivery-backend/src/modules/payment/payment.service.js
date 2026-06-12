@@ -71,12 +71,24 @@ export const createOrderFromPayment = async (payment) => {
   }
 
   // Count the coupon redemption now that the money is actually captured.
-  // (The payment flow intentionally claims usage at capture, not at intent.)
+  // The WHERE clause includes usedCount < maxUses so concurrent payments cannot
+  // increment past the limit — the DB evaluates the condition atomically.
   if (payment.couponCode) {
-    prisma.coupon.updateMany({
-      where: { code: payment.couponCode.toUpperCase() },
-      data: { usedCount: { increment: 1 } },
-    }).catch(() => {});
+    try {
+      const coupon = await prisma.coupon.findUnique({
+        where: { code: payment.couponCode.toUpperCase() },
+        select: { maxUses: true },
+      });
+      if (coupon) {
+        await prisma.coupon.updateMany({
+          where: {
+            code: payment.couponCode.toUpperCase(),
+            usedCount: { lt: coupon.maxUses },
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+    } catch { /* non-fatal */ }
   }
 
   emitOrderNew({ restaurantId: payment.restaurantId, order });

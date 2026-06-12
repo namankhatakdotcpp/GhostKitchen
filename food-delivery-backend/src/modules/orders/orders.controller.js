@@ -168,8 +168,8 @@ export const updateOrderStatusHTTP = async (req, res) => {
     if (req.user.role === "CUSTOMER" && currentOrder.customerId !== req.user.userId) {
       return res.status(403).json({ message: "Not authorized for this order" });
     }
-    if (req.user.role === "DELIVERY" && currentOrder.agentId && currentOrder.agentId !== req.user.userId) {
-      return res.status(403).json({ message: "Order is assigned to another agent" });
+    if (req.user.role === "DELIVERY" && currentOrder.agentId !== req.user.userId) {
+      return res.status(403).json({ message: "Order is not assigned to you" });
     }
     if (req.user.role === "RESTAURANT") {
       const { prisma } = await import("../../config/prisma.js");

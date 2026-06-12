@@ -116,7 +116,18 @@ export const getMenu = async (req, res) => {
       return res.status(400).json({ message: "Restaurant ID is required" });
     }
 
-    const isOwner = req.user && req.user.role === "RESTAURANT";
+    // Only the actual owner of THIS restaurant (or an admin) sees unavailable items.
+    // A RESTAURANT-role user who doesn't own this restaurant gets the public view.
+    let isOwner = false;
+    if (req.user?.role === "ADMIN") {
+      isOwner = true;
+    } else if (req.user?.role === "RESTAURANT") {
+      const owned = await prisma.restaurant.findFirst({
+        where: { id, ownerId: req.user.userId },
+        select: { id: true },
+      });
+      isOwner = !!owned;
+    }
 
     const menu = await getRestaurantMenu(id, isOwner);
 

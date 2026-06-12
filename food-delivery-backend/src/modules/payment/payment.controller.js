@@ -181,6 +181,20 @@ export const verifyPayment = async (req, res, next) => {
       });
     }
 
+    // Ownership check — only the customer who placed the order (or an admin) may
+    // query its payment status. Without this any authenticated user could probe
+    // arbitrary order IDs to discover payment data.
+    if (req.user.role !== "ADMIN") {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { customerId: true },
+      });
+      if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+      if (order.customerId !== req.user.userId) {
+        return res.status(403).json({ success: false, message: "Not authorized to view this payment" });
+      }
+    }
+
     const status = await paymentService.verifyPaymentStatus(orderId);
 
     res.json({

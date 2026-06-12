@@ -102,9 +102,12 @@ export const getActiveCoupons = async (req, res, next) => {
 
     res.json({
       coupons: coupons.map((c) => ({
-        ...c,
+        id: c.id,
+        code: c.code,
+        discountType: c.discountType,
         discountValue: parseFloat(c.discountValue),
         minOrder: parseFloat(c.minOrder),
+        expiresAt: c.expiresAt,
         availableUses: c.maxUses - c.usedCount,
       })),
     });
