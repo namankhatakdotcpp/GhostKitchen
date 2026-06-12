@@ -12,18 +12,12 @@ function withSocketServer(callback) {
   }
 }
 
-export function emitOrderStatusUpdated({ orderId, status, timestamp }) {
+export function emitOrderStatusUpdated({ orderId, status, estimatedDelivery = null, timestamp }) {
   withSocketServer((io) => {
-    io.to(`order-${orderId}`).emit("order:status-updated", {
-      orderId,
-      status,
-      timestamp,
-    });
-    io.to("admin").emit("order:status-updated", {
-      orderId,
-      status,
-      timestamp,
-    });
+    const payload = { orderId, status, estimatedDelivery, timestamp };
+    io.to(`order-${orderId}`).emit("order:status-updated", payload);
+    io.to(`shop-${orderId}`).emit("order:status-updated", payload);
+    io.to("admin").emit("order:status-updated", payload);
   });
 }
 

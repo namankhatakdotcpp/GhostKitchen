@@ -392,3 +392,136 @@ export const deleteExistingMenuItem = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// Shared serializer for recommendation results
+function serializeRestaurant(r) {
+  return {
+    id: r.id, name: r.name, slug: r.slug, imageUrl: r.imageUrl,
+    cuisines: r.cuisines, rating: r.rating, reviewCount: r.reviewCount,
+    isOpen: r.isOpen, statusNote: r.statusNote, address: r.address,
+  };
+}
+
+const RESTAURANT_SELECT = {
+  id: true, name: true, slug: true, imageUrl: true, cuisines: true,
+  rating: true, reviewCount: true, isOpen: true, statusNote: true, address: true,
+};
+
+// GET /restaurants/recommendations — personalised for the authenticated user
+export const getRecommendations = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      // Unauthenticated: fall through to trending
+      return getTrending(req, res);
+    }
+
+    // 1. What cuisines has this user ordered before?
+    const pastOrders = await prisma.order.findMany({
+      where: { customerId: userId, status: "DELIVERED" },
+      include: { restaurant: { select: { cuisines: true, id: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+
+    const orderedRestaurantIds = new Set(pastOrders.map((o) => o.restaurantId));
+    const cuisineFreq = {};
+    for (const o of pastOrders) {
+      for (const c of o.restaurant.cuisines ?? []) {
+        cuisineFreq[c] = (cuisineFreq[c] ?? 0) + 1;
+      }
+    }
+    const topCuisines = Object.entries(cuisineFreq)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([c]) => c);
+
+    // 2. Also include their favorited cuisines
+    const favorites = await prisma.favorite.findMany({
+      where: { userId },
+      include: { restaurant: { select: { cuisines: true } } },
+      take: 10,
+    });
+    for (const f of favorites) {
+      for (const c of f.restaurant.cuisines ?? []) {
+        if (!topCuisines.includes(c)) topCuisines.push(c);
+      }
+    }
+
+    // 3. Find open restaurants matching those cuisines, not yet ordered from
+    const recommended = await prisma.restaurant.findMany({
+      where: {
+        isOpen: true,
+        suspended: false,
+        isApproved: true,
+        cuisines: topCuisines.length > 0 ? { hasSome: topCuisines } : undefined,
+        id: orderedRestaurantIds.size > 0 ? { notIn: [...orderedRestaurantIds] } : undefined,
+      },
+      select: RESTAURANT_SELECT,
+      orderBy: { rating: "desc" },
+      take: 8,
+    });
+
+    // Fallback: if too few results, top-rated open restaurants
+    let results = recommended;
+    if (results.length < 4) {
+      const fallback = await prisma.restaurant.findMany({
+        where: {
+          isOpen: true, suspended: false, isApproved: true,
+          id: { notIn: results.map((r) => r.id) },
+        },
+        select: RESTAURANT_SELECT,
+        orderBy: { rating: "desc" },
+        take: 8 - results.length,
+      });
+      results = [...results, ...fallback];
+    }
+
+    res.json({ restaurants: results.map(serializeRestaurant) });
+  } catch (error) {
+    console.error("Error fetching recommendations:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET /restaurants/trending — by order volume in last 7 days
+export const getTrending = async (req, res) => {
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const grouped = await prisma.order.groupBy({
+      by: ["restaurantId"],
+      where: { createdAt: { gte: since }, status: { not: "CANCELLED" } },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 8,
+    });
+
+    if (grouped.length === 0) {
+      const topRated = await prisma.restaurant.findMany({
+        where: { isOpen: true, suspended: false, isApproved: true },
+        select: RESTAURANT_SELECT,
+        orderBy: { rating: "desc" },
+        take: 8,
+      });
+      return res.json({ restaurants: topRated.map(serializeRestaurant) });
+    }
+
+    const ids = grouped.map((g) => g.restaurantId);
+    const restaurants = await prisma.restaurant.findMany({
+      where: { id: { in: ids }, isOpen: true, suspended: false },
+      select: RESTAURANT_SELECT,
+    });
+
+    const countById = new Map(grouped.map((g) => [g.restaurantId, g._count.id]));
+    const sorted = restaurants.sort(
+      (a, b) => (countById.get(b.id) ?? 0) - (countById.get(a.id) ?? 0)
+    );
+
+    res.json({ restaurants: sorted.map(serializeRestaurant) });
+  } catch (error) {
+    console.error("Error fetching trending:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

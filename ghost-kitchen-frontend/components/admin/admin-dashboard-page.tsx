@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ColumnDef } from "@tanstack/react-table";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bike, ShoppingBag, Store, TrendingUp, Wallet, X } from "lucide-react";
+import { Bike, ShoppingBag, Store, TrendingUp, Wallet, X, Activity, Database, Wifi, Users } from "lucide-react";
 import { useMemo, useEffect, useState } from "react";
 import { getSocket } from "@/lib/socket";
 
@@ -12,6 +12,94 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import type { AdminAlert, AdminMetric, AdminOrderRow } from "@/types";
+
+function StatusDot({ ok }: { ok: boolean }) {
+  return (
+    <span className={`inline-block h-2 w-2 rounded-full ${ok ? "bg-green-500" : "bg-red-500"}`} />
+  );
+}
+
+function PlatformHealthCard() {
+  const { data, isLoading, dataUpdatedAt } = useQuery({
+    queryKey: ["platform-health"],
+    queryFn: () => api.get("/health/extended").then((r) => r.data),
+    refetchInterval: 30_000,
+    retry: false,
+  });
+
+  const dbOk = data?.db?.status === "healthy";
+  const redisOk = data?.redis?.status === "healthy";
+  const overall = data?.status;
+  const lastChecked = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString("en-IN") : "—";
+
+  return (
+    <div className="rounded-[20px] border border-border bg-white p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-brand" />
+          <h2 className="font-semibold text-text-primary">Platform Health</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          {!isLoading && data && (
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${overall === "OK" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+              {overall ?? "UNKNOWN"}
+            </span>
+          )}
+          <span className="text-[10px] text-text-muted">Updated {lastChecked}</span>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="h-20 animate-pulse rounded-[14px] bg-gray-100" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-[14px] border border-border p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Database className="h-3.5 w-3.5 text-text-muted" />
+              <p className="text-xs text-text-muted">Database</p>
+              <StatusDot ok={dbOk} />
+            </div>
+            <p className="text-lg font-bold text-text-primary">{data?.db?.latencyMs ?? "—"} ms</p>
+            <p className="text-[10px] text-text-muted">query latency</p>
+          </div>
+          <div className="rounded-[14px] border border-border p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Activity className="h-3.5 w-3.5 text-text-muted" />
+              <p className="text-xs text-text-muted">Redis</p>
+              <StatusDot ok={redisOk} />
+            </div>
+            <p className="text-lg font-bold text-text-primary">{redisOk ? "Online" : "Offline"}</p>
+            <p className="text-[10px] text-text-muted">cache layer</p>
+          </div>
+          <div className="rounded-[14px] border border-border p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Wifi className="h-3.5 w-3.5 text-text-muted" />
+              <p className="text-xs text-text-muted">Sockets</p>
+            </div>
+            <p className="text-lg font-bold text-text-primary">{data?.socket?.connections ?? 0}</p>
+            <p className="text-[10px] text-text-muted">live connections</p>
+          </div>
+          <div className="rounded-[14px] border border-border p-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Users className="h-3.5 w-3.5 text-text-muted" />
+              <p className="text-xs text-text-muted">Active Orders</p>
+            </div>
+            <p className="text-lg font-bold text-text-primary">{data?.platform?.activeOrders ?? 0}</p>
+            <p className="text-[10px] text-text-muted">{data?.platform?.onlineAgents ?? 0} agents online</p>
+          </div>
+        </div>
+      )}
+
+      {data && (
+        <p className="mt-3 text-[10px] text-text-muted">
+          Uptime: {Math.floor((data.uptimeSeconds ?? 0) / 3600)}h {Math.floor(((data.uptimeSeconds ?? 0) % 3600) / 60)}m · API latency: {data.platform?.apiLatencyMs ?? "—"} ms
+        </p>
+      )}
+    </div>
+  );
+}
 
 const metricIconMap = { ShoppingBag, Wallet, Store, Bike } as const;
 
@@ -205,6 +293,8 @@ export function AdminDashboardPage() {
           ))}
         </section>
       )}
+
+      <PlatformHealthCard />
 
       <section className="rounded-[20px] border border-border bg-white p-5">
         <h2 className="text-lg font-bold text-text-primary mb-5">Recent orders</h2>

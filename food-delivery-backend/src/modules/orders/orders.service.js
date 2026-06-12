@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { getSiteConfigCached } from "../config/config.service.js";
+import { computeETA } from "../../utils/eta.js";
 
 // All monetary values are in PAISE (₹50 = 5000).
 const FALLBACK_DELIVERY_FEE = 3000; // ₹30 — used only if SiteConfig is unreadable
@@ -37,16 +38,14 @@ function computeCouponDiscount(coupon, subtotal, restaurantId) {
 }
 
 function serializeOrder(order) {
-  if (!order) {
-    return null;
-  }
-
+  if (!order) return null;
   return {
     ...order,
     subtotal: Number(order.subtotal),
     deliveryFee: Number(order.deliveryFee),
     discount: Number(order.discount),
     total: Number(order.total),
+    estimatedDelivery: order.estimatedDelivery?.toISOString() ?? null,
   };
 }
 
@@ -192,12 +191,13 @@ export const createOrder = async (payload, customerId) => {
   return serializeOrder(order);
 };
 
-export const updateOrderStatus = async ({ orderId, status, agentId }) => {
+export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDelivery }) => {
   const order = await prisma.order.update({
     where: { id: orderId },
     data: {
       status,
       ...(agentId ? { agentId } : {}),
+      ...(estimatedDelivery ? { estimatedDelivery } : {}),
       ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
     },
     include: {
@@ -281,11 +281,13 @@ export const assignDeliveryAgent = async (orderId, io) => {
   agentWithDistance.sort((a, b) => a.distance - b.distance);
   const selectedAgent = agentWithDistance[0];
 
-  // 4. Update order with agent, set agent as unavailable
+  // 4. Update order with agent, compute ETA, set agent as unavailable
+  const estimatedDelivery = computeETA(order.restaurant, selectedAgent, "OUT_FOR_DELIVERY", order.deliveryAddress);
+
   const [updatedOrder] = await prisma.$transaction([
     prisma.order.update({
       where: { id: orderId },
-      data: { agentId: selectedAgent.id },
+      data: { agentId: selectedAgent.id, estimatedDelivery },
       include: { restaurant: true, agent: true },
     }),
     prisma.user.update({
@@ -317,8 +319,9 @@ export const assignDeliveryAgent = async (orderId, io) => {
       id: selectedAgent.id,
       name: selectedAgent.name,
       phone: selectedAgent.phone,
-      rating: 4.5, // TODO: calculate from reviews
+      rating: 4.5,
     },
+    estimatedDelivery: estimatedDelivery.toISOString(),
   });
   io.to(`shop-${order.restaurantId}`).emit("agent:assigned", {
     orderId,

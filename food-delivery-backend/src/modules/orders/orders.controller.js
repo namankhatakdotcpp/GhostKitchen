@@ -10,6 +10,7 @@ import { validateCreateOrder, validateStatusUpdate } from "./orders.validation.j
 import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "../../socket/socket.server.js";
 import { createNotification } from "../notification/notification.service.js";
 import { sendOrderPlacedEmail, sendOrderStatusEmail } from "../../services/email.service.js";
+import { computeETA } from "../../utils/eta.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -189,11 +190,26 @@ export const updateOrderStatusHTTP = async (req, res) => {
       return res.status(400).json({ message: validationError });
     }
 
-    // Update order status
+    // Compute ETA for non-terminal status transitions
+    const etaStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+    let estimatedDelivery = currentOrder.estimatedDelivery ?? null;
+    if (etaStatuses.includes(newStatus)) {
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: currentOrder.restaurantId },
+        select: { lat: true, lng: true, address: true },
+      });
+      const agent = newStatus === "OUT_FOR_DELIVERY" && req.user.role === "DELIVERY"
+        ? await prisma.user.findUnique({ where: { id: req.user.userId }, select: { currentLat: true, currentLng: true } })
+        : null;
+      estimatedDelivery = computeETA(restaurant, agent, newStatus, currentOrder.deliveryAddress);
+    }
+
+    // Update order status (and persist ETA)
     const updatedOrder = await updateOrderStatus({
       orderId,
       status: newStatus,
       agentId: req.user.role === "DELIVERY" ? req.user.userId : undefined,
+      estimatedDelivery: estimatedDelivery ?? undefined,
     });
 
     // If status changed to CONFIRMED, assign delivery agent
@@ -209,6 +225,9 @@ export const updateOrderStatusHTTP = async (req, res) => {
       emitOrderStatusUpdated({
         orderId,
         status: newStatus,
+        estimatedDelivery: estimatedDelivery instanceof Date
+          ? estimatedDelivery.toISOString()
+          : (estimatedDelivery ?? null),
         timestamp: new Date().toISOString(),
       });
     }

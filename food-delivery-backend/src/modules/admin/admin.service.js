@@ -1,11 +1,8 @@
 import { prisma } from "../../config/prisma.js";
 import { logger } from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
-import { getIO } from "../../socket/socketServer.js";
-
-function emitOrderStatusUpdated(data) {
-  try { getIO().to('admin').emit('order_status_updated', data) } catch {}
-}
+import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
+import { computeETA } from "../../utils/eta.js";
 
 const ORDER_INCLUDE = {
   customer: { select: { id: true, email: true, name: true, phone: true } },
@@ -53,23 +50,47 @@ export const getOrderById = async (orderId) => {
 
 export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
   const validStatuses = ["PLACED", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"];
+  const status = newStatus.toUpperCase();
 
-  if (!validStatuses.includes(newStatus.toUpperCase())) {
+  if (!validStatuses.includes(status)) {
     throw new AppError(`Invalid status: ${newStatus}`, 400);
   }
 
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: {
+      restaurant: { select: { lat: true, lng: true, address: true } },
+      agent: { select: { currentLat: true, currentLng: true } },
+    },
+  });
   if (!order) throw new AppError("Order not found", 404);
+
+  const terminalStatuses = ["DELIVERED", "CANCELLED"];
+  const etaStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+  const estimatedDelivery = etaStatuses.includes(status) && !terminalStatuses.includes(order.status)
+    ? computeETA(order.restaurant, order.agent, status, order.deliveryAddress)
+    : order.estimatedDelivery;
+
+  const updateData = {
+    status,
+    ...(estimatedDelivery ? { estimatedDelivery } : {}),
+    ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
+  };
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
-    data: { status: newStatus.toUpperCase() },
+    data: updateData,
     include: ORDER_INCLUDE,
   });
 
-  emitOrderStatusUpdated({ orderId, status: newStatus.toUpperCase(), timestamp: new Date().toISOString() });
+  emitOrderStatusUpdated({
+    orderId,
+    status,
+    estimatedDelivery: estimatedDelivery?.toISOString() ?? null,
+    timestamp: new Date().toISOString(),
+  });
 
-  logger.warn("Admin updated order status", { orderId, oldStatus: order.status, newStatus, reason });
+  logger.warn("Admin updated order status", { orderId, oldStatus: order.status, newStatus: status, reason });
   return updatedOrder;
 };
 
@@ -84,10 +105,139 @@ export const cancelOrder = async (orderId, reason = "Admin cancelled") => {
     include: ORDER_INCLUDE,
   });
 
-  emitOrderStatusUpdated({ orderId, status: "CANCELLED", timestamp: new Date().toISOString() });
+  emitOrderStatusUpdated({ orderId, status: "CANCELLED", estimatedDelivery: null, timestamp: new Date().toISOString() });
 
   logger.warn("Admin cancelled order", { orderId, reason });
   return cancelledOrder;
+};
+
+export const getAnalytics = async ({ days = 7 } = {}) => {
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - (Number(days) - 1));
+  startDate.setHours(0, 0, 0, 0);
+
+  const [allOrders, topRestaurantsRaw] = await Promise.all([
+    prisma.order.findMany({
+      where: { createdAt: { gte: startDate } },
+      select: {
+        id: true, status: true, total: true, createdAt: true,
+        restaurantId: true,
+        restaurant: { select: { name: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.order.groupBy({
+      by: ["restaurantId"],
+      where: { status: "DELIVERED", createdAt: { gte: startDate } },
+      _sum: { total: true },
+      _count: { id: true },
+      orderBy: { _sum: { total: "desc" } },
+      take: 5,
+    }),
+  ]);
+
+  // Build per-day buckets
+  const dayMap = new Map();
+  for (let i = 0; i < Number(days); i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    dayMap.set(key, { date: key, orders: 0, revenue: 0 });
+  }
+  for (const o of allOrders) {
+    const key = o.createdAt.toISOString().slice(0, 10);
+    const bucket = dayMap.get(key);
+    if (!bucket) continue;
+    bucket.orders++;
+    if (o.status === "DELIVERED") bucket.revenue += Number(o.total);
+  }
+
+  const trend = Array.from(dayMap.values());
+
+  // Status breakdown for the window
+  const statusBreakdown = {};
+  for (const o of allOrders) {
+    statusBreakdown[o.status] = (statusBreakdown[o.status] ?? 0) + 1;
+  }
+
+  // Enrich top restaurants
+  const restaurantIds = topRestaurantsRaw.map((r) => r.restaurantId);
+  const restaurants = await prisma.restaurant.findMany({
+    where: { id: { in: restaurantIds } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(restaurants.map((r) => [r.id, r.name]));
+  const topRestaurants = topRestaurantsRaw.map((r) => ({
+    restaurantId: r.restaurantId,
+    name: nameById.get(r.restaurantId) ?? "Unknown",
+    revenue: Number(r._sum.total ?? 0),
+    orders: r._count.id,
+  }));
+
+  const totalRevenue = allOrders
+    .filter((o) => o.status === "DELIVERED")
+    .reduce((s, o) => s + Number(o.total), 0);
+  const totalOrders = allOrders.length;
+  const deliveredOrders = allOrders.filter((o) => o.status === "DELIVERED").length;
+
+  return {
+    trend,
+    statusBreakdown,
+    topRestaurants,
+    summary: { totalOrders, deliveredOrders, totalRevenue, days: Number(days) },
+  };
+};
+
+export const getDeliveryAgents = async ({ page = 1, limit = 20, search, onlineOnly = false } = {}) => {
+  const where = {
+    roles: { has: "DELIVERY" },
+  };
+  if (onlineOnly === true || onlineOnly === "true") where.isAvailable = true;
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [agents, total] = await prisma.$transaction([
+    prisma.user.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: Number(limit),
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, name: true, email: true, phone: true,
+        isAvailable: true, isOnDuty: true, isBlocked: true, isSuspended: true,
+        vehicleType: true, vehicleNumber: true,
+        currentLat: true, currentLng: true,
+        createdAt: true,
+        _count: { select: { agentOrders: true } },
+      },
+    }),
+    prisma.user.count({ where }),
+  ]);
+
+  // Attach delivered order count per agent
+  const agentIds = agents.map((a) => a.id);
+  const deliveredCounts = await prisma.order.groupBy({
+    by: ["agentId"],
+    where: { agentId: { in: agentIds }, status: "DELIVERED" },
+    _count: { id: true },
+  });
+  const deliveredMap = new Map(deliveredCounts.map((d) => [d.agentId, d._count.id]));
+
+  return {
+    agents: agents.map((a) => ({
+      ...a,
+      totalOrders: a._count.agentOrders,
+      deliveredOrders: deliveredMap.get(a.id) ?? 0,
+    })),
+    total,
+    page: Number(page),
+    limit: Number(limit),
+  };
 };
 
 export const getAdminStats = async () => {
@@ -286,16 +436,31 @@ export const setRestaurantApproval = async (id, approve) => {
 };
 
 export const assignDeliveryPartner = async (orderId, agentId) => {
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { restaurant: { select: { lat: true, lng: true, address: true } } },
+  });
   if (!order) throw new AppError("Order not found", 404);
+
+  const agent = await prisma.user.findUnique({
+    where: { id: agentId },
+    select: { currentLat: true, currentLng: true },
+  });
+
+  const estimatedDelivery = computeETA(order.restaurant, agent, "OUT_FOR_DELIVERY", order.deliveryAddress);
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
-    data: { agentId, status: "OUT_FOR_DELIVERY" },
+    data: { agentId, status: "OUT_FOR_DELIVERY", estimatedDelivery },
     include: ORDER_INCLUDE,
   });
 
-  emitOrderStatusUpdated({ orderId, status: "OUT_FOR_DELIVERY", timestamp: new Date().toISOString() });
+  emitOrderStatusUpdated({
+    orderId,
+    status: "OUT_FOR_DELIVERY",
+    estimatedDelivery: estimatedDelivery.toISOString(),
+    timestamp: new Date().toISOString(),
+  });
 
   logger.info("Admin assigned delivery partner", { orderId, agentId });
   return updatedOrder;

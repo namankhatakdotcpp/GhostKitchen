@@ -198,11 +198,12 @@ model Order {
   discount        Float       @default(0)
   total           Float       @default(0)
   deliveryAddress Json?
-  cfOrderId       String?     @unique
-  placedAt        DateTime    @default(now())
-  deliveredAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  cfOrderId           String?     @unique
+  placedAt            DateTime    @default(now())
+  deliveredAt         DateTime?
+  estimatedDelivery   DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])

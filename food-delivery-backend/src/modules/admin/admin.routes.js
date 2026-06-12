@@ -45,6 +45,9 @@ import {
   getSettings,
   updateSettings,
   approveRestaurant,
+  getAnalytics,
+  getDeliveryAgents,
+  toggleAgentSuspend,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -132,5 +135,8 @@ router.get("/audit-log/export", exportAuditLog);
 router.get("/settings", getSettings);
 router.patch("/settings", updateSettings);
 router.patch("/restaurants/:id/approve", approveRestaurant);
+router.get("/analytics", getAnalytics);
+router.get("/delivery-agents", getDeliveryAgents);
+router.patch("/delivery-agents/:id/suspend", toggleAgentSuspend);
 
 export default router;

@@ -28,6 +28,7 @@ import {
 import { sanitizeBody } from "./middlewares/sanitize.middleware.js";
 import { redisHealthCheck } from "./config/redis.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
+import { getIO } from "./socket/socketServer.js";
 import { verifyAccessToken } from "./utils/jwt.js";
 
 const app = express();
@@ -161,6 +162,46 @@ app.get("/health", async (_req, res) => {
       environment: env.NODE_ENV,
       redis,
       db,
+    });
+  } catch (error) {
+    res.status(503).json({ status: "UNHEALTHY", error: error.message });
+  }
+});
+
+// Extended health — admin-only platform health with socket + order metrics
+app.get("/health/extended", async (_req, res) => {
+  try {
+    const t0 = Date.now();
+    const [redisStatus, dbStatus, activeOrders, onlineAgents] = await Promise.allSettled([
+      redisHealthCheck(),
+      (async () => {
+        const t = Date.now();
+        await prisma.$queryRaw`SELECT 1`;
+        return { status: "healthy", latencyMs: Date.now() - t };
+      })(),
+      prisma.order.count({ where: { status: { notIn: ["DELIVERED", "CANCELLED"] } } }),
+      prisma.user.count({ where: { roles: { has: "DELIVERY" }, isAvailable: true } }),
+    ]);
+
+    const redis = redisStatus.status === "fulfilled" ? redisStatus.value : { status: "unhealthy", message: redisStatus.reason?.message };
+    const db = dbStatus.status === "fulfilled" ? dbStatus.value : { status: "unhealthy", message: dbStatus.reason?.message };
+
+    let socketConnections = 0;
+    try { socketConnections = getIO().engine.clientsCount; } catch {}
+
+    res.json({
+      status: db.status === "healthy" ? "OK" : "DEGRADED",
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.round(process.uptime()),
+      environment: env.NODE_ENV,
+      db,
+      redis,
+      socket: { connections: socketConnections },
+      platform: {
+        activeOrders: activeOrders.status === "fulfilled" ? activeOrders.value : 0,
+        onlineAgents: onlineAgents.status === "fulfilled" ? onlineAgents.value : 0,
+        apiLatencyMs: Date.now() - t0,
+      },
     });
   } catch (error) {
     res.status(503).json({ status: "UNHEALTHY", error: error.message });

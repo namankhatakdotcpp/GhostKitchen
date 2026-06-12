@@ -442,3 +442,28 @@ export const exportAuditLog = async (req, res, next) => {
     res.json({ success: true, entries });
   } catch (error) { next(error); }
 };
+
+export const getAnalytics = async (req, res, next) => {
+  try {
+    const { days = 7 } = req.query;
+    const data = await adminService.getAnalytics({ days: Number(days) });
+    res.json(data);
+  } catch (error) { next(error); }
+};
+
+export const getDeliveryAgents = async (req, res, next) => {
+  try {
+    const { page, limit, search, onlineOnly } = req.query;
+    const data = await adminService.getDeliveryAgents({ page, limit, search, onlineOnly });
+    res.json(data);
+  } catch (error) { next(error); }
+};
+
+export const toggleAgentSuspend = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { suspend } = req.body;
+    const user = await adminService.suspendUser(id, { suspend });
+    res.json({ user });
+  } catch (error) { next(error); }
+};

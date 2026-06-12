@@ -128,7 +128,6 @@ export function CustomerHomePage() {
     queryKey: ["home-recent-orders"],
     queryFn: () => api.get("/orders?limit=5").then((r) => {
       const orders = r.data?.orders ?? r.data ?? [];
-      // Dedupe by restaurantId, keep most recent
       const seen = new Set<string>();
       return orders.filter((o: any) => {
         if (seen.has(o.restaurantId)) return false;
@@ -139,9 +138,22 @@ export function CustomerHomePage() {
     enabled: !!user,
     staleTime: 60_000,
   });
+  const { data: recommendationsData } = useQuery({
+    queryKey: ["home-recommendations"],
+    queryFn: () => api.get("/restaurants/recommendations").then((r) => r.data.restaurants ?? []),
+    enabled: !!user,
+    staleTime: 120_000,
+  });
+  const { data: trendingData } = useQuery({
+    queryKey: ["home-trending"],
+    queryFn: () => api.get("/restaurants/trending").then((r) => r.data.restaurants ?? []),
+    staleTime: 300_000,
+  });
 
   const favoriteRestaurants = favoritesData ?? [];
   const recentRestaurants = recentOrdersData ?? [];
+  const recommendedRestaurants = recommendationsData ?? [];
+  const trendingRestaurants = trendingData ?? [];
 
   function toggleFilter(filter: FilterOption) {
     setActiveFilters((currentFilters) =>
@@ -380,6 +392,68 @@ export function CustomerHomePage() {
                 statusNote={r.statusNote ?? null}
                 index={i}
                 isFavorited={true}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Recommended For You */}
+      {user && recommendedRestaurants.length > 0 && (
+        <section className="mt-7">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-text-primary">Recommended For You</h2>
+              <p className="mt-0.5 text-xs text-text-muted">Based on your order history</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {recommendedRestaurants.slice(0, 4).map((r: any, i: number) => (
+              <RestaurantCard
+                key={r.id}
+                id={r.id}
+                name={r.name}
+                cuisines={r.cuisines ?? []}
+                rating={r.rating ?? 0}
+                deliveryTime={r.address?.deliveryTime ?? 30}
+                deliveryFee={r.address?.deliveryFee ?? 0}
+                minOrder={r.address?.minOrder ?? 0}
+                imageUrl={r.imageUrl ?? ""}
+                isVeg={false}
+                isOpen={r.isOpen ?? true}
+                statusNote={r.statusNote ?? null}
+                index={i}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Trending Near You */}
+      {trendingRestaurants.length > 0 && (
+        <section className="mt-7">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-text-primary">Trending Now</h2>
+              <p className="mt-0.5 text-xs text-text-muted">Most ordered this week</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {trendingRestaurants.slice(0, 4).map((r: any, i: number) => (
+              <RestaurantCard
+                key={r.id}
+                id={r.id}
+                name={r.name}
+                cuisines={r.cuisines ?? []}
+                rating={r.rating ?? 0}
+                deliveryTime={r.address?.deliveryTime ?? 30}
+                deliveryFee={r.address?.deliveryFee ?? 0}
+                minOrder={r.address?.minOrder ?? 0}
+                imageUrl={r.imageUrl ?? ""}
+                isVeg={false}
+                isOpen={r.isOpen ?? true}
+                statusNote={r.statusNote ?? null}
+                index={i}
               />
             ))}
           </div>
