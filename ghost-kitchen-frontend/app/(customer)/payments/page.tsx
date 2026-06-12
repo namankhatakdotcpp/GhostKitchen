@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toRupees, formatDate } from "@/lib/utils";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
@@ -34,7 +35,7 @@ const statusStyle: Record<string, string> = {
   FAILED: "bg-red-100 text-red-800",
 };
 
-export default function PaymentsPage() {
+function PaymentsPageContent() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [refundMap, setRefundMap] = useState<Map<string, RefundRecord[]>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -165,4 +166,8 @@ export default function PaymentsPage() {
       )}
     </div>
   );
+}
+
+export default function PaymentsPage() {
+  return <ProtectedRoute requiredRole={["CUSTOMER"]}><PaymentsPageContent /></ProtectedRoute>;
 }

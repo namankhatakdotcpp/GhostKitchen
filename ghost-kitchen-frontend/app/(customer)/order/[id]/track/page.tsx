@@ -1,4 +1,7 @@
+"use client";
+
 import { OrderTrackingPage } from "@/components/customer/order-tracking-page";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 type OrderTrackPageProps = {
   params: {
@@ -7,5 +10,9 @@ type OrderTrackPageProps = {
 };
 
 export default function OrderTrackPage({ params }: OrderTrackPageProps) {
-  return <OrderTrackingPage orderId={params.id} />;
+  return (
+    <ProtectedRoute requiredRole={["CUSTOMER"]}>
+      <OrderTrackingPage orderId={params.id} />
+    </ProtectedRoute>
+  );
 }

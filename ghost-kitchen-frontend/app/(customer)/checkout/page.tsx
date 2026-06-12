@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { load } from '@cashfreepayments/cashfree-js'
 import { useCartStore } from '@/store/cartStore'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import api from '@/lib/api'
 import { toRupees } from '@/lib/utils'
 import AvailableCoupons from '@/components/customer/AvailableCoupons'
@@ -25,7 +26,7 @@ interface SavedAddress {
   isDefault: boolean
 }
 
-export default function CheckoutPage() {
+function CheckoutPageContent() {
   const router = useRouter()
   const { items, getRestaurantId, getSubtotal, clearCart } = useCartStore()
   const restaurantId = getRestaurantId()
@@ -328,4 +329,8 @@ export default function CheckoutPage() {
       </p>
     </div>
   )
+}
+
+export default function CheckoutPage() {
+  return <ProtectedRoute requiredRole={["CUSTOMER"]}><CheckoutPageContent /></ProtectedRoute>;
 }

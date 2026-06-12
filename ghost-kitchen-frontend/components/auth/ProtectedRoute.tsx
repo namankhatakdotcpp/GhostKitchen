@@ -23,8 +23,13 @@ export const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) 
       return;
     }
 
-    if (requiredRole && user && !requiredRole.includes(user.activeRole)) {
-      router.replace("/unauthorized");
+    if (requiredRole && user) {
+      // Check both activeRole and the roles array so a localStorage-tampered
+      // activeRole that isn't in the real roles array still gets blocked.
+      const hasRole = requiredRole.some(
+        (r) => user.activeRole === r && Array.isArray(user.roles) && user.roles.includes(r)
+      );
+      if (!hasRole) router.replace("/unauthorized");
     }
   }, [isAuthenticated, hasHydrated, user, requiredRole, router]);
 

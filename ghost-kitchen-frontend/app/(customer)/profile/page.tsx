@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
 import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X } from "lucide-react";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 interface Address {
   id: string;
@@ -37,7 +38,7 @@ const EMPTY_FORM: AddressFormState = {
   isDefault: false,
 };
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { user } = useAuthStore();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,4 +389,8 @@ export default function ProfilePage() {
       </div>
     </div>
   );
+}
+
+export default function ProfilePage() {
+  return <ProtectedRoute requiredRole={["CUSTOMER"]}><ProfilePageContent /></ProtectedRoute>;
 }

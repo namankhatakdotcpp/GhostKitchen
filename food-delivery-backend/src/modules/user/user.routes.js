@@ -72,7 +72,7 @@ router.patch("/addresses/:id", async (req, res, next) => {
         await tx.address.updateMany({ where: { userId: req.user.userId }, data: { isDefault: false } });
         data.isDefault = true;
       }
-      const address = await tx.address.update({ where: { id: req.params.id }, data });
+      const address = await tx.address.update({ where: { id: req.params.id, userId: req.user.userId }, data });
       res.json({ address });
     });
   } catch (e) { next(e); }
@@ -83,7 +83,7 @@ router.delete("/addresses/:id", async (req, res, next) => {
   try {
     const existing = await prisma.address.findFirst({ where: { id: req.params.id, userId: req.user.userId } });
     if (!existing) throw new AppError("Address not found", 404);
-    await prisma.address.delete({ where: { id: req.params.id } });
+    await prisma.address.deleteMany({ where: { id: req.params.id, userId: req.user.userId } });
     // If deleted address was default, promote the newest remaining one
     if (existing.isDefault) {
       const next_ = await prisma.address.findFirst({ where: { userId: req.user.userId }, orderBy: { createdAt: "desc" } });
@@ -100,7 +100,7 @@ router.post("/addresses/:id/set-default", async (req, res, next) => {
     if (!existing) throw new AppError("Address not found", 404);
     await prisma.$transaction([
       prisma.address.updateMany({ where: { userId: req.user.userId }, data: { isDefault: false } }),
-      prisma.address.update({ where: { id: req.params.id }, data: { isDefault: true } }),
+      prisma.address.update({ where: { id: req.params.id, userId: req.user.userId }, data: { isDefault: true } }),
     ]);
     res.json({ success: true });
   } catch (e) { next(e); }

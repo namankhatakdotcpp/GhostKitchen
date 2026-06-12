@@ -120,7 +120,7 @@ export const getReviewByOrderId = async (req, res, next) => {
       id: review.id,
       rating: review.rating,
       comment: review.comment,
-      userName: review.order.customer.name,
+      userName: review.order.customer.name.split(" ")[0],
       createdAt: review.createdAt,
     });
   } catch (error) {

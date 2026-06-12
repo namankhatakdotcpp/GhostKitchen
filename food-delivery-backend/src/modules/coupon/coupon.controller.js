@@ -97,6 +97,7 @@ export const getActiveCoupons = async (req, res, next) => {
         maxUses: true,
       },
       orderBy: { expiresAt: "asc" },
+      take: 100,
     });
 
     res.json({
@@ -176,10 +177,12 @@ export const getCouponByCode = async (req, res, next) => {
 
     res.json({
       coupon: {
-        ...coupon,
+        code: coupon.code,
+        discountType: coupon.discountType,
         discountValue: parseFloat(coupon.discountValue),
         minOrder: parseFloat(coupon.minOrder),
-        availableUses: coupon.maxUses - coupon.usedCount,
+        expiresAt: coupon.expiresAt,
+        isActive: coupon.isActive,
       },
     });
   } catch (error) {

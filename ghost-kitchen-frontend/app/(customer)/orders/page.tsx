@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReviewForm from "@/components/customer/ReviewForm";
 import { useCartStore } from "@/store/cartStore";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 interface OrderItemJSON {
   menuItemId: string;
@@ -34,7 +35,7 @@ interface Order {
   };
 }
 
-export default function OrdersPage() {
+function OrdersPageContent() {
   const router = useRouter();
   const { clearCart, addToCart } = useCartStore();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -281,4 +282,8 @@ export default function OrdersPage() {
       </div>
     </div>
   );
+}
+
+export default function OrdersPage() {
+  return <ProtectedRoute requiredRole={["CUSTOMER"]}><OrdersPageContent /></ProtectedRoute>;
 }
