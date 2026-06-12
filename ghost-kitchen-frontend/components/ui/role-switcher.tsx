@@ -49,6 +49,14 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
   const [switching, setSwitching] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
   if (!mounted) return null;
 
   // Read user from authStore (populated on login); fall back to userStore for legacy
@@ -112,14 +120,17 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
   return (
     <div className="relative">
       <button
+        aria-label={`Switch role. Current role: ${activeConfig.label}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
         className={`flex items-center gap-1.5 rounded-full border border-transparent px-3 py-1.5 text-sm font-semibold transition ${activeConfig.activeColor}`}
         disabled={switching}
         onClick={() => setOpen(!open)}
         type="button"
       >
-        <span>{activeConfig.icon}</span>
+        <span aria-hidden="true">{activeConfig.icon}</span>
         <span className="hidden sm:inline">{activeConfig.label}</span>
-        <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 12 12">
+        <svg aria-hidden="true" className="h-3 w-3" fill="currentColor" viewBox="0 0 12 12">
           <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
         </svg>
       </button>
@@ -129,9 +140,13 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
 
-          <div className={`absolute right-0 ${openUp ? "bottom-full mb-2" : "top-full mt-2"} z-50 w-56 max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-xl`}>
+          <div
+            role="listbox"
+            aria-label="Switch role"
+            className={`absolute right-0 ${openUp ? "bottom-full mb-2" : "top-full mt-2"} z-50 w-56 max-h-[80vh] overflow-y-auto overflow-x-hidden rounded-xl border border-[#E8E8E8] bg-white shadow-xl`}
+          >
             <div className="border-b border-[#F5F5F5] px-3 py-2">
-              <p className="text-xs font-semibold text-[#93959F]">Switch view</p>
+              <p aria-hidden="true" className="text-xs font-semibold text-[#93959F]">Switch view</p>
             </div>
 
             {/* Available roles */}
@@ -141,12 +156,14 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
               const isActive = role === user.activeRole;
               return (
                 <button
+                  role="option"
+                  aria-selected={isActive}
                   className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-[#F5F5F5] ${isActive ? "bg-orange-50" : ""}`}
                   key={role}
                   onClick={() => switchRole(role)}
                   type="button"
                 >
-                  <span className="text-lg">{cfg.icon}</span>
+                  <span aria-hidden="true" className="text-lg">{cfg.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium ${isActive ? "text-[#FF5200]" : "text-[#1C1C1C]"}`}>
                       {cfg.label}
@@ -154,7 +171,7 @@ export default function RoleSwitcher({ openUp = false }: { openUp?: boolean }) {
                     {isActive && <p className="text-xs text-[#93959F]">Currently active</p>}
                   </div>
                   {isActive && (
-                    <svg className="h-4 w-4 shrink-0 text-[#FF5200]" fill="none" viewBox="0 0 16 16">
+                    <svg aria-hidden="true" className="h-4 w-4 shrink-0 text-[#FF5200]" fill="none" viewBox="0 0 16 16">
                       <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   )}

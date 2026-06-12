@@ -1,12 +1,6 @@
 "use client";
 
-/**
- * Order Detail Modal
- * 
- * Shows complete order details in a modal
- */
-
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axiosInstance from "@/lib/api";
 import { formatDate, formatCurrency } from "@/lib/utils";
 
@@ -33,44 +27,84 @@ export default function OrderDetailModal({
   const [selectedStatus, setSelectedStatus] = useState(order.status);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const titleId = "order-modal-title";
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the close button when modal opens
+  useEffect(() => {
+    closeRef.current?.focus();
+  }, []);
+
+  // Close on Escape; trap focus inside the modal
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab") return;
+
+      const modal = document.getElementById("order-detail-modal");
+      if (!modal) return;
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled"));
+
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const handleStatusUpdate = async () => {
-    if (selectedStatus === order.status) {
-      onClose();
-      return;
-    }
+    if (selectedStatus === order.status) { onClose(); return; }
 
     try {
       setIsUpdating(true);
       setError(null);
-
       await axiosInstance.patch(`/admin/orders/${order.id}/status`, {
         status: selectedStatus,
         reason: "Admin updated via modal",
       });
-
       onStatusUpdated();
       onClose();
     } catch (err: any) {
-      const message = err.response?.data?.message || "Failed to update status";
-      setError(message);
-      console.error("Status update error:", err);
+      setError(err.response?.data?.message || "Failed to update status");
     } finally {
       setIsUpdating(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-lg border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        id="order-detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-slate-800 rounded-lg border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="sticky top-0 bg-slate-900 border-b border-slate-700 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white">Order Details</h2>
+          <h2 id={titleId} className="text-xl font-bold text-white">Order Details</h2>
           <button
+            ref={closeRef}
+            aria-label="Close order details"
             onClick={onClose}
-            className="text-slate-400 hover:text-white text-2xl transition"
+            className="text-slate-400 hover:text-white text-2xl transition rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            type="button"
           >
-            ✕
+            <span aria-hidden="true">✕</span>
           </button>
         </div>
 
@@ -158,13 +192,16 @@ export default function OrderDetailModal({
 
           {/* Status Update */}
           <div className="border-t border-slate-700 pt-4">
-            <label className="block text-slate-200 font-semibold mb-3">Update Status</label>
+            <label htmlFor="order-status-select" className="block text-slate-200 font-semibold mb-3">
+              Update Status
+            </label>
             {error && (
-              <div className="mb-3 p-3 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm">
+              <div role="alert" className="mb-3 p-3 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm">
                 {error}
               </div>
             )}
             <select
+              id="order-status-select"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
               className="w-full bg-slate-700 border border-slate-600 text-white rounded px-4 py-2 mb-4"
@@ -179,8 +216,9 @@ export default function OrderDetailModal({
               onClick={handleStatusUpdate}
               disabled={isUpdating}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition disabled:opacity-50"
+              type="button"
             >
-              {isUpdating ? "Updating..." : "Update Status"}
+              {isUpdating ? "Updating…" : "Update Status"}
             </button>
           </div>
         </div>

@@ -85,13 +85,14 @@ export function CustomerBottomNav() {
   }
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 py-2 backdrop-blur md:hidden">
+    <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 py-2 backdrop-blur md:hidden">
       <div className="mx-auto flex max-w-[460px] items-center justify-between">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
 
           return (
             <Link
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative flex min-w-[60px] flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold transition",
                 isActive

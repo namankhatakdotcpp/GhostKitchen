@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { popularLocations } from "@/lib/mockData";
 import { useUserStore } from "@/store/userStore";
@@ -27,9 +27,12 @@ function PinIcon() {
   );
 }
 
+const LOCATION_TITLE_ID = "location-modal-title";
+
 export function LocationModal() {
   const { isLocationModalOpen, closeLocationModal, setLocation } = useUserStore();
   const [query, setQuery] = useState("");
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   const matchingLocations = popularLocations.filter((location) =>
     location.label.toLowerCase().includes(query.toLowerCase()),
@@ -38,19 +41,53 @@ export function LocationModal() {
   function handleSelect(location: LocationOption) {
     setLocation(location);
     setQuery("");
+    closeLocationModal();
   }
+
+  // Focus close button when modal opens
+  useEffect(() => {
+    if (isLocationModalOpen) closeRef.current?.focus();
+  }, [isLocationModalOpen]);
+
+  // Escape key + focus trap
+  useEffect(() => {
+    if (!isLocationModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { closeLocationModal(); return; }
+      if (e.key !== "Tab") return;
+      const dialog = document.getElementById("location-modal-dialog");
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button, input, [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isLocationModalOpen, closeLocationModal]);
 
   return (
     <AnimatePresence>
       {isLocationModalOpen ? (
         <motion.div
           animate={{ opacity: 1 }}
+          aria-hidden={!isLocationModalOpen}
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C1C1C]/50 p-4"
           exit={{ opacity: 0 }}
           initial={{ opacity: 0 }}
           onClick={closeLocationModal}
         >
           <motion.div
+            id="location-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={LOCATION_TITLE_ID}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="w-full max-w-lg rounded-[28px] border border-border bg-white p-5 shadow-[0_24px_80px_rgba(28,28,28,0.18)]"
             exit={{ opacity: 0, scale: 0.98, y: 8 }}
@@ -60,14 +97,15 @@ export function LocationModal() {
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-text-muted" aria-hidden="true">
                   Delivery area
                 </p>
-                <h2 className="mt-2 text-2xl font-bold text-text-primary">
+                <h2 id={LOCATION_TITLE_ID} className="mt-2 text-2xl font-bold text-text-primary">
                   Choose your location
                 </h2>
               </div>
               <button
+                ref={closeRef}
                 aria-label="Close location selector"
                 className="rounded-full border border-border p-2 text-text-secondary transition hover:border-brand/40 hover:text-brand"
                 onClick={closeLocationModal}
@@ -87,7 +125,10 @@ export function LocationModal() {
             <div className="mt-5 rounded-2xl border border-border bg-surface px-4 py-3 focus-within:border-brand focus-within:bg-white focus-within:shadow-focus">
               <div className="flex items-center gap-3 text-text-secondary">
                 <PinIcon />
+                <label htmlFor="location-search" className="sr-only">Search by area or city</label>
                 <input
+                  id="location-search"
+                  autoComplete="off"
                   className="w-full border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search by area or city"

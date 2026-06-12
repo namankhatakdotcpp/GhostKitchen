@@ -84,18 +84,23 @@ export function CustomerNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 w-full max-w-shell items-center justify-between gap-2 px-4 md:gap-3 md:px-6 lg:px-8">
-        <Link className="text-xl font-extrabold tracking-[-0.04em] md:text-2xl" href="/">
-          <span className="text-text-primary">ghost</span>
-          <span className="text-brand">kitchen</span>
+        <Link
+          aria-label="GhostKitchen — go to home"
+          className="text-xl font-extrabold tracking-[-0.04em] md:text-2xl"
+          href="/"
+        >
+          <span aria-hidden="true" className="text-text-primary">ghost</span>
+          <span aria-hidden="true" className="text-brand">kitchen</span>
         </Link>
 
         <button
+          aria-label={`Delivery location: ${location?.label ?? "Select location"}`}
           className="flex min-w-0 max-w-[160px] flex-1 items-center justify-center gap-2 rounded-pill border border-border px-3 py-2 text-[11px] font-semibold text-text-primary transition hover:border-brand/30 hover:bg-brand-light md:max-w-[360px] md:px-4 md:text-sm"
           onClick={openLocationModal}
           type="button"
         >
           <PinIcon />
-          <span className="line-clamp-1">
+          <span aria-hidden="true" className="line-clamp-1">
             {location?.label ?? "Select location"}
           </span>
           <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
@@ -112,7 +117,10 @@ export function CustomerNavbar() {
         <div className="flex items-center gap-2 md:gap-3">
           <RoleSwitcher />
           <NotificationBell />
-          <Link href="/cart">
+          <Link
+            aria-label={`Cart, ${totalQuantity} item${totalQuantity !== 1 ? "s" : ""}`}
+            href="/cart"
+          >
             <motion.div
               animate={
                 shouldBounce
@@ -123,7 +131,7 @@ export function CustomerNavbar() {
               transition={{ duration: 0.4 }}
             >
               <CartIcon />
-              <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">
+              <span aria-hidden="true" className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">
                 {totalQuantity}
               </span>
             </motion.div>

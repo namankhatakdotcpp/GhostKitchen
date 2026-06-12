@@ -106,3 +106,46 @@ a {
   background-size: 400% 100%;
   animation: bone-loader 1.4s ease infinite;
 }
+
+/* ── Accessibility ─────────────────────────────────────────────────────────── */
+
+/* Skip-to-content link — hidden until focused */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 9999;
+}
+.skip-link:focus {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.25rem;
+  background: #FF5200;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Consistent focus-visible ring on all interactive elements */
+:focus-visible {
+  outline: 2px solid #FF5200;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Override outline suppression that hides keyboard focus */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible) {
+  outline: none;
+}
