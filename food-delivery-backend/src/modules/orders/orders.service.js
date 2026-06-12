@@ -49,16 +49,18 @@ function serializeOrder(order) {
   };
 }
 
-export const listOrders = async (customerId) => {
+export const listOrders = async (customerId, { page = 1, limit = 20 } = {}) => {
+  const take = Math.min(Number(limit), 100);
+  const skip = (Math.max(Number(page), 1) - 1) * take;
   const orders = await prisma.order.findMany({
     where: customerId ? { customerId } : undefined,
     include: {
       restaurant: true,
       agent: true,
     },
-    orderBy: {
-      placedAt: "desc",
-    },
+    orderBy: { placedAt: "desc" },
+    take,
+    skip,
   });
 
   return orders.map(serializeOrder);

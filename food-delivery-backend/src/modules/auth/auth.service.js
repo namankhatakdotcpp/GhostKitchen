@@ -8,6 +8,7 @@ import {
   hashToken,
 } from "../../utils/jwt.js";
 import AppError from "../../utils/AppError.js";
+import { logger } from "../../utils/logger.js";
 
 const USER_SELECT = {
   id: true, name: true, email: true, phone: true,
@@ -195,7 +196,7 @@ export const getCurrentUser = async (userId) => {
     }
   } catch (healErr) {
     // Log but don't fail the request — the user can still browse the app.
-    console.warn("[auth.me] heal failed, returning unhealed user:", healErr.message);
+    logger.warn("[auth.me] heal failed, returning unhealed user", { error: healErr.message });
   }
 
   return user;

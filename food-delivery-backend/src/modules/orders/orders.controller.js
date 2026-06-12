@@ -11,6 +11,7 @@ import { emitOrderAssignedToAgent, emitOrderNew, emitOrderStatusUpdated } from "
 import { createNotification } from "../notification/notification.service.js";
 import { sendOrderPlacedEmail, sendOrderStatusEmail } from "../../services/email.service.js";
 import { computeETA } from "../../utils/eta.js";
+import { logger } from "../../utils/logger.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -142,7 +143,7 @@ export const placeOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: error.message });
     }
 
-    console.error("Order creation error:", error);
+    logger.error("Order creation error", { error: error.message });
     return res.status(500).json({ message: "Unable to place order" });
   }
 };
@@ -216,7 +217,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
     if (newStatus === "CONFIRMED" && io) {
       const assignedAgent = await assignDeliveryAgent(orderId, io);
       if (!assignedAgent) {
-        console.warn(`No agents available for order ${orderId}`);
+        logger.warn("No agents available for order", { orderId });
       }
     }
 
@@ -266,7 +267,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
       order: updatedOrder,
     });
   } catch (error) {
-    console.error("Order status update error:", error);
+    logger.error("Order status update error", { error: error.message });
     return res.status(500).json({ message: "Unable to update order status" });
   }
 };

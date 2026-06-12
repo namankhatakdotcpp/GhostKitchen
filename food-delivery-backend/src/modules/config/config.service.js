@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { emitToAll } from "../../socket/socketServer.js";
 import { sendMaintenanceEmail } from "../../services/email.service.js";
+import { logger } from "../../utils/logger.js";
 
 // In-process cache — avoids a DB round-trip on every request for maintenance check
 let _cache = null;
@@ -150,7 +151,7 @@ export async function broadcastMaintenanceNotification(cfg) {
       }
     }
   } catch (err) {
-    console.error("[Maintenance] Notification broadcast failed:", err.message);
+    logger.error("[Maintenance] Notification broadcast failed", { error: err.message });
   }
 }
 

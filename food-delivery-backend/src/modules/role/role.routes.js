@@ -1,13 +1,13 @@
 import express from "express";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { setAccessTokenCookie } from "../auth/auth.controller.js";
+import { logger } from "../../utils/logger.js";
 import {
   switchRole, registerRestaurant, addRestaurant, registerRider,
   getMyRestaurants, updateMyRestaurant,
 } from "./role.service.js";
 import { prisma } from "../../config/prisma.js";
 import { auditLog } from "../../utils/audit.js";
-import { logger } from "../../utils/logger.js";
 
 const router = express.Router();
 
@@ -48,17 +48,14 @@ router.post("/register-restaurant", authenticate, async (req, res, next) => {
         req,
       });
     } catch (auditErr) {
-      console.warn("[register-restaurant] audit log failed (non-fatal):", auditErr.message);
+      logger.warn("[register-restaurant] audit log failed (non-fatal)", { error: auditErr.message });
     }
     res.status(201).json({ restaurant: result.restaurant, user: result.user, accessToken: result.token });
   } catch (e) {
-    // Log full details server-side; never leak raw Prisma/JS internals to clients.
-    console.error("[register-restaurant] failed:", {
+    logger.error("[register-restaurant] failed", {
       userId: req.user?.userId,
       message: e?.message,
-      stack: e?.stack,
       code: e?.code,
-      meta: e?.meta,
     });
     return next(e);
   }

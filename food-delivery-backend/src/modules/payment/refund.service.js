@@ -20,9 +20,14 @@ export const initiateRefund = async ({ cfOrderId, amount, reason, adminId, req }
   if (refundAmount > payment.amount) throw new AppError("Refund amount cannot exceed payment amount", 400);
   if (refundAmount <= 0) throw new AppError("Refund amount must be positive", 400);
 
-  // 2. Check for duplicate
-  const existing = await prisma.refund.findFirst({ where: { cfOrderId, status: "SUCCESS" } });
-  if (existing) return existing;
+  // 2. Check for duplicate — block if already succeeded OR still processing
+  const existing = await prisma.refund.findFirst({
+    where: { cfOrderId, status: { in: ["SUCCESS", "PENDING"] } },
+  });
+  if (existing?.status === "SUCCESS") return existing;
+  if (existing?.status === "PENDING") {
+    throw new AppError("A refund is already pending for this order. Wait for it to settle before initiating another.", 409);
+  }
 
   // 3. Call Cashfree Refund API
   const cfRefundId = `REF-${cfOrderId}-${Date.now()}`;

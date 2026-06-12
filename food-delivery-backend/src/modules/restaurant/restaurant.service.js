@@ -2,6 +2,7 @@ import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { getSiteConfigCached } from "../config/config.service.js";
 import { cacheGet, cacheSet, cacheDelete, CACHE_KEYS, CACHE_TTL } from "../../utils/cache.js";
+import { logger } from "../../utils/logger.js";
 
 export const getRestaurants = async (
   search,
@@ -52,24 +53,17 @@ export const getRestaurants = async (
       pages: Math.ceil(total / limit),
     };
   } catch (error) {
-    console.error("❌ getRestaurants DB error:", error.message);
+    logger.error("getRestaurants DB error", { error: error.message });
     throw error;
   }
 };
 
 export const getRestaurantById = async (param) => {
-  const conditions = [];
-
-  // Always look up by string ID directly (covers UUIDs and legacy ids like "rest-001")
-  conditions.push({ id: param });
-
-  // Also try slug lookup
-  conditions.push({ slug: param });
-
-
   return await prisma.restaurant.findFirst({
     where: {
-      OR: conditions,
+      OR: [{ id: param }, { slug: param }],
+      suspended: false,
+      isApproved: true,
     },
     include: {
       owner: {
@@ -90,7 +84,11 @@ export const getRestaurantWithCache = async (param) => {
   if (cached) return cached;
 
   const restaurant = await prisma.restaurant.findFirst({
-    where: { OR: isUUID ? [{ id: param }] : [{ slug: param }] },
+    where: {
+      OR: isUUID ? [{ id: param }] : [{ slug: param }],
+      suspended: false,
+      isApproved: true,
+    },
     include: {
       menuItems: {
         select: {
@@ -163,14 +161,14 @@ export const getRestaurantMenu = async (id, isOwner = false) => {
 };
 
 export const createRestaurant = async (data, ownerId) => {
-  // Generate slug from restaurant name — suffix keeps it unique so two
-  // restaurants with the same name don't collide on the unique constraint
+  const cfg = await getSiteConfigCached().catch(() => null);
+
   const slug = data.name
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "") // Remove special characters
-    .replace(/\s+/g, "-") // Replace spaces with hyphens
-    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
     .slice(0, 50) + "-" + Date.now().toString(36);
 
   return prisma.restaurant.create({
@@ -188,6 +186,8 @@ export const createRestaurant = async (data, ownerId) => {
         minOrder: data.minOrder,
       },
       deliveryRadius: data.deliveryRadius || 5,
+      isApproved: cfg ? !cfg.requireApproval : true,
+      isOpen: cfg ? !cfg.requireApproval : true,
     },
     include: {
       owner: {

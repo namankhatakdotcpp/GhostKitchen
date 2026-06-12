@@ -1,3 +1,4 @@
+import { logger } from "../../utils/logger.js";
 import {
   getRestaurants,
   getRestaurantById,
@@ -51,7 +52,7 @@ export const getMyRestaurant = async (req, res) => {
 
     return res.json({ success: true, data: restaurant });
   } catch (error) {
-    console.error("Error fetching own restaurant:", error);
+    logger.error("Error fetching own restaurant", { error: error.message });
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -63,11 +64,10 @@ export const listRestaurants = async (req, res) => {
 
     return res.json({ success: true, data: result });
   } catch (error) {
-    console.error("ERROR:", error);
+    logger.error("Failed to fetch restaurants", { error: error.message });
     return res.status(500).json({
       success: false,
       message: "Failed to fetch restaurants",
-      error: error?.message,
     });
   }
 };
@@ -83,11 +83,7 @@ export const getRestaurant = async (req, res) => {
       });
     }
 
-    console.log("[Restaurant API]", {
-      route: "/restaurants/:id",
-      param,
-      time: new Date().toISOString(),
-    });
+    logger.debug("GET /restaurants/:id", { param });
 
     const data = await getRestaurantWithCache(param);
 
@@ -104,8 +100,7 @@ export const getRestaurant = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("[Restaurant API ERROR]", err);
-
+    logger.error("GET /restaurants/:id failed", { error: err.message, param: req.params.id });
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -123,21 +118,15 @@ export const getMenu = async (req, res) => {
 
     const isOwner = req.user && req.user.role === "RESTAURANT";
 
-    console.log("📖 Fetching menu for restaurant:", { id, isOwner });
     const menu = await getRestaurantMenu(id, isOwner);
 
     if (!menu) {
-      console.warn("⚠️ Restaurant not found or no menu:", id);
       return res.status(404).json({ message: "Restaurant not found" });
     }
 
-    console.log("✅ Menu fetched:", { restaurantId: id, categories: Object.keys(menu).length });
     return res.status(200).json(menu);
   } catch (error) {
-    console.error("❌ Error fetching menu:", {
-      message: error?.message,
-      restaurantId: req.params.id,
-    });
+    logger.error("Error fetching menu", { restaurantId: req.params.id, error: error?.message });
     return res.status(500).json({
       message: "Failed to fetch menu",
       error: process.env.NODE_ENV === "development" ? error?.message : undefined,
@@ -180,7 +169,7 @@ export const createNewRestaurant = async (req, res) => {
 
     return res.status(201).json({ message: "Restaurant created successfully", restaurant });
   } catch (error) {
-    console.error("Error creating restaurant:", error);
+    logger.error("Error creating restaurant", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -209,7 +198,7 @@ export const updateExistingRestaurant = async (req, res) => {
 
     return res.status(200).json({ message: "Restaurant updated successfully", restaurant: updated });
   } catch (error) {
-    console.error("Error updating restaurant:", error);
+    logger.error("Error updating restaurant", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -231,7 +220,7 @@ export const toggleStatus = async (req, res) => {
 
     return res.status(200).json({ message: "Restaurant status updated", restaurant: updated });
   } catch (error) {
-    console.error("Error toggling restaurant status:", error);
+    logger.error("Error toggling restaurant status", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -249,7 +238,7 @@ export const setRestaurantStatus = async (req, res) => {
     const updated = await setRestaurantStatusAndNote(id, isOpen, statusNote ?? null);
     return res.json({ success: true, restaurant: updated });
   } catch (error) {
-    console.error("Error setting restaurant status:", error);
+    logger.error("Error setting restaurant status", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -267,7 +256,7 @@ export const getRestaurantAnalytics = async (req, res) => {
     const data = await getRestaurantAnalyticsData(id, range);
     return res.json({ success: true, data });
   } catch (error) {
-    console.error("Error fetching analytics:", error);
+    logger.error("Error fetching analytics", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -303,7 +292,7 @@ export const addNewMenuItem = async (req, res) => {
 
     return res.status(201).json({ message: "Menu item added successfully", menuItem });
   } catch (error) {
-    console.error("Error adding menu item:", error);
+    logger.error("Error adding menu item", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -336,7 +325,7 @@ export const updateExistingMenuItem = async (req, res) => {
 
     return res.status(200).json({ message: "Menu item updated successfully", menuItem: updated });
   } catch (error) {
-    console.error("Error updating menu item:", error);
+    logger.error("Error updating menu item", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -362,7 +351,7 @@ export const toggleMenuItemStatus = async (req, res) => {
 
     return res.status(200).json({ message: "Menu item availability toggled", menuItem: updated });
   } catch (error) {
-    console.error("Error toggling menu item availability:", error);
+    logger.error("Error toggling menu item availability", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -388,7 +377,7 @@ export const deleteExistingMenuItem = async (req, res) => {
 
     return res.status(200).json({ message: "Menu item deleted successfully" });
   } catch (error) {
-    console.error("Error deleting menu item:", error);
+    logger.error("Error deleting menu item", { error: error.message });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -480,7 +469,7 @@ export const getRecommendations = async (req, res) => {
 
     res.json({ restaurants: results.map(serializeRestaurant) });
   } catch (error) {
-    console.error("Error fetching recommendations:", error);
+    logger.error("Error fetching recommendations", { error: error.message });
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -521,7 +510,7 @@ export const getTrending = async (req, res) => {
 
     res.json({ restaurants: sorted.map(serializeRestaurant) });
   } catch (error) {
-    console.error("Error fetching trending:", error);
+    logger.error("Error fetching trending", { error: error.message });
     res.status(500).json({ message: "Internal server error" });
   }
 };
