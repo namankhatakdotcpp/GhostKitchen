@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   Map,
+  Siren,
   Settings,
   ShoppingBag,
   Store,
@@ -38,6 +39,7 @@ const navGroups = [
       { href: "/admin/orders",         label: "Orders",          icon: ShoppingBag },
       { href: "/admin/delivery-agents",label: "Delivery Agents", icon: Bike },
       { href: "/admin/live-map",       label: "Operations Map",  icon: Map },
+      { href: "/admin/ops",            label: "Ops Intelligence", icon: Siren },
     ],
   },
   {
