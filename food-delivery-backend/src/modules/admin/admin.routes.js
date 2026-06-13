@@ -48,6 +48,7 @@ import {
   getAnalytics,
   getDeliveryAgents,
   toggleAgentSuspend,
+  getLiveMap,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -61,6 +62,12 @@ router.use(authorize("ADMIN"));
  * Admin dashboard statistics
  */
 router.get("/stats", getAdminStats);
+
+/**
+ * GET /api/admin/live-map
+ * Live operations map snapshot: restaurants, riders, active deliveries
+ */
+router.get("/live-map", getLiveMap);
 
 /**
  * GET /api/admin/orders

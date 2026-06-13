@@ -3,12 +3,24 @@ import { authenticate } from "../../middlewares/auth.middleware.js";
 import { roleMiddleware } from "../../middlewares/role.middleware.js";
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
+import { updateRiderLocation } from "./delivery.service.js";
 
 const router = express.Router();
 
 // Every delivery route requires the DELIVERY role — previously any logged-in
 // customer could toggle availability and read order/customer details.
 router.use(authenticate, roleMiddleware(["DELIVERY", "ADMIN"]));
+
+// POST /api/delivery/location
+// Rider GPS ping. The rider id is taken from the authenticated token, never the
+// body, so a rider can only ever update their own location. Broadcasts to admin.
+router.post("/location", async (req, res, next) => {
+  try {
+    const { latitude, longitude, heading, speed } = req.body;
+    const location = await updateRiderLocation(req.user.userId, { latitude, longitude, heading, speed });
+    res.json({ location });
+  } catch (e) { next(e); }
+});
 
 // PATCH /api/delivery/status
 router.patch("/status", async (req, res, next) => {

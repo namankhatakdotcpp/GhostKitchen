@@ -3,6 +3,10 @@ import { logger } from "../../utils/logger.js";
 import AppError from "../../utils/AppError.js";
 import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
 import { computeETA } from "../../utils/eta.js";
+import { getRiderStatus } from "../../utils/riderStatus.js";
+
+// Order statuses that represent an in-flight delivery a rider is actively working.
+const ACTIVE_DELIVERY_STATUSES = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
 
 const ORDER_INCLUDE = {
   customer: { select: { id: true, email: true, name: true, phone: true } },
@@ -698,4 +702,112 @@ export const auditLogToCsv = (entries) => {
     headers.map((h) => escapeCsv(h === "createdAt" ? e[h]?.toISOString() : e[h])).join(",")
   );
   return [headers.join(","), ...rows].join("\n");
+};
+
+// ── Live Operations Map ───────────────────────────────────────────────────────
+// Single snapshot powering /api/admin/live-map: restaurants, riders (with live
+// presence + active load), and in-flight deliveries. All counts are computed
+// with groupBy aggregations (no per-row queries) so it scales to hundreds of
+// restaurants and thousands of riders without N+1 fan-out.
+export const getLiveMapData = async () => {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [restaurants, riderLocations, deliveringOrders] = await Promise.all([
+    prisma.restaurant.findMany({
+      where: { lat: { not: null }, lng: { not: null } },
+      select: { id: true, name: true, lat: true, lng: true, rating: true, isOpen: true, suspended: true },
+    }),
+    prisma.riderLocation.findMany({
+      where: { rider: { roles: { has: "DELIVERY" } } },
+      select: {
+        riderId: true, latitude: true, longitude: true, heading: true, speed: true, lastSeenAt: true,
+        rider: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.order.findMany({
+      where: { status: "OUT_FOR_DELIVERY" },
+      select: {
+        id: true, status: true, total: true, createdAt: true,
+        restaurant: { select: { id: true, name: true, lat: true, lng: true } },
+        customer: { select: { id: true, name: true, phone: true } },
+        agent: { select: { id: true, name: true, phone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const restaurantIds = restaurants.map((r) => r.id);
+  const riderIds = riderLocations.map((l) => l.riderId);
+
+  const [activeByRestaurant, todayByRestaurant, activeByRider] = await Promise.all([
+    restaurantIds.length
+      ? prisma.order.groupBy({
+          by: ["restaurantId"],
+          where: { restaurantId: { in: restaurantIds }, status: { in: ACTIVE_DELIVERY_STATUSES } },
+          _count: { id: true },
+        })
+      : [],
+    restaurantIds.length
+      ? prisma.order.groupBy({
+          by: ["restaurantId"],
+          where: { restaurantId: { in: restaurantIds }, createdAt: { gte: startOfToday } },
+          _count: { id: true },
+        })
+      : [],
+    riderIds.length
+      ? prisma.order.groupBy({
+          by: ["agentId"],
+          where: { agentId: { in: riderIds }, status: { in: ACTIVE_DELIVERY_STATUSES } },
+          _count: { id: true },
+        })
+      : [],
+  ]);
+
+  const activeRestMap = new Map(activeByRestaurant.map((r) => [r.restaurantId, r._count.id]));
+  const todayRestMap = new Map(todayByRestaurant.map((r) => [r.restaurantId, r._count.id]));
+  const activeRiderMap = new Map(activeByRider.map((r) => [r.agentId, r._count.id]));
+  const riderCoordMap = new Map(riderLocations.map((l) => [l.riderId, { latitude: l.latitude, longitude: l.longitude }]));
+
+  return {
+    restaurants: restaurants.map((r) => ({
+      id: r.id,
+      name: r.name,
+      latitude: r.lat,
+      longitude: r.lng,
+      rating: r.rating,
+      status: r.suspended ? "SUSPENDED" : r.isOpen ? "OPEN" : "CLOSED",
+      activeOrders: activeRestMap.get(r.id) ?? 0,
+      todaysOrders: todayRestMap.get(r.id) ?? 0,
+    })),
+    riders: riderLocations.map((l) => ({
+      id: l.riderId,
+      name: l.rider?.name ?? "Rider",
+      status: getRiderStatus(l.lastSeenAt),
+      latitude: l.latitude,
+      longitude: l.longitude,
+      heading: l.heading,
+      speed: l.speed,
+      lastSeenAt: l.lastSeenAt,
+      activeDeliveries: activeRiderMap.get(l.riderId) ?? 0,
+    })),
+    activeOrders: deliveringOrders.map((o) => ({
+      id: o.id,
+      orderNumber: o.id.slice(-6).toUpperCase(),
+      status: o.status,
+      total: o.total,
+      restaurant: o.restaurant
+        ? { id: o.restaurant.id, name: o.restaurant.name, latitude: o.restaurant.lat, longitude: o.restaurant.lng }
+        : null,
+      customer: o.customer ? { id: o.customer.id, name: o.customer.name } : null,
+      rider: o.agent
+        ? {
+            id: o.agent.id,
+            name: o.agent.name,
+            latitude: riderCoordMap.get(o.agent.id)?.latitude ?? null,
+            longitude: riderCoordMap.get(o.agent.id)?.longitude ?? null,
+          }
+        : null,
+    })),
+  };
 };

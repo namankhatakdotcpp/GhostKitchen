@@ -10,6 +10,7 @@ import {
   Database,
   LayoutDashboard,
   LogOut,
+  Map,
   Settings,
   ShoppingBag,
   Store,
@@ -36,6 +37,7 @@ const navGroups = [
       { href: "/admin/restaurants",    label: "Restaurants",     icon: Store },
       { href: "/admin/orders",         label: "Orders",          icon: ShoppingBag },
       { href: "/admin/delivery-agents",label: "Delivery Agents", icon: Bike },
+      { href: "/admin/live-map",       label: "Operations Map",  icon: Map },
     ],
   },
   {

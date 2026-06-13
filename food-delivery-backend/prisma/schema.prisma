@@ -69,6 +69,7 @@ model User {
   notifications   Notification[]
   addresses       Address[]
   favorites       Favorite[]
+  riderLocation   RiderLocation? @relation("UserRiderLocation")
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -337,4 +338,24 @@ model SiteConfig {
   maintenanceScheduledAt  DateTime?
   maintenanceEndsAt       DateTime?
   updatedAt               DateTime  @updatedAt
+}
+
+// Live GPS position for a delivery rider, powering the admin live operations map.
+// One row per rider (riderId unique); upserted on every POST /api/delivery/location.
+model RiderLocation {
+  id         String   @id @default(cuid())
+
+  riderId    String   @unique
+
+  latitude   Float
+  longitude  Float
+
+  heading    Float?
+  speed      Float?
+
+  lastSeenAt DateTime @updatedAt
+
+  rider User @relation("UserRiderLocation", fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@index([latitude, longitude])
 }

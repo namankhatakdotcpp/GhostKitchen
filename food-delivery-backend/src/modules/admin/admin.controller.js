@@ -467,3 +467,14 @@ export const toggleAgentSuspend = async (req, res, next) => {
     res.json({ user });
   } catch (error) { next(error); }
 };
+
+/**
+ * GET /admin/live-map
+ * Snapshot for the live operations map: restaurants, riders, active deliveries.
+ */
+export const getLiveMap = async (req, res, next) => {
+  try {
+    const data = await adminService.getLiveMapData();
+    res.json(data);
+  } catch (error) { next(error); }
+};
