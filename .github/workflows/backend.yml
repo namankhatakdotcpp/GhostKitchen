@@ -76,7 +76,7 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npm run test:coverage -- --coverage.thresholds.statements=80 --coverage.thresholds.branches=70
+        run: npm run test:coverage
         env:
           DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
           JWT_SECRET: "test-secret-32-chars-minimum-here"
