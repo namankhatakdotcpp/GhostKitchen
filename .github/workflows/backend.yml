@@ -20,6 +20,11 @@ jobs:
     name: Lint & Schema
     runs-on: ubuntu-latest
 
+    # prisma validate/migrate-diff evaluate env("DATABASE_URL") in the
+    # datasource block, so a value must be present even though no DB is hit.
+    env:
+      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+
     steps:
       - uses: actions/checkout@v4
 
