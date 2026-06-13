@@ -14,6 +14,7 @@ import { prisma } from "./config/prisma.js";
 import { connectRedis } from "./config/redis.js";
 import { initSocket } from "./socket/socketServer.js";
 import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
+import { startIncidentJob } from "./jobs/incident.job.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
 import cron from "node-cron";
 import { logger } from "./utils/logger.js";
@@ -62,6 +63,7 @@ const startServer = async () => {
       // Background jobs safely
       try {
         startOrderTimeoutJob();
+        startIncidentJob();
       } catch (jobError) {
         logger.error("❌ Job initialisation failed", { error: jobError.message });
       }

@@ -13,7 +13,9 @@ import {
   listIncidents,
   createIncident,
   updateIncident,
+  acknowledgeIncident,
   resolveIncident,
+  getIncidentEvents,
 } from "./ops.controller.js";
 
 const router = express.Router();
@@ -28,7 +30,9 @@ router.get("/performance/restaurants", getRestaurantPerformance);
 
 router.get("/incidents", listIncidents);
 router.post("/incidents", createIncident);
+router.get("/incidents/:id/events", getIncidentEvents);
 router.patch("/incidents/:id", updateIncident);
+router.post("/incidents/:id/acknowledge", acknowledgeIncident);
 router.post("/incidents/:id/resolve", resolveIncident);
 
 export default router;

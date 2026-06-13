@@ -387,16 +387,37 @@ model Incident {
   entityType  String? // RIDER | ORDER | RESTAURANT
   entityId    String?
 
-  createdById String
-  createdBy   User      @relation("IncidentCreator", fields: [createdById], references: [id])
+  // null for incidents the system raised automatically from a fleet alert
+  createdById  String?
+  createdBy    User?     @relation("IncidentCreator", fields: [createdById], references: [id])
   resolvedById String?
-  resolvedBy   User?    @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  resolvedBy   User?     @relation("IncidentResolver", fields: [resolvedById], references: [id])
   resolvedAt   DateTime?
+  acknowledgedAt DateTime?
 
+  // Escalation engine
+  escalatedAt     DateTime?
+  escalationCount Int       @default(0)
+  lastNotifiedAt  DateTime?
+
+  events      IncidentEvent[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([status])
   @@index([severity])
   @@index([createdAt])
+}
+
+// Append-only activity log for an incident (timeline shown in the admin UI).
+model IncidentEvent {
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type       String // CREATED | SEVERITY_CHANGED | STATUS_CHANGED | ACKNOWLEDGED | RESOLVED | ESCALATED | NOTIFIED
+  message    String?
+  actorId    String? // admin user id, or null for system actions
+  createdAt  DateTime @default(now())
+
+  @@index([incidentId, createdAt])
 }

@@ -11,7 +11,8 @@ const { AdminOpsPage } = await import("@/components/admin/admin-ops-page");
 const DATA: Record<string, any> = {
   "/ops/alerts": { alerts: [{ type: "RIDER_OFFLINE", severity: "CRITICAL", entityType: "RIDER", entityId: "d1", message: "Ravi offline 12 min" }] },
   "/ops/sla": { measuredOrders: 10, onTime: 8, delayed: 2, onTimeRate: 80, avgLatenessMin: 6, days: 7 },
-  "/ops/incidents": { incidents: [{ id: "inc-1", title: "Kitchen fire drill", description: null, severity: "HIGH", status: "OPEN", category: null, createdAt: new Date().toISOString() }] },
+  "/ops/incidents": { incidents: [{ id: "inc-1", title: "Kitchen fire drill", description: null, severity: "HIGH", status: "OPEN", category: null, escalationCount: 2, createdAt: new Date().toISOString() }] },
+  "/ops/incidents/inc-1/events": { events: [{ id: "e1", type: "CREATED", message: "Created (HIGH)", createdAt: new Date().toISOString() }] },
   "/ops/performance/riders": { riders: [{ riderId: "d1", name: "Ravi", deliveries: 12, avgDeliveryMin: 28, distanceKm: 40, cancellationRate: 5 }], days: 7 },
   "/ops/performance/restaurants": { restaurants: [{ restaurantId: "r1", name: "Pizza Place", rating: 4.5, revenuePaise: 1250000, orderVolume: 30, deliveredOrders: 27 }], days: 7 },
 };
@@ -80,5 +81,20 @@ describe("AdminOpsPage", () => {
     await waitFor(() => expect(screen.getByText("Kitchen fire drill")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/ops/incidents/inc-1/resolve"));
+  });
+
+  it("acknowledges an open incident", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Kitchen fire drill")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/ops/incidents/inc-1/acknowledge"));
+  });
+
+  it("shows the incident timeline on demand", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Kitchen fire drill")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledWith("/ops/incidents/inc-1/events"));
+    await waitFor(() => expect(screen.getByText("Created (HIGH)")).toBeInTheDocument());
   });
 });

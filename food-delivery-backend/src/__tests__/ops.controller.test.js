@@ -12,7 +12,9 @@ vi.mock("../modules/ops/ops.service.js", () => ({
   listIncidents: vi.fn(),
   createIncident: vi.fn(),
   updateIncident: vi.fn(),
+  acknowledgeIncident: vi.fn(),
   resolveIncident: vi.fn(),
+  listIncidentEvents: vi.fn(),
 }));
 
 const ctrl = await import("../modules/ops/ops.controller.js");
@@ -85,6 +87,20 @@ describe("ops.controller", () => {
     const res = mockRes();
     await ctrl.resolveIncident({ params: { id: "inc-1" }, user: { userId: "admin-2" } }, res, vi.fn());
     expect(svc.resolveIncident).toHaveBeenCalledWith("inc-1", "admin-2");
+  });
+
+  it("acknowledgeIncident uses the authenticated user id", async () => {
+    svc.acknowledgeIncident.mockResolvedValue({ id: "inc-1", status: "ACKNOWLEDGED" });
+    const res = mockRes();
+    await ctrl.acknowledgeIncident({ params: { id: "inc-1" }, user: { userId: "admin-3" } }, res, vi.fn());
+    expect(svc.acknowledgeIncident).toHaveBeenCalledWith("inc-1", "admin-3");
+  });
+
+  it("getIncidentEvents returns the timeline", async () => {
+    svc.listIncidentEvents.mockResolvedValue({ events: [{ type: "CREATED" }] });
+    const res = mockRes();
+    await ctrl.getIncidentEvents({ params: { id: "inc-1" } }, res, vi.fn());
+    expect(res.json).toHaveBeenCalledWith({ events: [{ type: "CREATED" }] });
   });
 
   it("forwards service errors to next", async () => {

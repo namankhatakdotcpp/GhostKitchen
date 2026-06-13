@@ -11,6 +11,7 @@ vi.mock("../config/prisma.js", () => ({
     restaurant: { findMany: vi.fn() },
     user: { findMany: vi.fn() },
     incident: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
+    incidentEvent: { create: vi.fn().mockResolvedValue({}), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -239,6 +240,140 @@ describe("ops.service performance", () => {
     prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Pizza", rating: 4.5 }]);
     const out = await ops.getRestaurantPerformance({ days: 7 });
     expect(out.restaurants[0]).toMatchObject({ restaurantId: "r1", revenuePaise: 45000 });
+  });
+});
+
+// ── Pure logic: auto-incidents + escalation ──────────────────────────────────────
+describe("computeAutoIncidents", () => {
+  it("raises HIGH/CRITICAL for overloaded restaurants at the right thresholds", () => {
+    const out = logic.computeAutoIncidents({ restaurants: [
+      { id: "r1", name: "A", activeOrders: 25 },
+      { id: "r2", name: "B", activeOrders: 40 },
+      { id: "r3", name: "C", activeOrders: 5 },
+    ] }, NOW);
+    expect(out.find((c) => c.entityId === "r1")).toMatchObject({ severity: "HIGH", category: "RESTAURANT_OVERLOADED" });
+    expect(out.find((c) => c.entityId === "r2")).toMatchObject({ severity: "CRITICAL" });
+    expect(out.find((c) => c.entityId === "r3")).toBeUndefined();
+  });
+
+  it("only raises rider-offline when an active delivery exists", () => {
+    const out = logic.computeAutoIncidents({ riders: [
+      { id: "d1", name: "R1", lastSeenAt: minsAgo(20), activeDeliveries: 1 },
+      { id: "d2", name: "R2", lastSeenAt: minsAgo(20), activeDeliveries: 0 },
+    ] }, NOW);
+    expect(out.map((c) => c.entityId)).toEqual(["d1"]);
+  });
+
+  it("escalates a delivery to CRITICAL past 30 min late", () => {
+    const out = logic.computeAutoIncidents({ activeOrders: [{ id: "o1", orderNumber: "A1", estimatedDelivery: minsAgo(31) }] }, NOW);
+    expect(out[0]).toMatchObject({ category: "DELIVERY_DELAYED", severity: "CRITICAL" });
+  });
+
+  it("raises an incident for an order stuck > 45 min", () => {
+    const out = logic.computeAutoIncidents({ openOrders: [{ id: "o2", orderNumber: "A2", status: "PREPARING", placedAt: minsAgo(50) }] }, NOW);
+    expect(out[0]).toMatchObject({ category: "ORDER_STUCK", severity: "HIGH" });
+  });
+});
+
+describe("nextEscalation + maxSeverity", () => {
+  it("maxSeverity returns the higher severity", () => {
+    expect(logic.maxSeverity("HIGH", "LOW")).toBe("HIGH");
+    expect(logic.maxSeverity("MEDIUM", "CRITICAL")).toBe("CRITICAL");
+  });
+  it("bumps LOW→MEDIUM after 30 min", () => {
+    expect(logic.nextEscalation({ severity: "LOW", createdAt: minsAgo(31), lastNotifiedAt: null }, NOW).severity).toBe("MEDIUM");
+  });
+  it("bumps HIGH→CRITICAL after 60 min", () => {
+    expect(logic.nextEscalation({ severity: "HIGH", createdAt: minsAgo(61), lastNotifiedAt: null }, NOW).severity).toBe("CRITICAL");
+  });
+  it("renotifies after 120 min when not recently notified", () => {
+    const r = logic.nextEscalation({ severity: "CRITICAL", createdAt: minsAgo(130), lastNotifiedAt: null }, NOW);
+    expect(r.renotify).toBe(true);
+  });
+  it("emails after 180 min", () => {
+    const r = logic.nextEscalation({ severity: "CRITICAL", createdAt: minsAgo(190), lastNotifiedAt: null }, NOW);
+    expect(r.email).toBe(true);
+  });
+  it("suppresses renotify within the 2h dedup window", () => {
+    const r = logic.nextEscalation({ severity: "CRITICAL", createdAt: minsAgo(200), lastNotifiedAt: minsAgo(10) }, NOW);
+    expect(r.renotify).toBe(false);
+  });
+});
+
+// ── Service: auto-incident engine + dedup ────────────────────────────────────────
+describe("ops.service runAutoIncidents", () => {
+  const ago = (m) => new Date(Date.now() - m * 60000);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.incidentEvent.create.mockResolvedValue({});
+    prisma.riderLocation.findMany.mockResolvedValue([]);
+    prisma.order.findMany.mockResolvedValue([]); // active + open empty
+    prisma.order.groupBy.mockResolvedValue([{ restaurantId: "r1", _count: { id: 25 } }]); // HIGH overload
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Busy" }]);
+    prisma.user.findMany.mockResolvedValue([]); // admins for notify
+  });
+
+  it("creates an incident for a fresh candidate", async () => {
+    prisma.incident.findMany.mockResolvedValue([]); // no existing
+    prisma.incident.create.mockResolvedValue({ id: "inc-1", title: "x", severity: "HIGH" });
+    const out = await ops.runAutoIncidents(ago(0));
+    expect(out.created).toBe(1);
+    expect(prisma.incident.create).toHaveBeenCalled();
+  });
+
+  it("deduplicates: escalates an existing OPEN incident instead of creating", async () => {
+    prisma.order.groupBy.mockResolvedValue([{ restaurantId: "r1", _count: { id: 40 } }]); // CRITICAL now
+    prisma.incident.findMany.mockResolvedValue([{ id: "inc-1", category: "RESTAURANT_OVERLOADED", entityId: "r1", severity: "HIGH" }]);
+    prisma.incident.update.mockResolvedValue({});
+    const out = await ops.runAutoIncidents(ago(0));
+    expect(out.created).toBe(0);
+    expect(out.escalated).toBe(1);
+    expect(prisma.incident.create).not.toHaveBeenCalled();
+    expect(prisma.incident.update).toHaveBeenCalled();
+  });
+
+  it("does not downgrade when the live signal is no worse", async () => {
+    prisma.incident.findMany.mockResolvedValue([{ id: "inc-1", category: "RESTAURANT_OVERLOADED", entityId: "r1", severity: "CRITICAL" }]);
+    prisma.incident.update.mockResolvedValue({});
+    const out = await ops.runAutoIncidents(ago(0));
+    expect(out.escalated).toBe(0); // candidate HIGH < existing CRITICAL → only a freshness touch
+  });
+});
+
+describe("ops.service runEscalations / acknowledge / events", () => {
+  const ago = (m) => new Date(Date.now() - m * 60000);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.incidentEvent.create.mockResolvedValue({});
+    prisma.user.findMany.mockResolvedValue([{ id: "a1", name: "Admin", email: "a@gk.dev" }]);
+  });
+
+  it("escalates an aged OPEN incident", async () => {
+    prisma.incident.findMany.mockResolvedValue([{ id: "inc-1", title: "x", severity: "LOW", status: "OPEN", createdAt: ago(40), escalationCount: 0, lastNotifiedAt: null }]);
+    prisma.incident.update.mockResolvedValue({});
+    const out = await ops.runEscalations(new Date());
+    expect(out.escalated).toBe(1);
+    expect(prisma.incident.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ severity: "MEDIUM" }) }));
+  });
+
+  it("re-notifies a long-open incident", async () => {
+    prisma.incident.findMany.mockResolvedValue([{ id: "inc-1", title: "x", severity: "CRITICAL", status: "OPEN", createdAt: ago(130), escalationCount: 1, lastNotifiedAt: null }]);
+    prisma.incident.update.mockResolvedValue({});
+    const out = await ops.runEscalations(new Date());
+    expect(out.renotified).toBe(1);
+  });
+
+  it("acknowledgeIncident sets ACKNOWLEDGED + logs an event", async () => {
+    prisma.incident.update.mockResolvedValue({ id: "inc-1", status: "ACKNOWLEDGED" });
+    const out = await ops.acknowledgeIncident("inc-1", "a1");
+    expect(out.status).toBe("ACKNOWLEDGED");
+    expect(prisma.incidentEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ type: "ACKNOWLEDGED" }) }));
+  });
+
+  it("listIncidentEvents returns the timeline", async () => {
+    prisma.incidentEvent.findMany.mockResolvedValue([{ id: "e1", type: "CREATED" }]);
+    const out = await ops.listIncidentEvents("inc-1");
+    expect(out.events).toHaveLength(1);
   });
 });
 

@@ -48,9 +48,22 @@ export const updateIncident = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+export const acknowledgeIncident = async (req, res, next) => {
+  try {
+    const incident = await opsService.acknowledgeIncident(req.params.id, req.user.userId);
+    res.json({ incident });
+  } catch (err) { next(err); }
+};
+
 export const resolveIncident = async (req, res, next) => {
   try {
     const incident = await opsService.resolveIncident(req.params.id, req.user.userId);
     res.json({ incident });
+  } catch (err) { next(err); }
+};
+
+export const getIncidentEvents = async (req, res, next) => {
+  try {
+    res.json(await opsService.listIncidentEvents(req.params.id));
   } catch (err) { next(err); }
 };
