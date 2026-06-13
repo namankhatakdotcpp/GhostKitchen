@@ -729,6 +729,7 @@ export const getLiveMapData = async () => {
       where: { status: "OUT_FOR_DELIVERY" },
       select: {
         id: true, status: true, total: true, createdAt: true,
+        estimatedDelivery: true, deliveryAddress: true,
         restaurant: { select: { id: true, name: true, lat: true, lng: true } },
         customer: { select: { id: true, name: true, phone: true } },
         agent: { select: { id: true, name: true, phone: true } },
@@ -791,23 +792,32 @@ export const getLiveMapData = async () => {
       lastSeenAt: l.lastSeenAt,
       activeDeliveries: activeRiderMap.get(l.riderId) ?? 0,
     })),
-    activeOrders: deliveringOrders.map((o) => ({
-      id: o.id,
-      orderNumber: o.id.slice(-6).toUpperCase(),
-      status: o.status,
-      total: o.total,
-      restaurant: o.restaurant
-        ? { id: o.restaurant.id, name: o.restaurant.name, latitude: o.restaurant.lat, longitude: o.restaurant.lng }
-        : null,
-      customer: o.customer ? { id: o.customer.id, name: o.customer.name } : null,
-      rider: o.agent
-        ? {
-            id: o.agent.id,
-            name: o.agent.name,
-            latitude: riderCoordMap.get(o.agent.id)?.latitude ?? null,
-            longitude: riderCoordMap.get(o.agent.id)?.longitude ?? null,
-          }
-        : null,
-    })),
+    activeOrders: deliveringOrders.map((o) => {
+      // Customer drop-off coordinates live on the deliveryAddress JSON (lat/lng).
+      const drop = o.deliveryAddress && typeof o.deliveryAddress === "object" ? o.deliveryAddress : null;
+      const dropLat = typeof drop?.lat === "number" ? drop.lat : null;
+      const dropLng = typeof drop?.lng === "number" ? drop.lng : null;
+      return {
+        id: o.id,
+        orderNumber: o.id.slice(-6).toUpperCase(),
+        status: o.status,
+        total: o.total,
+        estimatedDelivery: o.estimatedDelivery,
+        restaurant: o.restaurant
+          ? { id: o.restaurant.id, name: o.restaurant.name, latitude: o.restaurant.lat, longitude: o.restaurant.lng }
+          : null,
+        customer: o.customer
+          ? { id: o.customer.id, name: o.customer.name, latitude: dropLat, longitude: dropLng }
+          : null,
+        rider: o.agent
+          ? {
+              id: o.agent.id,
+              name: o.agent.name,
+              latitude: riderCoordMap.get(o.agent.id)?.latitude ?? null,
+              longitude: riderCoordMap.get(o.agent.id)?.longitude ?? null,
+            }
+          : null,
+      };
+    }),
   };
 };

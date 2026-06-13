@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-// ── Mock react-leaflet / leaflet so markers render as plain DOM in jsdom ─────────
+const flyTo = vi.fn();
+
+// ── Mock react-leaflet / cluster / heat so markers render as plain DOM ───────────
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children }: any) => <div data-testid="map">{children}</div>,
   TileLayer: () => <div data-testid="tile" />,
@@ -12,14 +14,16 @@ vi.mock("react-leaflet", () => ({
     </div>
   ),
   Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
+  Polyline: ({ positions }: any) => <div data-testid="polyline" data-pts={JSON.stringify(positions)} />,
+  useMap: () => ({ flyTo, getZoom: () => 12, removeLayer: vi.fn(), addLayer: vi.fn() }),
 }));
+vi.mock("react-leaflet-cluster", () => ({ default: ({ children }: any) => <div data-testid="cluster">{children}</div> }));
 vi.mock("leaflet", () => ({ default: { divIcon: vi.fn(() => ({})) } }));
 vi.mock("leaflet/dist/leaflet.css", () => ({}));
+vi.mock("leaflet.heat", () => ({}));
 
-// ── Mock the API client ──────────────────────────────────────────────────────────
 vi.mock("@/lib/api", () => ({ api: { get: vi.fn() } }));
 
-// ── Mock the socket — capture handlers so we can fire events manually ────────────
 const handlers: Record<string, (...args: any[]) => void> = {};
 vi.mock("@/lib/socket", () => ({
   getSocket: () => ({
@@ -34,19 +38,19 @@ const { api } = await import("@/lib/api");
 const { default: AdminLiveOperationsMap } = await import("@/components/admin/AdminLiveOperationsMap");
 
 const NOW = new Date().toISOString();
-
 const SNAPSHOT = {
   restaurants: [
-    { id: "r1", name: "Pizza Place", latitude: 28.61, longitude: 77.2, rating: 4.5, status: "OPEN", activeOrders: 12, todaysOrders: 30 },
+    { id: "r1", name: "Pizza Place", latitude: 28.61, longitude: 77.2, rating: 4.5, status: "OPEN", activeOrders: 3, todaysOrders: 30 },
   ],
   riders: [
-    { id: "d1", name: "Fast Rider", status: "ONLINE", latitude: 28.7, longitude: 77.1, heading: 90, speed: 15, lastSeenAt: NOW, activeDeliveries: 3 },
+    { id: "d1", name: "Fast Rider", status: "ONLINE", latitude: 28.7, longitude: 77.1, heading: 90, speed: 24, lastSeenAt: NOW, activeDeliveries: 1 },
   ],
   activeOrders: [
     {
       id: "ckorderabc123456", orderNumber: "123456", status: "OUT_FOR_DELIVERY", total: 45000,
+      estimatedDelivery: new Date(Date.now() + 18 * 60_000).toISOString(),
       restaurant: { id: "r1", name: "Pizza Place", latitude: 28.61, longitude: 77.2 },
-      customer: { id: "c1", name: "Alice" },
+      customer: { id: "c1", name: "Alice", latitude: 28.55, longitude: 77.05 },
       rider: { id: "d1", name: "Fast Rider", latitude: 28.7, longitude: 77.1 },
     },
   ],
@@ -61,39 +65,63 @@ function renderMap() {
   );
 }
 
-describe("AdminLiveOperationsMap", () => {
+describe("AdminLiveOperationsMap (enhanced)", () => {
   beforeEach(() => {
     for (const k of Object.keys(handlers)) delete handlers[k];
+    flyTo.mockClear();
     vi.mocked(api.get).mockResolvedValue({ data: SNAPSHOT });
   });
 
-  it("renders the map container and tile layer", async () => {
+  it("renders the map and the fleet statistics panel", async () => {
     renderMap();
     expect(await screen.findByTestId("map")).toBeInTheDocument();
-    expect(screen.getByTestId("tile")).toBeInTheDocument();
+    expect(screen.getByText("Riders online")).toBeInTheDocument();
+    expect(screen.getByText("Avg ETA")).toBeInTheDocument();
+    expect(screen.getByText("Avg speed")).toBeInTheDocument();
   });
 
-  it("renders a marker for each restaurant, rider and active delivery", async () => {
+  it("computes average speed from rider data", async () => {
     renderMap();
-    // 1 restaurant + 1 rider + 1 delivery = 3 markers
-    await waitFor(() => expect(screen.getAllByTestId("marker")).toHaveLength(3));
+    // "24 km/h" shows in both the stats panel and the rider popup.
+    await waitFor(() => expect(screen.getAllByText("24 km/h").length).toBeGreaterThan(0));
   });
 
-  it("renders popups with restaurant and rider details", async () => {
+  it("renders rider, restaurant and delivery markers", async () => {
     renderMap();
-    await waitFor(() => expect(screen.getAllByTestId("marker").length).toBeGreaterThan(0));
-    // Names appear in their own popup and are referenced in the delivery popup.
-    expect(screen.getAllByText("Pizza Place").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Fast Rider").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Order #123456/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Last seen:/)).toBeInTheDocument()); // rider popup
+    expect(screen.getByText(/Average rating:/)).toBeInTheDocument(); // restaurant popup
+    expect(screen.getByText(/Order #123456/)).toBeInTheDocument(); // delivery popup
+  });
+
+  it("hides restaurant markers when the Restaurants layer is unchecked", async () => {
+    renderMap();
+    await waitFor(() => expect(screen.getByText(/Average rating:/)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Restaurants"));
+    await waitFor(() => expect(screen.queryByText(/Average rating:/)).toBeNull());
+  });
+
+  it("filters riders out of the map when the search matches nothing", async () => {
+    renderMap();
+    await waitFor(() => expect(screen.getByText(/Last seen:/)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText("Name or rider ID…"), { target: { value: "nobody" } });
+    await waitFor(() => expect(screen.queryByText(/Last seen:/)).toBeNull());
+  });
+
+  it("draws route polylines and flies to the rider when an order is selected", async () => {
+    renderMap();
+    await waitFor(() => expect(screen.getByText(/Order #123456/)).toBeInTheDocument());
+
+    // The order also appears as a clickable item in the sidebar list.
+    const orderButton = screen.getByRole("button", { name: /#123456/ });
+    fireEvent.click(orderButton);
+
+    await waitFor(() => expect(screen.getAllByTestId("polyline").length).toBe(2)); // rider→restaurant + rider→customer
+    expect(flyTo).toHaveBeenCalled();
   });
 
   it("updates only the affected rider marker on a socket location event", async () => {
     renderMap();
-    await waitFor(() => expect(screen.getAllByTestId("marker").length).toBe(3));
-
-    // Before: no marker sits at the new coordinates.
-    expect(screen.queryByText((_, el) => el?.getAttribute("data-pos") === "28.8,77.3")).toBeNull();
+    await waitFor(() => expect(screen.getByText(/Last seen:/)).toBeInTheDocument());
 
     await act(async () => {
       handlers["rider:location:update"]({
@@ -102,17 +130,9 @@ describe("AdminLiveOperationsMap", () => {
       });
     });
 
-    // After: the rider marker moved to the new coordinates.
     await waitFor(() => {
       const moved = screen.getAllByTestId("marker").some((m) => m.getAttribute("data-pos") === "28.8,77.3");
       expect(moved).toBe(true);
     });
-  });
-
-  it("shows the live counts in the header", async () => {
-    renderMap();
-    await waitFor(() => expect(screen.getByText("Riders online")).toBeInTheDocument());
-    expect(screen.getByText("Restaurants")).toBeInTheDocument();
-    expect(screen.getByText("Active deliveries")).toBeInTheDocument();
   });
 });

@@ -156,6 +156,8 @@ describe("getLiveMapData", () => {
     prisma.order.findMany.mockResolvedValue([
       {
         id: "ckorderabc123456", status: "OUT_FOR_DELIVERY", total: 45000, createdAt: new Date(),
+        estimatedDelivery: new Date("2026-06-13T12:30:00.000Z"),
+        deliveryAddress: { lat: 28.55, lng: 77.05, line1: "Green Park" },
         restaurant: { id: "r1", name: "Pizza Place", lat: 28.61, lng: 77.20 },
         customer: { id: "c1", name: "Alice", phone: "+91999" },
         agent: { id: "d1", name: "Fast Rider", phone: "+91888" },
@@ -201,6 +203,27 @@ describe("getLiveMapData", () => {
     expect(activeOrders[0].status).toBe("OUT_FOR_DELIVERY");
     expect(activeOrders[0].rider).toMatchObject({ id: "d1", latitude: 28.70, longitude: 77.10 });
     expect(activeOrders[0].customer).toMatchObject({ id: "c1", name: "Alice" });
+  });
+
+  it("includes estimatedDelivery and customer drop-off coordinates for route drawing", async () => {
+    const { activeOrders } = await getLiveMapData();
+    expect(activeOrders[0].estimatedDelivery).toEqual(new Date("2026-06-13T12:30:00.000Z"));
+    expect(activeOrders[0].customer).toMatchObject({ latitude: 28.55, longitude: 77.05 });
+  });
+
+  it("tolerates a missing/blank delivery address (null drop-off coords)", async () => {
+    prisma.order.findMany.mockResolvedValueOnce([
+      {
+        id: "ckorderxyz999999", status: "OUT_FOR_DELIVERY", total: 20000, createdAt: new Date(),
+        estimatedDelivery: null, deliveryAddress: null,
+        restaurant: { id: "r1", name: "Pizza Place", lat: 28.61, lng: 77.20 },
+        customer: { id: "c2", name: "Bob", phone: "+91777" },
+        agent: null,
+      },
+    ]);
+    const { activeOrders } = await getLiveMapData();
+    expect(activeOrders[0].customer).toMatchObject({ latitude: null, longitude: null });
+    expect(activeOrders[0].rider).toBeNull();
   });
 
   it("does not leak the customer phone into the active-order payload", async () => {
