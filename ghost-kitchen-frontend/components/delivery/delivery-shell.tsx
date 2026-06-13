@@ -18,6 +18,7 @@ import { getSocket } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import { useDeliveryStore } from "@/store/deliveryStore";
 import { useUserStore } from "@/store/userStore";
+import { useRiderLocationTracking } from "@/hooks/useRiderLocationTracking";
 import RoleSwitcher from "@/components/ui/role-switcher";
 import type { DeliveryAssignment } from "@/types";
 
@@ -179,6 +180,10 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
   const { user } = useUserStore();
   const resolvedAgentId = user?.id ?? agentId;
 
+  // Stream GPS to the backend while online. Unmounting the shell (logout /
+  // role switch / leaving the portal) or going offline stops tracking.
+  const trackingStatus = useRiderLocationTracking(isOnline);
+
   useEffect(() => {
     const socket = getSocket();
     const room = `agent-${resolvedAgentId}`;
@@ -226,6 +231,13 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
         </span>
         <RoleSwitcher />
       </header>
+      {isOnline && (trackingStatus === "denied" || trackingStatus === "unavailable") && (
+        <div className="bg-red-50 px-4 py-2 text-center text-xs font-semibold text-red-600">
+          {trackingStatus === "denied"
+            ? "Location access is blocked. Enable it so customers and dispatch can see you live."
+            : "Location isn't available on this device, so live tracking is off."}
+        </div>
+      )}
       <main className="pb-24">{children}</main>
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/96 px-3 py-2 backdrop-blur">

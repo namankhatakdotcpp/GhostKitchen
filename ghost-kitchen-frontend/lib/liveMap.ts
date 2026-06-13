@@ -84,3 +84,16 @@ export function riderColor(status: RiderStatus): string {
   if (status === "IDLE") return MAP_COLORS.riderIdle;
   return MAP_COLORS.riderOffline;
 }
+
+// Great-circle distance between two coordinates, in metres (Haversine).
+// Used to throttle rider GPS pings so we only send when meaningfully moved.
+export function metersBetween(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6_371_000; // Earth radius in metres
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
