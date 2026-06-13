@@ -309,9 +309,16 @@ app.get("/api/config", async (_req, res, next) => {
 // ── 13. Maintenance mode gate ─────────────────────────────────────────────────
 // Runs AFTER the public /api/config endpoint so the frontend can still read config.
 // Admins bypass the gate (checked by decoding their JWT without a DB lookup).
+// Auth endpoints that must stay reachable during maintenance, otherwise an
+// admin with no (or an expired) token could never log in to bypass the gate.
+// New sign-ups (/auth/register) stay blocked so maintenance still halts growth.
+const MAINTENANCE_AUTH_ALLOWLIST = ["/auth/login", "/auth/refresh", "/auth/me", "/auth/logout", "/auth/logout-all"];
+
 app.use("/api", async (req, res, next) => {
   // Skip admin routes — admins always get through
   if (req.path.startsWith("/admin")) return next();
+  // Allow authentication so admins can log in and bypass the gate below.
+  if (MAINTENANCE_AUTH_ALLOWLIST.includes(req.path)) return next();
   try {
     let cfg = await getSiteConfigCached();
     cfg = await applyMaintenanceSchedule(cfg);
