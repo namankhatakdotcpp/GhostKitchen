@@ -9,10 +9,21 @@ import api from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { useDeliveryStore } from "@/store/deliveryStore";
 import { useUserStore } from "@/store/userStore";
+import { useRiderTrackingStatus } from "@/hooks/useRiderLocationTracking";
+
+// Maps the GPS tracker status to the rider-facing presence shown on the dashboard.
+const PRESENCE: Record<string, { label: string; dot: string; text: string }> = {
+  tracking: { label: "Online · live location on", dot: "bg-success", text: "text-success" },
+  paused: { label: "Offline · no internet, will resume", dot: "bg-gray-400", text: "text-text-secondary" },
+  error: { label: "Searching for GPS signal…", dot: "bg-amber-500", text: "text-amber-600" },
+  denied: { label: "Location blocked — enable it to receive orders", dot: "bg-red-500", text: "text-red-600" },
+  unavailable: { label: "GPS unavailable on this device", dot: "bg-gray-400", text: "text-text-secondary" },
+};
 
 export function DeliveryHomePage() {
   const { isOnline, setOnline, agentId } = useDeliveryStore();
   const { user } = useUserStore();
+  const trackingStatus = useRiderTrackingStatus();
   const resolvedAgentId = user?.id ?? agentId;
   const [locationError, setLocationError] = useState("");
 
@@ -132,6 +143,15 @@ export function DeliveryHomePage() {
             ? "Stay ready. A full-screen assignment card will appear the moment an order is assigned to you."
             : "Go online to start receiving delivery requests from nearby restaurants."}
         </p>
+
+        {isOnline && PRESENCE[trackingStatus] && (
+          <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
+            <span className={`h-2.5 w-2.5 rounded-full ${PRESENCE[trackingStatus].dot}`} />
+            <span className={`text-sm font-semibold ${PRESENCE[trackingStatus].text}`}>
+              {PRESENCE[trackingStatus].label}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
