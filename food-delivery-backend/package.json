@@ -5,10 +5,11 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "npx prisma migrate deploy && node src/server.js",
+    "start": "node scripts/migrate-deploy.js && node src/server.js",
     "start:dev-no-migrate": "node src/server.js",
     "dev": "nodemon src/server.js",
     "seed": "node prisma/seed.js",
+    "db:deploy": "node scripts/migrate-deploy.js",
     "db:migrate": "npx prisma migrate deploy",
     "db:migrate:dev": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
