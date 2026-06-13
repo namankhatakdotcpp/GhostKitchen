@@ -198,3 +198,66 @@ describe("ops.service getSlaSummary", () => {
     expect(sla).toMatchObject({ measuredOrders: 1, delayed: 1, days: 7 });
   });
 });
+
+// ── Service: fleet alerts orchestration ──────────────────────────────────────────
+describe("ops.service getFleetAlerts", () => {
+  // The service computes alerts against the real clock, so use real-relative times.
+  const ago = (m) => new Date(Date.now() - m * 60000);
+  it("assembles alerts from riders, orders and restaurants", async () => {
+    prisma.riderLocation.findMany.mockResolvedValue([
+      { riderId: "d1", lastSeenAt: ago(20), rider: { name: "Ravi" } },
+    ]);
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ id: "o1", estimatedDelivery: ago(20), agentId: "d1" }]) // active (OUT_FOR_DELIVERY)
+      .mockResolvedValueOnce([{ id: "o2", status: "PREPARING", placedAt: ago(40), restaurant: { name: "Pizza" } }]); // open
+    prisma.order.groupBy.mockResolvedValue([{ restaurantId: "r1", _count: { id: 11 } }]);
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Busy" }]);
+
+    const alerts = await ops.getFleetAlerts();
+    const types = alerts.map((a) => a.type);
+    expect(types).toContain("RIDER_OFFLINE");
+    expect(types).toContain("DELIVERY_DELAYED");
+    expect(types).toContain("ORDER_STUCK");
+    expect(types).toContain("RESTAURANT_OVERLOADED");
+  });
+});
+
+// ── Service: performance orchestration ───────────────────────────────────────────
+describe("ops.service performance", () => {
+  it("getRiderPerformance shapes orders and returns rows", async () => {
+    prisma.order.findMany.mockResolvedValue([
+      { agentId: "d1", status: "DELIVERED", placedAt: minsAgo(40), deliveredAt: minsAgo(10), deliveryAddress: { lat: 2, lng: 2 }, restaurant: { lat: 1, lng: 1 } },
+    ]);
+    prisma.user.findMany.mockResolvedValue([{ id: "d1", name: "Ravi" }]);
+    const out = await ops.getRiderPerformance({ days: 7 });
+    expect(out.days).toBe(7);
+    expect(out.riders[0]).toMatchObject({ riderId: "d1", deliveries: 1 });
+  });
+
+  it("getRestaurantPerformance returns revenue rows", async () => {
+    prisma.order.findMany.mockResolvedValue([{ restaurantId: "r1", status: "DELIVERED", total: 45000 }]);
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Pizza", rating: 4.5 }]);
+    const out = await ops.getRestaurantPerformance({ days: 7 });
+    expect(out.restaurants[0]).toMatchObject({ restaurantId: "r1", revenuePaise: 45000 });
+  });
+});
+
+// ── Service: incident listing + update ───────────────────────────────────────────
+describe("ops.service listIncidents / updateIncident", () => {
+  it("listIncidents paginates via $transaction", async () => {
+    prisma.$transaction.mockResolvedValue([[{ id: "inc-1" }], 1]);
+    const out = await ops.listIncidents({ status: "OPEN", page: 1, limit: 50 });
+    expect(out).toMatchObject({ total: 1, page: 1, pages: 1 });
+    expect(out.incidents).toHaveLength(1);
+  });
+
+  it("updateIncident applies a valid severity change", async () => {
+    prisma.incident.update.mockResolvedValue({ id: "inc-1", severity: "CRITICAL" });
+    const out = await ops.updateIncident("inc-1", { severity: "CRITICAL" });
+    expect(out.severity).toBe("CRITICAL");
+  });
+
+  it("updateIncident rejects an invalid status", async () => {
+    await expect(ops.updateIncident("inc-1", { status: "BOGUS" })).rejects.toMatchObject({ statusCode: 400 });
+  });
+});

@@ -290,25 +290,25 @@ export function ShopOrdersPage() {
         status: "new",
         autoRejectAt: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
       };
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) => [
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) => [
         boardItem,
-        ...current,
+        ...(current ?? []),
       ]);
       setBanner(`New order ${raw.id?.slice(-6).toUpperCase() ?? ""} received.`);
       maybeNotify(boardItem);
     }
 
     function handleAgentAssigned(payload: { orderId: string; agentName: string }) {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
-        current.map((item) =>
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) =>
+        (current ?? []).map((item) =>
           item.id === payload.orderId ? { ...item, assignedAgentName: payload.agentName } : item,
         ),
       );
     }
 
     function handlePickedUp(payload: { orderId: string }) {
-      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
-        current.map((item) =>
+      queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) =>
+        (current ?? []).map((item) =>
           item.id === payload.orderId ? { ...item, status: "completed" } : item,
         ),
       );
@@ -335,8 +335,8 @@ export function ShopOrdersPage() {
   }, [queryClient, soundEnabled, restaurantId]);
 
   function updateBoard(mutator: (item: ShopBoardItem) => ShopBoardItem | null) {
-    queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current = []) =>
-      current
+    queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) =>
+      (current ?? [])
         .map(mutator)
         .filter((item): item is ShopBoardItem => Boolean(item)),
     );
