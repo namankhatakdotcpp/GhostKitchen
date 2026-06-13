@@ -44,8 +44,14 @@ class RiderLocationTracker {
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private bound = false;
 
+  private positionListeners = new Set<(fix: Fix | null) => void>();
+
   getStatus(): RiderTrackingStatus {
     return this.status;
+  }
+
+  getLatestPosition(): Fix | null {
+    return this.latest;
   }
 
   subscribe(listener: Listener): () => void {
@@ -53,10 +59,21 @@ class RiderLocationTracker {
     return () => this.listeners.delete(listener);
   }
 
+  // Subscribe to raw position fixes — lets other views (e.g. the active-delivery
+  // map) reuse the single GPS watch instead of opening their own.
+  subscribePosition(listener: (fix: Fix | null) => void): () => void {
+    this.positionListeners.add(listener);
+    return () => this.positionListeners.delete(listener);
+  }
+
   private setStatus(next: RiderTrackingStatus) {
     if (next === this.status) return;
     this.status = next;
     this.listeners.forEach((l) => l(next));
+  }
+
+  private emitPosition() {
+    this.positionListeners.forEach((l) => l(this.latest));
   }
 
   private isOffline(): boolean {
@@ -99,6 +116,7 @@ class RiderLocationTracker {
     this.flushTimer = null;
     this.latest = null;
     this.lastSent = null;
+    this.emitPosition();
 
     if (this.bound) {
       window.removeEventListener("online", this.onOnline);
@@ -130,6 +148,7 @@ class RiderLocationTracker {
       // Geolocation speed is m/s; the rest of the app shows km/h.
       speed: speed != null && Number.isFinite(speed) && speed >= 0 ? Math.round(speed * 3.6) : null,
     };
+    this.emitPosition();
     if (!this.isOffline()) this.setStatus("tracking");
     void this.send(); // opportunistic — gated to ≥20m moves between heartbeats
   };

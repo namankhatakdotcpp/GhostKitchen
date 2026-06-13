@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckSquare, MapPin, PhoneCall, Square } from "lucide-react";
 import toast from "react-hot-toast";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { getSocket } from "@/lib/socket";
 import { useDeliveryStore } from "@/store/deliveryStore";
 import { useUserStore } from "@/store/userStore";
+import { useRiderPosition } from "@/hooks/useRiderLocationTracking";
 
 // Open a Google Maps directions URL. Falls back gracefully if no API key.
 function mapsLink(originLat?: number, originLng?: number, destLat?: number, destLng?: number, destAddress?: string) {
@@ -63,31 +64,16 @@ export function DeliveryActivePage() {
   const { user } = useUserStore();
   const resolvedAgentId = user?.id ?? agentId;
 
-  const [currentLat, setCurrentLat] = useState<number | undefined>();
-  const [currentLng, setCurrentLng] = useState<number | undefined>();
+  // Read the rider position from the single shared GPS watch (the location
+  // tracker running in the delivery shell) — no second watchPosition here.
+  const position = useRiderPosition();
+  const currentLat = position?.lat;
+  const currentLng = position?.lng;
 
   // Step-2 items checklist
   const allItems: string[] = activeAssignment?.itemsSummary ?? [];
   const [checkedItems, setCheckedItems] = useState<Set<number>>(new Set());
   const allChecked = allItems.length > 0 && checkedItems.size === allItems.length;
-
-  // watchPosition for continuous GPS
-  useEffect(() => {
-    if (!activeAssignment || !navigator.geolocation) return;
-    const socket = getSocket();
-
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setCurrentLat(lat);
-        setCurrentLng(lng);
-        socket.emit("agent:location", { agentId: resolvedAgentId, lat, lng });
-      },
-      () => undefined,
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, [activeAssignment, resolvedAgentId]);
 
   if (!activeAssignment) {
     return (

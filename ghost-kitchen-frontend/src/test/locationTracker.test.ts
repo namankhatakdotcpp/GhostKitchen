@@ -73,6 +73,19 @@ describe("locationTracker imperative API", () => {
     expect(seen).toContain("idle");
   });
 
+  it("shares the latest position via subscribePosition (single GPS watch)", async () => {
+    const seen: Array<{ lat: number; lng: number } | null> = [];
+    const unsub = riderLocationTracker.subscribePosition((f) => seen.push(f ? { lat: f.lat, lng: f.lng } : null));
+    startTracking();
+    successCb!(fix(28.7, 77.1));
+    expect(riderLocationTracker.getLatestPosition()).toMatchObject({ lat: 28.7, lng: 77.1 });
+    expect(seen.at(-1)).toEqual({ lat: 28.7, lng: 77.1 });
+
+    stopTracking(); // clears the position and notifies null
+    expect(seen.at(-1)).toBeNull();
+    unsub();
+  });
+
   it("posts the first fix with km/h speed and omits absent fields", async () => {
     startTracking();
     successCb!(fix(28.7, 77.1, 90, 10));

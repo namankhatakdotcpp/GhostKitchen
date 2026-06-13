@@ -50,3 +50,21 @@ export function useRiderTrackingStatus(): RiderTrackingStatus {
 
   return status;
 }
+
+/**
+ * Read-only subscription to the rider's latest GPS fix from the single shared
+ * watch. Views that need the current position (e.g. the active-delivery map)
+ * use this instead of opening a second geolocation watch.
+ */
+export function useRiderPosition(): { lat: number; lng: number } | null {
+  const [pos, setPos] = useState<{ lat: number; lng: number } | null>(() => {
+    const f = riderLocationTracker.getLatestPosition();
+    return f ? { lat: f.lat, lng: f.lng } : null;
+  });
+
+  useEffect(() => {
+    return riderLocationTracker.subscribePosition((f) => setPos(f ? { lat: f.lat, lng: f.lng } : null));
+  }, []);
+
+  return pos;
+}
