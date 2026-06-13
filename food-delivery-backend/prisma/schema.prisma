@@ -35,6 +35,19 @@ enum DiscountType {
   FLAT
 }
 
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
 model User {
   id              String    @id @default(uuid())
   name            String
@@ -70,6 +83,8 @@ model User {
   addresses       Address[]
   favorites       Favorite[]
   riderLocation   RiderLocation? @relation("UserRiderLocation")
+  reportedIncidents Incident[]   @relation("IncidentCreator")
+  resolvedIncidents Incident[]   @relation("IncidentResolver")
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -358,4 +373,30 @@ model RiderLocation {
   rider User @relation("UserRiderLocation", fields: [riderId], references: [id], onDelete: Cascade)
 
   @@index([latitude, longitude])
+}
+
+// Operations incidents raised by admins (manually or from a fleet alert), for
+// the Incident Center on the admin dashboard.
+model Incident {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  severity    IncidentSeverity @default(MEDIUM)
+  status      IncidentStatus   @default(OPEN)
+  category    String? // e.g. RIDER_OFFLINE, ORDER_STUCK, RESTAURANT_OVERLOADED, DELIVERY_DELAYED, OTHER
+  entityType  String? // RIDER | ORDER | RESTAURANT
+  entityId    String?
+
+  createdById String
+  createdBy   User      @relation("IncidentCreator", fields: [createdById], references: [id])
+  resolvedById String?
+  resolvedBy   User?    @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  resolvedAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([severity])
+  @@index([createdAt])
 }

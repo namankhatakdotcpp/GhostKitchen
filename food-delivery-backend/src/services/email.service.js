@@ -122,3 +122,22 @@ export async function sendRestaurantApprovedEmail({ to, name, restaurantName }) 
     `),
   });
 }
+
+// Operations alert email for admins (incidents, critical fleet alerts).
+export async function sendAdminAlertEmail({ to, name, subject, message, severity = "HIGH" }) {
+  await send({
+    to,
+    subject: `[GhostKitchen Ops · ${severity}] ${subject}`,
+    html: wrap(`
+      <div class="header"><h1>Operations Alert</h1></div>
+      <div class="body">
+        <p>Hi ${name ?? "Admin"},</p>
+        <p><strong>${subject}</strong></p>
+        <p>${message}</p>
+        <p>Severity: <strong>${severity}</strong></p>
+        <p>Open the admin Operations Intelligence dashboard to review and act.</p>
+      </div>
+      <div class="footer">GhostKitchen &copy; ${new Date().getFullYear()}</div>
+    `),
+  });
+}
