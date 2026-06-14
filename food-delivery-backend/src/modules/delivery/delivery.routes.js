@@ -154,11 +154,19 @@ router.get("/earnings", async (req, res, next) => {
       }
     }
 
+    // Sum completed session durations within the period
+    const sessions = await prisma.riderSession.findMany({
+      where: { riderId: agentId, startedAt: { gte: startDate }, endedAt: { not: null } },
+      select: { durationMin: true },
+    });
+    const onlineMinutes = sessions.reduce((sum, s) => sum + (s.durationMin ?? 0), 0);
+    const onlineHours = Math.round((onlineMinutes / 60) * 10) / 10; // 1 decimal
+
     res.json({
       total,
       deliveries,
       avgPerDelivery,
-      onlineHours: 0,
+      onlineHours,
       dailyBreakdown: Array.from(dailyMap.values()),
       recentOrders: orders.slice(0, 20).map((o, i) => ({
         id: `pay-${i + 1}`,

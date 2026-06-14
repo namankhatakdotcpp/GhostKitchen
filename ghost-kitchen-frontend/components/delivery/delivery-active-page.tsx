@@ -7,7 +7,6 @@ import toast from "react-hot-toast";
 
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { getSocket } from "@/lib/socket";
 import { useDeliveryStore } from "@/store/deliveryStore";
 import { useUserStore } from "@/store/userStore";
 import { useRiderPosition } from "@/hooks/useRiderLocationTracking";
@@ -87,16 +86,17 @@ export function DeliveryActivePage() {
   }
 
   async function handleStep(step: 1 | 2 | 3) {
-    const socket = getSocket();
-    const statusByStep = { 1: "CONFIRMED", 2: "OUT_FOR_DELIVERY", 3: "DELIVERED" } as const;
+    const statusByStep = { 1: "OUT_FOR_DELIVERY", 2: "OUT_FOR_DELIVERY", 3: "DELIVERED" } as const;
     const newStatus = statusByStep[step];
 
-    socket.emit("order:status", { orderId: activeAssignment!.orderId, status: newStatus, agentId: resolvedAgentId });
+    try {
+      await api.patch(`/orders/${activeAssignment!.orderId}/status`, { status: newStatus });
+    } catch {
+      toast.error("Failed to update status — please retry");
+      return;
+    }
 
     if (step === 3) {
-      try {
-        await api.patch(`/orders/${activeAssignment!.orderId}/status`, { status: "DELIVERED" });
-      } catch { /* socket handles it */ }
       completeDelivery();
       toast.success("Delivery complete! Earnings added 🎉");
       router.push("/delivery/home");

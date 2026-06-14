@@ -62,17 +62,29 @@ export const updateRiderLocation = async (riderId, { latitude, longitude, headin
   const head = optionalNumber(heading, { min: 0, max: 360, label: "heading" });
   const spd = optionalNumber(speed, { min: 0, max: 1000, label: "speed" });
 
-  const location = await prisma.riderLocation.upsert({
-    where: { riderId },
-    create: { riderId, latitude: lat, longitude: lng, heading: head, speed: spd },
-    update: { latitude: lat, longitude: lng, heading: head, speed: spd },
-  });
+  const [location] = await Promise.all([
+    prisma.riderLocation.upsert({
+      where: { riderId },
+      create: { riderId, latitude: lat, longitude: lng, heading: head, speed: spd },
+      update: { latitude: lat, longitude: lng, heading: head, speed: spd },
+    }),
+    // Keep the legacy User location columns in sync for proximity assignment.
+    prisma.user.update({
+      where: { id: riderId },
+      data: { currentLat: lat, currentLng: lng },
+    }),
+  ]);
 
-  // Keep the legacy User location columns in sync for proximity assignment.
-  await prisma.user.update({
-    where: { id: riderId },
-    data: { currentLat: lat, currentLng: lng },
-  });
+  // Find the rider's active delivery so we can relay location to the customer
+  // tracking page. Non-fatal — location update must never fail due to this lookup.
+  let activeOrderId = null;
+  try {
+    const activeOrder = await prisma.order.findFirst({
+      where: { agentId: riderId, status: "OUT_FOR_DELIVERY" },
+      select: { id: true },
+    });
+    activeOrderId = activeOrder?.id ?? null;
+  } catch { /* ignore */ }
 
   const status = getRiderStatus(location.lastSeenAt);
 
@@ -84,6 +96,7 @@ export const updateRiderLocation = async (riderId, { latitude, longitude, headin
     speed: location.speed,
     status,
     lastSeenAt: location.lastSeenAt,
+    activeOrderId,
   });
 
   return { ...location, status };

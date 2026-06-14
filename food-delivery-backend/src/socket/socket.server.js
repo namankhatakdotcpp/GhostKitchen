@@ -60,8 +60,8 @@ export function emitOrderAssignedToAgent({
 }
 
 // Broadcasts a rider's new GPS position to the admin live operations map.
-// Only the "admin" room receives it — rider coordinates are not public data.
-export function emitRiderLocationUpdate({ riderId, latitude, longitude, heading = null, speed = null, status, lastSeenAt }) {
+// Also relays to the active order room so the customer tracking page updates.
+export function emitRiderLocationUpdate({ riderId, latitude, longitude, heading = null, speed = null, status, lastSeenAt, activeOrderId = null }) {
   withSocketServer((io) => {
     io.to("admin").emit("rider:location:update", {
       riderId,
@@ -72,6 +72,10 @@ export function emitRiderLocationUpdate({ riderId, latitude, longitude, heading 
       status,
       lastSeenAt,
     });
+    // Relay to customer tracking page (only the coordinates — not admin-only data)
+    if (activeOrderId) {
+      io.to(`order-${activeOrderId}`).emit("agent:location", { lat: latitude, lng: longitude });
+    }
   });
 }
 

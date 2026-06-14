@@ -88,40 +88,26 @@ export function useSocket() {
     };
   }, [user?.id]);
 
-  // Listen for order updates (versioned events)
+  // Listen for order updates
   useEffect(() => {
     const socket = getSocket();
 
-    // Real-time order update from server (v1)
-    const handleOrderUpdate = (order: any) => {
-      console.log("📡 Received order:update:v1", order);
+    const handleOrderUpdate = (payload: any) => {
+      const order = payload?.order ?? payload;
       updateOrder(order);
     };
 
-    // New order created notification (v1)
-    const handleNewOrder = (order: any) => {
-      console.log("📡 Received order:new:v1", order);
+    const handleNewOrder = (payload: any) => {
+      const order = payload?.order ?? payload;
       updateOrder(order);
     };
 
-    // Order cancelled notification (v1)
-    const handleOrderCancelled = (data: any) => {
-      console.log("📡 Received order:cancelled:v1", data);
-      updateOrder({
-        ...data,
-        status: "CANCELLED",
-      });
-    };
-
-    // Listen for versioned events
-    socket.on("order:update:v1", handleOrderUpdate);
-    socket.on("order:new:v1", handleNewOrder);
-    socket.on("order:cancelled:v1", handleOrderCancelled);
+    socket.on("order:status-updated", handleOrderUpdate);
+    socket.on("order:new", handleNewOrder);
 
     return () => {
-      socket.off("order:update:v1", handleOrderUpdate);
-      socket.off("order:new:v1", handleNewOrder);
-      socket.off("order:cancelled:v1", handleOrderCancelled);
+      socket.off("order:status-updated", handleOrderUpdate);
+      socket.off("order:new", handleNewOrder);
     };
   }, [updateOrder]);
 
@@ -205,31 +191,27 @@ export function useRestaurantSocket(restaurantId: string | null) {
     socket.emit("join_restaurant_room", restaurantId);
 
     // Listen for new orders in restaurant
-    const handleNewOrder = (order: any) => {
-      console.log("🍽️ New order for restaurant (v1):", order);
-      // Could add to a separate "pending orders" list
-      updateOrder(order);
+    const handleNewOrder = (payload: any) => {
+      updateOrder(payload?.order ?? payload);
     };
 
-    const handleOrderUpdate = (order: any) => {
-      console.log("🍽️ Order update (v1):", order);
-      updateOrder(order);
+    const handleOrderUpdate = (payload: any) => {
+      updateOrder(payload?.order ?? payload);
     };
 
-    // Listen for versioned events
-    socket.on("order:new:v1", handleNewOrder);
-    socket.on("order:update:v1", handleOrderUpdate);
+    socket.on("order:new", handleNewOrder);
+    socket.on("order:status-updated", handleOrderUpdate);
 
     return () => {
-      socket.off("order:new:v1", handleNewOrder);
-      socket.off("order:update:v1", handleOrderUpdate);
+      socket.off("order:new", handleNewOrder);
+      socket.off("order:status-updated", handleOrderUpdate);
     };
   }, [restaurantId, updateOrder]);
 }
 
 /**
  * useDeliverySocket Hook
- * 
+ *
  * For delivery partners to track assigned orders
  */
 export function useDeliverySocket(deliveryUserId: string | null) {
@@ -240,24 +222,28 @@ export function useDeliverySocket(deliveryUserId: string | null) {
 
     const socket = getSocket();
 
-    // Connect socket if not already connected
     if (!socket.connected) {
       socket.connect();
     }
 
-    // Join delivery room
     socket.emit("join_delivery_room", deliveryUserId);
 
-    // Listen for order updates (versioned)
-    const handleOrderUpdate = (order: any) => {
-      console.log("🚗 Delivery order update (v1):", order);
+    const handleOrderUpdate = (payload: any) => {
+      const order = payload?.order ?? payload;
       updateOrder(order);
     };
 
-    socket.on("order:update:v1", handleOrderUpdate);
+    // agent:assigned fires when admin/auto-assignment picks this rider
+    const handleAssigned = (payload: any) => {
+      updateOrder(payload?.order ?? payload);
+    };
+
+    socket.on("order:status-updated", handleOrderUpdate);
+    socket.on("order:assigned", handleAssigned);
 
     return () => {
-      socket.off("order:update:v1", handleOrderUpdate);
+      socket.off("order:status-updated", handleOrderUpdate);
+      socket.off("order:assigned", handleAssigned);
     };
   }, [deliveryUserId, updateOrder]);
 }
