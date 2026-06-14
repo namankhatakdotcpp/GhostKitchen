@@ -15,15 +15,24 @@ defaults:
   run:
     working-directory: food-delivery-backend
 
+# Env vars needed by postinstall (prisma generate + resolve-failed-migrations.js).
+# resolve-failed-migrations.js gracefully exits-0 when the DB is unreachable,
+# so a placeholder URL is sufficient and nothing actually connects.
+env:
+  DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
+  JWT_SECRET: "test-secret-32-chars-minimum-here"
+  JWT_REFRESH_SECRET: "test-refresh-secret-32-chars-min"
+  CASHFREE_APP_ID: "test"
+  CASHFREE_SECRET_KEY: "test"
+  CASHFREE_ENV: "sandbox"
+  FRONTEND_URL: "http://localhost:3000"
+  BACKEND_URL: "http://localhost:5000"
+  ALLOWED_ORIGINS: "http://localhost:3000"
+
 jobs:
   validate:
     name: Lint & Schema
     runs-on: ubuntu-latest
-
-    # prisma validate/migrate-diff evaluate env("DATABASE_URL") in the
-    # datasource block, so a value must be present even though no DB is hit.
-    env:
-      DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
 
     steps:
       - uses: actions/checkout@v4
@@ -46,21 +55,7 @@ jobs:
         continue-on-error: true
 
       - name: Verify module imports (smoke test)
-        run: |
-          node --input-type=module <<'EOF'
-          import('./src/config/env.js').catch(() => {});
-          console.log('Import smoke test passed');
-          EOF
-        env:
-          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
-          JWT_SECRET: "test-secret-32-chars-minimum-here"
-          JWT_REFRESH_SECRET: "test-refresh-secret-32-chars-min"
-          CASHFREE_APP_ID: "test"
-          CASHFREE_SECRET_KEY: "test"
-          CASHFREE_ENV: "sandbox"
-          FRONTEND_URL: "http://localhost:3000"
-          BACKEND_URL: "http://localhost:5000"
-          ALLOWED_ORIGINS: "http://localhost:3000"
+        run: node --input-type=module --eval "import('./src/config/env.js').catch(()=>{}); console.log('Import smoke test passed');"
 
   test:
     name: Unit & Security Tests
@@ -82,16 +77,6 @@ jobs:
 
       - name: Run tests with coverage
         run: npm run test:coverage
-        env:
-          DATABASE_URL: "postgresql://placeholder:placeholder@localhost:5432/placeholder"
-          JWT_SECRET: "test-secret-32-chars-minimum-here"
-          JWT_REFRESH_SECRET: "test-refresh-secret-32-chars-min"
-          CASHFREE_APP_ID: "test"
-          CASHFREE_SECRET_KEY: "test"
-          CASHFREE_ENV: "sandbox"
-          FRONTEND_URL: "http://localhost:3000"
-          BACKEND_URL: "http://localhost:5000"
-          ALLOWED_ORIGINS: "http://localhost:3000"
 
   security:
     name: Security Audit
