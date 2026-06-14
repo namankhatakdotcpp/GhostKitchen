@@ -1,0 +1,2874 @@
+%% GhostKitchen — Complete Engineering Journey, Architecture Evolution & Technical Project Book
+%% March – June 2026
+%% Compile: pdflatex (run twice for ToC/labels)
+
+\documentclass[11pt,a4paper,twoside]{book}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[inner=2.8cm,outer=2.2cm,top=2.5cm,bottom=2.8cm]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{fontawesome5}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{graphicx}
+\usepackage{wrapfig}
+\usepackage{mdframed}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{lscape}
+\usepackage{makecell}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,backgrounds,decorations.pathreplacing,calc}
+\tcbuselibrary{skins,breakable,listings}
+
+% ── Colour Palette ─────────────────────────────────────────────────────────────
+\definecolor{brand}{HTML}{FF5200}
+\definecolor{branddark}{HTML}{CC4100}
+\definecolor{dark}{HTML}{111827}
+\definecolor{muted}{HTML}{6B7280}
+\definecolor{light}{HTML}{F9FAFB}
+\definecolor{ok}{HTML}{059669}
+\definecolor{warn}{HTML}{D97706}
+\definecolor{crit}{HTML}{DC2626}
+\definecolor{info}{HTML}{2563EB}
+\definecolor{purple}{HTML}{7C3AED}
+\definecolor{codebg}{HTML}{F3F4F6}
+\definecolor{rowalt}{HTML}{FFF7F4}
+\definecolor{headbg}{HTML}{FF5200}
+
+\hypersetup{colorlinks=true,linkcolor=branddark,urlcolor=info,citecolor=brand,
+  pdftitle={GhostKitchen Engineering Journey},pdfauthor={GhostKitchen Engineering}}
+
+% ── Chapter / Section Style ────────────────────────────────────────────────────
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{brand}}
+  {\color{muted}\normalsize CHAPTER \thechapter}{12pt}{\Huge}[\vspace{4pt}\color{brand}\titlerule]
+\titlespacing*{\chapter}{0pt}{-10pt}{20pt}
+\titleformat{\section}{\large\bfseries\color{dark}}{\thesection.}{0.5em}{}[\vspace{-2pt}{\color{brand}\rule{\linewidth}{0.6pt}}]
+\titleformat{\subsection}{\normalsize\bfseries\color{dark}}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\small\bfseries\itshape\color{dark}}{}{0em}{}
+
+% ── Headers / Footers ──────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[LE]{\small\color{muted}\leftmark}
+\fancyhead[RO]{\small\color{muted}\rightmark}
+\fancyhead[RE,LO]{\small\color{brand}\textbf{GhostKitchen}}
+\fancyfoot[C]{\small\color{muted}\thepage}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\color{muted}\thepage}}
+
+% ── Code Listings ──────────────────────────────────────────────────────────────
+\lstset{
+  backgroundcolor=\color{codebg},basicstyle=\ttfamily\footnotesize,
+  breaklines=true,frame=single,framesep=4pt,rulecolor=\color{muted},
+  keywordstyle=\color{info},commentstyle=\color{muted}\itshape,
+  stringstyle=\color{ok},numbers=left,numberstyle=\tiny\color{muted},
+  numbersep=6pt,xleftmargin=12pt,
+}
+
+% ── Coloured Table Helpers ─────────────────────────────────────────────────────
+\newcommand{\th}[1]{\textbf{\color{white}#1}}
+\newcommand{\cellok}[1]{\cellcolor{ok!15}\textbf{\color{ok}#1}}
+\newcommand{\cellwarn}[1]{\cellcolor{warn!20}\textbf{\color{warn}#1}}
+\newcommand{\cellcrit}[1]{\cellcolor{crit!15}\textbf{\color{crit}#1}}
+\newcommand{\cellinfo}[1]{\cellcolor{info!10}\textbf{\color{info}#1}}
+\newcommand{\cellmuted}[1]{\cellcolor{muted!12}\textit{\color{muted}#1}}
+\newcommand{\yes}{\textcolor{ok}{\faCheckCircle}}
+\newcommand{\no}{\textcolor{crit}{\faTimesCircle}}
+\newcommand{\half}{\textcolor{warn}{\faAdjust}}
+
+% ── tcolorbox Styles ──────────────────────────────────────────────────────────
+\tcbset{
+  insight/.style={colback=info!6,colframe=info,fonttitle=\bfseries,breakable},
+  warn/.style={colback=warn!8,colframe=warn,fonttitle=\bfseries,breakable},
+  crit/.style={colback=crit!6,colframe=crit,fonttitle=\bfseries,breakable},
+  success/.style={colback=ok!6,colframe=ok,fonttitle=\bfseries,breakable},
+  story/.style={colback=light,colframe=muted!40,fonttitle=\bfseries\color{brand},
+    title=Engineering Decision,breakable},
+  commit/.style={colback=brand!5,colframe=brand!50,fonttitle=\bfseries\footnotesize,breakable},
+}
+
+% ── Era Timeline Node ──────────────────────────────────────────────────────────
+\newcommand{\erabox}[4]{%
+  \begin{tcolorbox}[colback=#1!8,colframe=#1,title={\textbf{#2}},fonttitle=\bfseries\small]
+  \textbf{Dates:} #3\\[2pt]#4
+  \end{tcolorbox}
+}
+
+\begin{document}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║                    FRONT MATTER                      ║
+% ╚══════════════════════════════════════════════════════╝
+
+\frontmatter
+
+% ── Half-Title ────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  \begin{tikzpicture}
+    \fill[brand] (0,0) rectangle (14,1.2);
+    \node[text=white,font=\Huge\bfseries] at (7,0.6) {GhostKitchen};
+  \end{tikzpicture}\\[0.6cm]
+  {\LARGE\bfseries\color{dark} Complete Engineering Journey}\\[0.3cm]
+  {\large\color{muted} Architecture Evolution \& Technical Project Book}\\[0.2cm]
+  \begin{tikzpicture}
+    \fill[brand] (0,0) rectangle (14,0.08);
+  \end{tikzpicture}\\[2.5cm]
+
+  \begin{tabular}{p{4cm}p{9cm}}
+    \textbf{Platform}     & Multi-role food delivery — customers, restaurants, riders, admins \\[4pt]
+    \textbf{Backend}      & Node.js 20 · Express · Prisma ORM · PostgreSQL · Redis · Socket.IO \\[4pt]
+    \textbf{Frontend}     & Next.js 15 App Router · React · TailwindCSS · Zustand · Leaflet \\[4pt]
+    \textbf{Payments}     & Cashfree PG (create-order → webhook → verify → refund) \\[4pt]
+    \textbf{Hosting}      & Render (backend) · Vercel (frontend) · Neon/Supabase (PostgreSQL) \\[4pt]
+    \textbf{Period}       & March 26, 2026 – June 14, 2026 (81 days, 194 commits) \\[4pt]
+    \textbf{Scale}        & 49,955 source LOC · 11,613 test LOC · 1,036 automated tests \\[4pt]
+    \textbf{Authors}      & GhostKitchen Engineering Team \\[4pt]
+    \textbf{Version}      & 1.0 · June 2026 \\
+  \end{tabular}
+
+  \vfill
+  \begin{tcolorbox}[colback=brand!6,colframe=brand,width=\textwidth]
+  \centering
+  \textbf{From prototype to production-ready platform in 81 days.}\\
+  This book tells the complete engineering story — the decisions, the crises,
+  the pivots, and the architecture that emerged.
+  \end{tcolorbox}
+  \vspace{0.5cm}
+  {\small\color{muted}\textbf{CONFIDENTIAL — Internal Engineering Documentation}}
+\end{titlepage}
+
+\cleardoublepage
+\tableofcontents
+\cleardoublepage
+
+% ── Preface ───────────────────────────────────────────────────────────────────
+\chapter*{Preface}
+\addcontentsline{toc}{chapter}{Preface}
+
+GhostKitchen began as a prototype food-delivery application and evolved, over
+eleven weeks, into a production-ready multi-role platform handling payments,
+real-time GPS tracking, automated incident detection, and executive analytics.
+
+This book documents that journey \emph{from source}: every architectural
+decision is grounded in the commit history, every schema diagram derived from
+the actual migration files, every benchmark drawn from the test suite.  It is
+not a marketing document.  It is an engineering record.
+
+The story has five acts:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{The Prototype} (March 26 – April 7) — First working checkout flow,
+        Cashfree payments, Socket.IO real-time tracking.
+  \item \textbf{The Production Crisis} (April 7–10) — Twenty-three sequential bug-fix
+        commits exposing every gap between a local demo and a live system.
+  \item \textbf{The Great Rebuild} (June 3–7) — Complete architectural overhaul:
+        multi-role RBAC, token-based auth replacing NextAuth, self-healing migrations.
+  \item \textbf{Product Maturity} (June 10–13) — Admin console, 6,708-city onboarding,
+        WCAG accessibility, security sprints, test coverage from 17.6\% to 76.6\%.
+  \item \textbf{Operations Excellence} (June 14) — Live GPS map, incident engine,
+        executive analytics, distributed locks, observability hardening.
+\end{enumerate}
+
+Each chapter that follows examines one dimension of this evolution in depth.
+Architecture diagrams are drawn from the final system state; timelines reflect
+the actual commit chronology.
+
+\mainmatter
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 1 — PROJECT OVERVIEW                        ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Project Overview}
+
+\section{What Is GhostKitchen?}
+
+GhostKitchen is a production-grade, multi-role food delivery platform built for
+the Indian market.  It connects four distinct user types — customers, restaurant
+owners, delivery riders, and platform administrators — through a single
+application with role-gated dashboards, real-time order tracking, and integrated
+payment processing via Cashfree PG.
+
+The platform is \emph{not} a tutorial project.  It implements:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Hashed, rotating refresh tokens with concurrent-race protection
+  \item Server-side socket room authorization backed by Prisma ownership queries
+  \item HMAC-SHA256 webhook verification on raw request bodies
+  \item Distributed Redis locks preventing duplicate cron-job execution across instances
+  \item A three-tier observability stack: Winston structured logs → Sentry with release tags → enriched health endpoints
+  \item An automated incident engine that detects, escalates, and notifies without human intervention
+\end{itemize}
+
+\section{Problem Statement}
+
+Food delivery in India is dominated by aggregators (Swiggy, Zomato) that charge
+15–30\% commission.  Independent restaurant operators need a platform they
+control — one that can run on their own domain, integrate their existing payment
+accounts, and provide analytics without a middleman.
+
+GhostKitchen targets this operator-first model: the restaurant owner deploys
+their own instance, retains all payment revenue, and gains operational
+intelligence that aggregators keep proprietary.
+
+\section{Business Goals}
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Enable restaurant owners to accept and manage orders without third-party
+        commission.
+  \item Provide customers with a smooth browse→cart→checkout→track experience
+        comparable to national aggregators.
+  \item Give delivery riders a transparent earnings dashboard with session tracking.
+  \item Equip platform administrators with real-time operational intelligence,
+        incident detection, and executive KPIs.
+\end{enumerate}
+
+\section{Target Users}
+
+\begin{center}\small
+\begin{tabular}{llp{6.5cm}}
+\toprule
+\rowcolor{headbg}\th{Role} & \th{Primary Device} & \th{Core Needs} \\
+\midrule
+Customer        & Mobile / web & Browse, search, order, track, re-order, reviews \\
+\rowcolor{rowalt}Restaurant     & Tablet / desktop & Receive orders, manage menu, view analytics \\
+Delivery Rider  & Mobile       & Accept assignments, GPS-stream position, track earnings \\
+\rowcolor{rowalt}Admin          & Desktop          & Operations visibility, incident management, executive KPIs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Technical Goals}
+
+\begin{tcolorbox}[insight,title=System Requirements]
+\begin{itemize}[leftmargin=1.2em,nosep]
+  \item \textbf{Sub-100ms API responses} for browse, search, and cart operations
+  \item \textbf{Real-time delivery tracking} with GPS precision via Socket.IO
+  \item \textbf{Zero-downtime deploys} via self-healing migration scripts
+  \item \textbf{Multi-instance horizontal scaling} with shared Redis state
+  \item \textbf{Full OWASP Top 10 coverage} across all API surfaces
+  \item \textbf{WCAG 2.1 AA accessibility} for all customer-facing pages
+\end{itemize}
+\end{tcolorbox}
+
+\section{Project Scale in Numbers}
+
+\begin{center}\small
+\begin{tabular}{lr lr}
+\toprule
+\textbf{Metric} & \textbf{Value} & \textbf{Metric} & \textbf{Value} \\
+\midrule
+Total commits        & 194          & Backend source LOC   & 22,767 \\
+Development days     & 81           & Frontend source LOC  & 27,188 \\
+Database models      & 20           & Test LOC             & 11,613 \\
+Prisma migrations    & 21           & Total tests          & 1,036  \\
+API endpoints        & 89           & Test files           & 42     \\
+Frontend pages       & 44           & npm dependencies     & 49     \\
+Socket event types   & 14           & Env variables        & 18     \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 2 — THE FIVE ENGINEERING ERAS               ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{The Five Engineering Eras}
+
+\section{Overview}
+
+GhostKitchen's 194 commits fall into five distinct engineering eras, each with
+a dominant theme, a defining challenge, and measurable outcomes.
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  era/.style={rectangle,rounded corners=4pt,minimum height=1.1cm,
+    text width=2.4cm,align=center,font=\footnotesize\bfseries},
+  line/.style={-Stealth,thick,color=muted}
+]
+\node[era,fill=info!20,draw=info]       (e1) at (0,0)   {Era I\\Genesis\\Mar 26–Apr 7};
+\node[era,fill=crit!15,draw=crit]       (e2) at (3,0)   {Era II\\Crisis\\Apr 7–10};
+\node[era,fill=purple!15,draw=purple]   (e3) at (6,0)   {Era III\\Rebuild\\Jun 3–7};
+\node[era,fill=warn!20,draw=warn]       (e4) at (9,0)   {Era IV\\Maturity\\Jun 10–13};
+\node[era,fill=ok!15,draw=ok]           (e5) at (12,0)  {Era V\\Excellence\\Jun 14};
+\draw[line] (e1) -- (e2);
+\draw[line] (e2) -- (e3);
+\draw[line] (e3) -- (e4);
+\draw[line] (e4) -- (e5);
+\node[font=\tiny,color=muted,below=0.3cm of e1] {47 commits};
+\node[font=\tiny,color=muted,below=0.3cm of e2] {23 commits};
+\node[font=\tiny,color=muted,below=0.3cm of e3] {52 commits};
+\node[font=\tiny,color=muted,below=0.3cm of e4] {42 commits};
+\node[font=\tiny,color=muted,below=0.3cm of e5] {30 commits};
+\end{tikzpicture}
+\caption{GhostKitchen's five engineering eras}
+\end{figure}
+
+\section{Era I — Genesis (March 26 – April 7, 47 commits)}
+
+\subsection{What Was Built}
+
+The first commit on March 26 established a basic Express backend with restaurant
+browsing, a cart system, and Cashfree payment integration.  The frontend was a
+Next.js 14 application using NextAuth for session management.
+
+\begin{tcolorbox}[commit,title=Milestone commits]
+\begin{itemize}[leftmargin=1em,nosep,topsep=2pt]
+  \item \texttt{cad7cd2} — Phase 1: Production-Ready Auth System (Apr 9)
+  \item \texttt{8aaa7ff} — Phase 2: Cart system with DB persistence (Apr 9)
+  \item \texttt{b36822c} — Phase 3: Order System — Cart→Checkout→Order (Apr 9)
+  \item \texttt{b6a92f1} — Cashfree Payment Integration (Apr 9)
+  \item \texttt{b8b7fe4} — Phase 2: Real-time tracking with Socket.IO (Apr 10)
+  \item \texttt{c13d76b} — Phase 3: Admin panel and dashboard (Apr 10)
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Architecture at Day 1}
+
+The initial stack was deliberately minimal: a single Express server, Prisma
+connected to a Neon PostgreSQL database, no Redis, and Socket.IO in in-memory
+mode.  Authentication used NextAuth on the frontend passing session cookies to
+the backend — a pattern that would prove catastrophic in the cross-origin
+Vercel/Render deployment.
+
+\subsection{Initial Limitations}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Single-role model}: users were either customers or admins; no restaurant owner or rider roles
+  \item \textbf{No refresh token rotation}: JWT access tokens were long-lived
+  \item \textbf{No webhook idempotency}: duplicate Cashfree webhooks created duplicate orders
+  \item \textbf{No rate limiting}: all endpoints were open to brute force
+  \item \textbf{CORS wildcards}: \texttt{Access-Control-Allow-Origin: *} in early config
+\end{itemize}
+
+\section{Era II — The Production Crisis (April 7–10, 23 commits)}
+
+\subsection{The Problem}
+
+When the prototype was deployed to Render + Vercel, it produced a cascade of
+failures.  The commit log for April 7–10 reads as a triage log:
+
+\begin{lstlisting}[language=bash,numbers=none]
+ISSUE 5: Add transaction locking for race condition prevention
+ISSUE 6: Fix order status override with conditional update
+ISSUE 7: Optimize cron job with single atomic updateMany
+ISSUE 8: Add database indexes for Order model queries
+ISSUE 9: Add structured logging context to payment service
+FINAL PRODUCTION GAPS: Fix 3 critical vulnerabilities
+\end{lstlisting}
+
+\subsection{Root Causes}
+
+The crisis revealed that local development masked critical production gaps:
+
+\begin{center}\small
+\begin{tabular}{p{5cm}p{7.5cm}}
+\toprule
+\rowcolor{headbg}\th{Symptom} & \th{Root Cause} \\
+\midrule
+Restaurant API 500 & Missing columns in production DB (slug, lat, lng) \\
+\rowcolor{rowalt}Duplicate orders & Cashfree webhook had no idempotency guard \\
+Checkout double-submit & No server-side duplicate check on order creation \\
+\rowcolor{rowalt}CORS failures & Hardcoded origin list missed Vercel preview URLs \\
+Payment race condition & Concurrent webhooks both passed SELECT-then-UPDATE \\
+\rowcolor{rowalt}Slow order queries & No indexes on \texttt{Order.restaurantId}, \texttt{Order.customerId} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{What the Crisis Taught}
+
+\begin{tcolorbox}[story]
+This 72-hour debugging marathon produced a discipline that would govern every
+subsequent phase: never ship a feature without thinking through the production
+deployment, the database state, and the concurrent-request scenario.  The
+23 rapid-fire commits of Era II became the platform's first real stress test.
+\end{tcolorbox}
+
+\section{Era III — The Great Rebuild (June 3–7, 52 commits)}
+
+\subsection{The Architectural Decision}
+
+Between April 10 and June 3 — a 54-day gap with no commits — the team made a
+fundamental decision: the NextAuth-based single-role architecture could not be
+extended to support restaurant owners and delivery riders without a rewrite.
+The rebuild introduced:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Multi-role JWT tokens}: a single user can hold CUSTOMER, RESTAURANT, DELIVERY, and ADMIN roles simultaneously
+  \item \textbf{Role switching}: token re-issue endpoint with active-role encoding
+  \item \textbf{Authorization header auth}: replaced cookie-based auth to circumvent Safari third-party cookie blocking (Vercel ↔ Render cross-origin)
+  \item \textbf{Zustand state management}: replaced NextAuth sessions with a persisted client-side store
+  \item \textbf{Self-healing migrations}: idempotent DDL (\texttt{ADD COLUMN IF NOT EXISTS}) to patch production without downtime
+\end{itemize}
+
+\subsection{The Cookie Crisis (June 4–5)}
+
+The rebuild triggered a new crisis: the frontend's Zustand auth store would
+hydrate from localStorage, call \texttt{/auth/me} with an Authorization header,
+then immediately clear state on a 401 — causing an infinite re-render loop.
+Six commits on June 4 tackled this in sequence:
+
+\begin{tcolorbox}[commit,title=Auth loop resolution (June 4--5)]
+\begin{itemize}[leftmargin=1em,nosep,topsep=2pt]
+  \item \texttt{bef7fcf} — Wait for Zustand hydration before auth redirect
+  \item \texttt{15d1a98} — Don't clear auth state on cross-origin 401
+  \item \texttt{24f47a6} — Use Authorization header to bypass third-party cookie blocking
+  \item \texttt{17a035e} — Allow Authorization header in preflight CORS response
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Restaurant Healing Logic}
+
+A subtle production issue emerged when restaurant owners registered their
+restaurant and then lost their \texttt{restaurantId} claim on token refresh.
+The fix introduced an \emph{auto-heal} mechanism on \texttt{/auth/me}: if the
+user has a RESTAURANT role but no \texttt{restaurantId} in their token, the
+server queries the DB and re-issues a corrected token.
+
+\section{Era IV — Product Maturity (June 10–13, 42 commits)}
+
+\subsection{Feature Explosion}
+
+Once the architecture stabilized, June 10–13 delivered features at pace:
+
+\begin{center}\footnotesize
+\begin{longtable}{p{3.5cm}p{9cm}}
+\toprule
+\rowcolor{headbg}\th{Date} & \th{Commits / Features} \\
+\midrule
+June 10 & Admin DMS drawer, \texttt{/bootstrap-admin}, city-search onboarding, 6,708 Indian cities, dark admin shell redesign, settings enforcement, user management (suspend/block/delete/role-change) \\
+\rowcolor{rowalt}June 11 & Favorites UI, smart homepage, address-based checkout, customer refunds, field-name audit sweep, backend hardening sprint, Sentry integration, CI/CD pipeline \\
+June 12 & ETA engine, recommendations engine, admin completions, launch-readiness security fixes (OOM guard, refund race, requireApproval), IDOR closure, WCAG 2.1 AA fixes, 103-test suite \\
+\rowcolor{rowalt}June 13 & Backend coverage 17.6\%→76.6\%, CI/CD repair, README overhaul, maintenance mode, self-healing deploy P3009 fix \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{The 6{,}708-City Dataset}
+
+\begin{tcolorbox}[story]
+Restaurant onboarding required a city-selection field.  The initial implementation
+used a handful of hardcoded major cities, which immediately broke for any
+restaurant outside the top 10 metros.  The solution was to embed an open-source
+dataset of all 6,708 Indian cities and towns into the frontend bundle, paired with
+a fuzzy-search autocomplete.  Commit \texttt{4216492} added this dataset; the
+bundle impact was acceptable because Next.js code-splits it to the onboarding
+page only.
+\end{tcolorbox}
+
+\section{Era V — Operations Excellence (June 14, 30 commits)}
+
+June 14 was the most productive single day in the project: 30 commits delivering
+five major systems.
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{9cm}}
+\toprule
+\rowcolor{headbg}\th{System} & \th{Description} \\
+\midrule
+Live Operations Map      & Real-time rider GPS on Leaflet with heatmap, clustering, route display \\
+\rowcolor{rowalt}Ops Intelligence Waves A–C & Incident engine, scoring, leaderboards, executive analytics \\
+Security Sprints 1–2     & OWASP hardening, Permissions-Policy, audit trails, regression suites \\
+\rowcolor{rowalt}Distributed Locks         & Redis SETNX guards on all three cron jobs \\
+Observability             & JSON logs, Sentry release tags, X-Request-ID, enriched health endpoints \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 3 — DATABASE EVOLUTION                      ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Database Evolution}
+
+\section{Migration Philosophy}
+
+GhostKitchen's database evolved through 21 migrations over 11 weeks.  From
+migration 5 onwards, all DDL used \texttt{IF NOT EXISTS} guards, making every
+migration safe to replay — critical for the self-healing deployment pipeline
+that had to recover from P3009 migration-lock failures on Render.
+
+\section{Migration Chronology}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{5.5cm}p{7.5cm}}
+\toprule
+\rowcolor{headbg}\th{Migration} & \th{Purpose \& Key Changes} \\
+\midrule
+\texttt{20260603\_baseline\_multi\_role} &
+  Foundation schema. Defines 4 enums (Role, OrderStatus, PaymentStatus, DiscountType).
+  Creates User, RefreshToken, Restaurant, MenuItem, Order, CartItem, Review,
+  Coupon, Payment, PaymentWebhook. \\
+\rowcolor{rowalt}\texttt{20260603\_refresh\_token\_hash} &
+  Security: renames \texttt{RefreshToken.token} → \texttt{tokenHash} to clarify
+  the stored value is a SHA-256 hash, not a raw secret. \\
+\texttt{20260603\_security\_hardening} &
+  Adds AuditLog table with indexes on userId, action, createdAt.
+  Adds composite index on MenuItem(restaurantId, isAvailable) for menu queries. \\
+\rowcolor{rowalt}\texttt{20260604\_add\_missing\_columns} &
+  Production repair: adds slug, lat, lng, isOpen, deliveryRadius, rating,
+  reviewCount, cuisine, minOrder, deliveryFee, estimatedDelivery to Restaurant
+  using IF NOT EXISTS to avoid failures on partially-upgraded instances. \\
+\texttt{20260604\_add\_user\_roles\_column} &
+  Multi-role: adds \texttt{roles Role[] DEFAULT ARRAY['CUSTOMER']} to User,
+  enabling one account to hold multiple platform roles simultaneously. \\
+\rowcolor{rowalt}\texttt{20260604\_rename\_refresh\_token\_column} &
+  Idempotent recreation of RefreshToken table with correct schema + composite
+  index on (userId, expiresAt) for token cleanup queries. \\
+\texttt{20260605\_complete\_systems} &
+  Adds reviewCount, suspended to Restaurant. Adds isActive, description,
+  restaurantId to Coupon. Creates Notification table for in-app alerts. \\
+\rowcolor{rowalt}\texttt{20260607\_fix\_menuitem\_columns} &
+  Adds isVeg, isBestSeller, sortOrder, isAvailable to MenuItem.
+  Adds category, description indexes for menu filtering. \\
+\texttt{20260610\_add\_user\_is\_blocked} &
+  Security: adds isBlocked flag enabling admin to lock out accounts. \\
+\rowcolor{rowalt}\texttt{20260610\_add\_restaurant\_role\_value} &
+  Enum migration: adds RESTAURANT value to the Role enum (was missing). \\
+\texttt{20260610\_add\_user\_is\_suspended} &
+  Operations: adds isSuspended to distinguish temporary suspension from hard block. \\
+\rowcolor{rowalt}\texttt{20260610\_site\_config\_restaurant\_approved} &
+  Platform governance: creates singleton SiteConfig table (maintenance mode,
+  feature flags, fee settings). Adds isApproved to Restaurant. \\
+\texttt{20260610\_status\_note\_maintenance\_reason} &
+  UX: adds statusNote to Restaurant for "back at 5pm" messaging.
+  Adds maintenanceReason to SiteConfig. \\
+\rowcolor{rowalt}\texttt{20260610\_maintenance\_scheduling} &
+  Operations: adds maintenanceScheduledAt and maintenanceEndsAt to SiteConfig,
+  enabling cron-driven maintenance window automation. \\
+\texttt{20260610\_order\_analytics\_index} &
+  Performance: composite index on Order(restaurantId, createdAt) accelerating
+  restaurant analytics queries by 10–50× on large datasets. \\
+\rowcolor{rowalt}\texttt{20260611\_addresses\_refunds\_favorites} &
+  Customer features: creates Address (multi-address with default flag),
+  Favorite (user↔restaurant unique constraint), Refund tables. \\
+\texttt{20260611\_add\_order\_estimated\_delivery} &
+  ETA: adds estimatedDelivery timestamp to Order, populated by the ETA engine
+  at order confirmation. \\
+\rowcolor{rowalt}\texttt{20260613\_add\_rider\_location} &
+  GPS: creates RiderLocation with unique index on riderId and spatial index on
+  (latitude, longitude) for proximity queries. \\
+\texttt{20260614\_add\_incident} &
+  Ops Intelligence: creates Incident with IncidentSeverity/Status enums.
+  Indexes on status, severity, createdAt for dashboard queries. \\
+\rowcolor{rowalt}\texttt{20260614\_incident\_escalation} &
+  Wave B: adds acknowledgedAt, escalatedAt, escalationCount, lastNotifiedAt
+  to Incident. Creates IncidentEvent for immutable audit timeline. \\
+\texttt{20260614\_order\_lifecycle\_rider\_sessions} &
+  Delivery tracking: adds acceptedAt, readyAt, pickedUpAt timestamps to Order.
+  Creates RiderSession for online-time and earnings analytics. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Database Model Map}
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  model/.style={rectangle,rounded corners=3pt,draw=dark,fill=light,
+    minimum width=2.2cm,minimum height=0.65cm,font=\footnotesize\bfseries,align=center},
+  rel/.style={-Stealth,color=muted,thin},
+  group/.style={rectangle,rounded corners=8pt,draw=muted!40,dashed,
+    fill=muted!5,inner sep=8pt},
+]
+% Auth cluster
+\node[model,fill=info!15,draw=info] (user) at (0,8) {User};
+\node[model,fill=info!8] (rt) at (3,8) {RefreshToken};
+\node[model,fill=info!8] (session) at (3,6.5) {RiderSession};
+\node[model,fill=info!8] (audit) at (0,6.5) {AuditLog};
+
+% Core order cluster
+\node[model,fill=brand!15,draw=brand] (order) at (7,7) {Order};
+\node[model,fill=brand!8] (cart) at (5,5.5) {CartItem};
+\node[model,fill=brand!8] (payment) at (9,5.5) {Payment};
+\node[model,fill=brand!8] (webhook) at (11,7) {PaymentWebhook};
+\node[model,fill=brand!8] (refund) at (9,8.5) {Refund};
+
+% Content cluster
+\node[model,fill=ok!15,draw=ok] (rest) at (0,3) {Restaurant};
+\node[model,fill=ok!8] (menu) at (3,3) {MenuItem};
+\node[model,fill=ok!8] (review) at (0,1.5) {Review};
+\node[model,fill=ok!8] (coupon) at (3,1.5) {Coupon};
+\node[model,fill=ok!8] (fav) at (6,3) {Favorite};
+\node[model,fill=ok!8] (addr) at (6,1.5) {Address};
+\node[model,fill=ok!8] (notif) at (5,8.5) {Notification};
+
+% Ops cluster
+\node[model,fill=purple!15,draw=purple] (incident) at (13,3.5) {Incident};
+\node[model,fill=purple!8] (inevent) at (13,2) {IncidentEvent};
+\node[model,fill=purple!8] (riderloc) at (11,3.5) {RiderLocation};
+
+% Config
+\node[model,fill=warn!15,draw=warn] (config) at (13,7) {SiteConfig};
+
+% Relations
+\draw[rel] (user) -- (rt);
+\draw[rel] (user) -- (session);
+\draw[rel] (user) -- (audit);
+\draw[rel] (user) -- (order);
+\draw[rel] (user) -- (cart);
+\draw[rel] (user) -- (fav);
+\draw[rel] (user) -- (addr);
+\draw[rel] (user) -- (notif);
+\draw[rel] (rest) -- (menu);
+\draw[rel] (rest) -- (review);
+\draw[rel] (rest) -- (order);
+\draw[rel] (order) -- (payment);
+\draw[rel] (order) -- (refund);
+\draw[rel] (payment) -- (webhook);
+\draw[rel] (incident) -- (inevent);
+\draw[rel] (user) -- (riderloc);
+\draw[rel] (order) -- (cart);
+\end{tikzpicture}
+\caption{Simplified GhostKitchen data model (20 models, 21 migrations)}
+\end{figure}
+
+\section{Schema Scale}
+
+\begin{center}\small
+\begin{tabular}{lrl lrl}
+\toprule
+\textbf{Model} & \textbf{Fields} && \textbf{Model} & \textbf{Fields} \\
+\midrule
+User          & 31 && Order     & 24 \\
+Restaurant    & 23 && Incident  & 20 \\
+SiteConfig    & 17 && MenuItem  & 15 \\
+Payment       & 12 && Address   & 14 \\
+Refund        & 9  && Notification & 9 \\
+AuditLog      & 9  && RiderLocation & 8 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The User model's 31 fields reflect the platform's multi-role complexity:
+identity (name, email, passwordHash), geolocation (currentLat, currentLng),
+availability (isAvailable for riders), moderation (isBlocked, isSuspended),
+and role state (roles[], activeRole, restaurantId).
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 4 — BACKEND ARCHITECTURE                    ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Backend Architecture}
+
+\section{Module Structure}
+
+The backend is a Node.js 20 / Express application structured around 15 feature
+modules, each encapsulating routes, controller, and service.  The only shared
+infrastructure is in \texttt{src/config/}, \texttt{src/middlewares/},
+\texttt{src/utils/}, and \texttt{src/socket/}.
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  box/.style={rectangle,draw=dark,fill=light,rounded corners=3pt,
+    minimum width=2.8cm,minimum height=0.6cm,font=\footnotesize,align=center},
+  infra/.style={rectangle,draw=info,fill=info!10,rounded corners=3pt,
+    minimum width=2.8cm,minimum height=0.6cm,font=\footnotesize\bfseries,align=center},
+]
+% Entry
+\node[infra] (srv) at (6,10) {server.js};
+\node[infra] (app) at (6,8.8) {app.js (Express)};
+
+% Middleware stack
+\node[box] (m1) at (1.5,7.5) {Helmet/CSP};
+\node[box] (m2) at (4.2,7.5) {CORS};
+\node[box] (m3) at (6.8,7.5) {Rate Limiter};
+\node[box] (m4) at (9.5,7.5) {Request Tracing};
+\node[box] (m5) at (12,7.5) {Sanitize};
+
+% Modules
+\node[box,fill=brand!10,draw=brand] (auth) at (0,5.8) {auth};
+\node[box] (cart) at (2.5,5.8) {cart};
+\node[box] (orders) at (5,5.8) {orders};
+\node[box] (payment) at (7.5,5.8) {payment};
+\node[box] (rest) at (10,5.8) {restaurant};
+\node[box] (del) at (12.5,5.8) {delivery};
+\node[box] (admin) at (0,4.5) {admin};
+\node[box] (ops) at (2.5,4.5) {ops};
+\node[box] (exec) at (5,4.5) {exec};
+\node[box] (notif) at (7.5,4.5) {notification};
+\node[box] (user) at (10,4.5) {user};
+\node[box] (coupon) at (12.5,4.5) {coupon};
+
+% Infra
+\node[infra] (prisma) at (2,2.8) {Prisma ORM};
+\node[infra] (redis) at (5.5,2.8) {Redis (ioredis/Upstash)};
+\node[infra] (socket) at (9,2.8) {Socket.IO};
+\node[infra] (sentry) at (12,2.8) {Sentry};
+
+% DB
+\node[infra,fill=ok!15,draw=ok] (pg) at (6,1.5) {PostgreSQL (Neon)};
+
+\draw[-Stealth,thick,color=brand] (srv) -- (app);
+\draw[color=muted,thin] (app) -- (m1); \draw[color=muted,thin] (app) -- (m4);
+\draw[color=muted,thin] (app) -- (m3); \draw[color=muted,thin] (app) -- (m5);
+\draw[color=muted,thin] (auth) -- (prisma); \draw[color=muted,thin] (orders) -- (prisma);
+\draw[color=muted,thin] (prisma) -- (pg);
+\end{tikzpicture}
+\caption{Backend layered architecture}
+\end{figure}
+
+\section{Request Lifecycle}
+
+Every HTTP request flows through a deterministic pipeline:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Helmet} sets 10+ security headers (CSP, HSTS, X-Frame-Options).
+  \item \textbf{Permissions-Policy} restricts camera, microphone, geolocation, payment.
+  \item \textbf{Request Tracing} assigns \texttt{req.id = randomUUID()} and sets \texttt{X-Request-ID} response header.
+  \item \textbf{CORS} validates origin against allowlist + Vercel preview pattern.
+  \item \textbf{Compression} applies gzip at level 6 for API responses.
+  \item \textbf{Body parsing} limits payloads to 50 KB.
+  \item \textbf{XSS sanitisation} deep-cleans request bodies with the \texttt{xss} library.
+  \item \textbf{Rate limiters} (tiered: general 200/15min, auth 10/15min, payment 20/min).
+  \item \textbf{Route handler} calls authenticate → authorize → controller → service.
+  \item \textbf{Error handler} classifies operational vs non-operational errors; routes to Sentry.
+\end{enumerate}
+
+\section{API Surface}
+
+\begin{center}\small
+\begin{longtable}{p{2.2cm}p{2cm}p{8.5cm}}
+\toprule
+\rowcolor{headbg}\th{Module} & \th{Endpoints} & \th{Key Operations} \\
+\midrule
+auth        & 6  & register, login, me, refresh, logout, logout-all \\
+\rowcolor{rowalt}restaurant  & 14 & list, get, create, update, menu CRUD, analytics, trending, recommendations \\
+orders      & 5  & list, get, place, update-status, reorder \\
+\rowcolor{rowalt}payment     & 11 & create-order, verify, webhook, history, retry, refunds (customer+admin) \\
+cart        & 5  & get, add, update, remove, clear \\
+\rowcolor{rowalt}delivery    & 4  & accept-order, location ping, status toggle, earnings \\
+admin       & 37 & full platform management across users, restaurants, orders, coupons, analytics \\
+\rowcolor{rowalt}ops         & 11 & incidents, SLA, performance, leaderboards, alerts \\
+exec        & 6  & KPIs, fleet, customers, restaurants, trends, summary \\
+\rowcolor{rowalt}notification & 5 & list, read, read-all, delete, delete-all \\
+user        & 9  & addresses, favorites, profile \\
+\rowcolor{rowalt}role        & 7  & switch, register-restaurant, register-rider, add-restaurant, my-restaurant \\
+review      & 6  & create, update, delete, get by order/restaurant, can-review \\
+\rowcolor{rowalt}coupon      & 7  & validate, active, available, admin CRUD \\
+config      & —  & getSiteConfigCached, updateSiteConfig (internal service) \\
+\midrule
+\textbf{Total} & \textbf{133} & \textbf{89 public endpoints + 44 internal routes} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Authentication System}
+
+\subsection{Token Architecture}
+
+GhostKitchen uses a dual-token model.  Access tokens are short-lived JWTs (15
+minutes by default) encoding the user's roles, activeRole, and restaurantId.
+Refresh tokens are long-lived (7 days) but stored only as SHA-256 hashes in
+the database — the raw token is transmitted once and never stored in cleartext.
+
+\begin{lstlisting}[language=JavaScript,caption={JWT payload structure}]
+{
+  userId: "cuid2_user_id",
+  roles: ["CUSTOMER", "RESTAURANT"],
+  activeRole: "RESTAURANT",
+  restaurantId: "cuid2_restaurant_id",
+  secondRole: "CUSTOMER",
+  iat: 1718323200,
+  exp: 1718324100  // 15 minutes
+}
+\end{lstlisting}
+
+\subsection{Refresh Token Rotation}
+
+The refresh endpoint implements rotation with a concurrent-race guard:
+
+\begin{lstlisting}[language=JavaScript,caption={Rotation with race guard (auth.service.js)}]
+// Rotate: delete old token atomically
+const deleted = await prisma.refreshToken.deleteMany({ where: { tokenHash } });
+if (deleted.count === 0) {
+  // Another concurrent request already rotated this token — treat as revoked
+  throw new AppError("Refresh token revoked or expired", 401);
+}
+// Issue new pair
+const { accessToken, refreshToken } = generateTokenPair(buildTokenPayload(user));
+await storeRefreshToken(user.id, refreshToken);
+\end{lstlisting}
+
+If two requests arrive simultaneously with the same refresh token, one will find
+\texttt{deleted.count === 0} and be rejected, preventing token replay attacks.
+
+\section{Authorization Architecture}
+
+\subsection{Three-Layer RBAC}
+
+\begin{center}\small
+\begin{tabular}{p{3cm}p{9.5cm}}
+\toprule
+\rowcolor{headbg}\th{Layer} & \th{Mechanism} \\
+\midrule
+Router-level  & \texttt{router.use(authenticate, authorize("ADMIN"))} — blocks entire module \\
+\rowcolor{rowalt}Route-level   & \texttt{roleMiddleware(["CUSTOMER"])} — per-endpoint role gate \\
+Service-level & \texttt{getRestaurantByIdAndOwner(id, userId)} — ownership verification \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{IDOR Prevention}
+
+Every resource with a per-user ownership invariant enforces it at the service
+layer, independent of the role check.  Representative patterns:
+
+\begin{lstlisting}[language=JavaScript,caption={Order IDOR gate (orders.controller.js)}]
+async function canAccessOrder(order, user) {
+  if (user.role === "ADMIN") return true;
+  if (order.customerId === user.userId) return true;
+  if (order.agentId && order.agentId === user.userId) return true;
+  if (user.roles?.includes("RESTAURANT")) {
+    const owned = await prisma.restaurant.findFirst({
+      where: { id: order.restaurantId, ownerId: user.userId },
+    });
+    return !!owned;
+  }
+  return false;
+}
+\end{lstlisting}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 5 — CUSTOMER PLATFORM                       ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Customer Platform}
+
+\section{Discovery \& Search}
+
+\subsection{Restaurant Listing}
+
+The primary browse experience presents restaurants with filtering by cuisine,
+city, minimum order, delivery fee, and availability.  The \texttt{listRestaurants}
+service supports cursor-based pagination and constructs a dynamic Prisma
+\texttt{where} clause from query parameters.
+
+\subsection{Search}
+
+Search operates on restaurant name, cuisine, and description fields using
+Prisma's case-insensitive \texttt{contains} mode.  A full-text index was
+considered but deferred; at current scale the ILIKE query returns in under 20ms
+with the existing btree index on \texttt{Restaurant.name}.
+
+\subsection{Recommendations Engine}
+
+Commit \texttt{59ff07a} introduced a personalised recommendations endpoint.
+The algorithm ranks restaurants by a weighted composite of the user's own order
+history and global popularity (review count × rating).  For authenticated users,
+restaurants they've ordered from before receive a boost; for guests, the ranking
+falls back to pure popularity.
+
+\subsection{Trending}
+
+A lightweight trending query aggregates order counts over the last 7 days,
+returning the top 10 restaurants ordered by recent order volume.
+
+\section{Cart System}
+
+The cart is database-persisted, not session-based.  This decision was made
+early (commit \texttt{8aaa7ff}) to support cross-device continuity.  CartItems
+are keyed to the authenticated user and include a unique constraint on
+(userId, menuItemId) to prevent duplicate additions.
+
+\begin{tcolorbox}[warn,title=Cart Cross-Restaurant Guard]
+The cart service enforces a single-restaurant constraint: adding an item from
+a different restaurant clears the existing cart automatically.  This prevents
+an order from containing items with incompatible delivery logistics.
+\end{tcolorbox}
+
+\section{Checkout \& Order Placement}
+
+Order placement is a transactional operation that:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Validates all CartItems still exist and are available
+  \item Re-fetches prices from the database (never trusts client totals)
+  \item Computes subtotal, delivery fee, and coupon discount server-side
+  \item Verifies coupon eligibility (active, not expired, usage limit, minimum order)
+  \item Atomically decrements \texttt{coupon.usedCount} and creates the Order in a Prisma transaction
+  \item Emits \texttt{order:new} to the restaurant's Socket.IO room
+  \item Sends an order-confirmation email via Resend
+\end{enumerate}
+
+\section{Payments}
+
+\subsection{The Cashfree Integration}
+
+GhostKitchen uses Cashfree PG's Node.js SDK for the payment lifecycle:
+
+\begin{center}\small
+\begin{tabular}{llp{7cm}}
+\toprule
+\rowcolor{headbg}\th{Step} & \th{Endpoint} & \th{Action} \\
+\midrule
+1. Create order  & \texttt{POST /payments/create-order} & \texttt{PGCreateOrder} — creates Cashfree order, returns \texttt{payment\_session\_id} \\
+\rowcolor{rowalt}2. Checkout      & Frontend          & \texttt{cashfree.checkout()} loads Cashfree drop-in UI \\
+3. Callback      & \texttt{/checkout/callback} & Reads \texttt{?order\_id} from URL, displays pending state \\
+\rowcolor{rowalt}4. Webhook       & \texttt{POST /payments/webhook} & HMAC-verified, idempotent order confirmation \\
+5. Verify        & \texttt{GET /payments/verify/:orderId} & Client-side poll after callback \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Webhook Idempotency}
+
+A critical bug in Era II was duplicate order creation from duplicate webhooks.
+The fix uses \texttt{PaymentWebhook} as an idempotency table:
+
+\begin{lstlisting}[language=JavaScript,caption={Webhook idempotency guard}]
+const existing = await prisma.paymentWebhook.findUnique({
+  where: { eventId: `${orderId}_${paymentStatus}_${cfPaymentId}` },
+});
+if (existing) {
+  logger.info("Duplicate webhook — skipping", { orderId });
+  return { duplicate: true };
+}
+\end{lstlisting}
+
+\section{Order Tracking}
+
+When an order is placed, the customer joins the Socket.IO room \texttt{order-\{id\}}.
+Status changes from the restaurant (\texttt{CONFIRMED}, \texttt{PREPARING},
+\texttt{OUT\_FOR\_DELIVERY}, \texttt{DELIVERED}) are emitted to this room via
+\texttt{emitOrderStatusUpdated}.  When the rider goes out for delivery, their
+GPS coordinates are relayed to the same room as \texttt{agent:location} events.
+
+\section{Favorites, Addresses \& Reviews}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Favorites}: toggle endpoints with a unique constraint on (userId, restaurantId); the homepage surfaces favourited restaurants first.
+  \item \textbf{Addresses}: full CRUD with a single-default constraint enforced at the service layer; the default address auto-populates checkout.
+  \item \textbf{Reviews}: one review per order (enforced); customer can update their own; 1–5 star with text; restaurant rating auto-updated.
+\end{itemize}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 6 — RESTAURANT PLATFORM                     ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Restaurant Platform}
+
+\section{Onboarding}
+
+Restaurant registration is a multi-step flow:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item User registers (or logs in) and navigates to \texttt{/onboarding/restaurant}
+  \item Completes the registration form including city (searched from 6,708-entry dataset)
+  \item Server creates Restaurant row, sets \texttt{ownerId}, updates User's roles array, re-issues token with \texttt{restaurantId} claim
+\end{enumerate}
+
+The endpoint is idempotent: if the user already has a pending restaurant
+registration, a second call returns the existing restaurant.  The auto-heal
+logic on \texttt{/auth/me} re-attaches orphaned restaurantIds when token claims
+drift from database state.
+
+\section{Menu Management}
+
+The shop menu page (commit \texttt{02c1bf8}) provides full CRUD for menu items
+with drag-and-drop reordering via \texttt{@dnd-kit}.  Each item tracks:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Name, description, price (paise), category, image URL
+  \item \texttt{isVeg} flag with visual indicator
+  \item \texttt{isBestSeller} badge
+  \item \texttt{isAvailable} toggle (inline from the menu list)
+  \item \texttt{sortOrder} for custom sequence
+\end{itemize}
+
+Menu item limits are enforced via the SiteConfig \texttt{maxMenuItems} setting,
+checked at creation time.
+
+\section{Order Management}
+
+The restaurant dashboard receives new orders via \texttt{order:new} socket events
+delivered to the \texttt{shop-\{restaurantId\}} room.  Restaurant owners can
+transition orders through: CONFIRMED → PREPARING → OUT\_FOR\_DELIVERY (triggers
+agent assignment on the admin side).
+
+State-machine validation in \texttt{orders.controller.js} enforces:
+
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+\rowcolor{headbg}\th{Actor} & \th{Permitted Transitions} \\
+\midrule
+RESTAURANT & PLACED→CONFIRMED, CONFIRMED→PREPARING \\
+\rowcolor{rowalt}DELIVERY   & CONFIRMED→OUT\_FOR\_DELIVERY, OUT\_FOR\_DELIVERY→DELIVERED \\
+ADMIN      & Any transition, including CANCEL \\
+\rowcolor{rowalt}CUSTOMER   & Any open status → CANCELLED \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Restaurant Analytics}
+
+The analytics endpoint returns:
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Revenue by day/week/month using the \texttt{Order(restaurantId, createdAt)} composite index
+  \item Order count by status
+  \item Top menu items by order frequency
+  \item Average order value
+\end{itemize}
+
+The Ops Intelligence Wave B scoring engine additionally computes a
+restaurant performance score (0–100) based on acceptance rate, preparation
+time, and review rating.
+
+\section{Status \& Availability}
+
+Restaurants have two availability controls:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{isOpen} (boolean): manually toggled by the owner from the shop header or settings
+  \item \textbf{statusNote} (text): freeform message displayed to customers ("Back at 5pm", "Out of gas")
+\end{itemize}
+
+The \texttt{set-status} endpoint (the active one; \texttt{status} is dead code)
+atomically updates both fields and emits a socket event for real-time admin
+visibility.
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 7 — DELIVERY PLATFORM                       ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Delivery Platform}
+
+\section{Rider Onboarding}
+
+Riders register via \texttt{POST /role/register-rider}, which adds DELIVERY to
+their roles array and creates a RiderLocation row initialised to coordinates
+(0, 0).  The rider then sees the delivery dashboard at \texttt{/delivery/home}.
+
+\section{Going Online}
+
+\texttt{PATCH /delivery/status} toggles the rider's \texttt{isAvailable} flag.
+When going online, the rider's current GPS coordinates (from the frontend's
+Geolocation API) are included, seeding the RiderLocation table for the admin
+map.  Going online also joins the rider's Socket.IO room \texttt{agent-\{id\}},
+which receives assignment events.
+
+\section{GPS Streaming Architecture}
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  box/.style={rectangle,rounded corners=4pt,draw=dark,fill=light,
+    minimum width=2.5cm,minimum height=0.8cm,font=\footnotesize,align=center},
+  arrow/.style={-Stealth,thick}
+]
+\node[box,fill=brand!15,draw=brand] (rider) at (0,0) {Rider\\Browser};
+\node[box] (geoloc) at (3,0) {Geolocation\\API};
+\node[box] (svc) at (6,0) {GPS Tracker\\Service};
+\node[box,fill=info!15] (api) at (9,0) {POST\\\/delivery\/location};
+\node[box,fill=ok!15,draw=ok] (db) at (12,0) {RiderLocation\\(Upsert)};
+\node[box,fill=purple!15,draw=purple] (socket) at (9,-2) {Socket.IO\\Emit};
+\node[box] (adminmap) at (5,-2) {Admin\\Live Map};
+\node[box] (trackpage) at (12,-2) {Customer\\Track Page};
+
+\draw[arrow] (rider) -- (geoloc) node[midway,above,font=\tiny] {watchPosition};
+\draw[arrow] (geoloc) -- (svc) node[midway,above,font=\tiny] {coords};
+\draw[arrow] (svc) -- (api) node[midway,above,font=\tiny] {POST 5s};
+\draw[arrow] (api) -- (db) node[midway,above,font=\tiny] {upsert};
+\draw[arrow] (api) -- (socket);
+\draw[arrow,dashed] (socket) -- (adminmap) node[midway,above,font=\tiny] {rider:location:update};
+\draw[arrow,dashed] (socket) -- (trackpage) node[midway,above,font=\tiny] {agent:location};
+\end{tikzpicture}
+\caption{GPS streaming pipeline from rider device to admin map and customer tracking page}
+\end{figure}
+
+The \texttt{riderTracker} service (extracted in commit \texttt{37593ee})
+encapsulates \texttt{navigator.geolocation.watchPosition} with a 5-second
+minimum interval, error handling with retry, and automatic cleanup on component
+unmount.  The refactor eliminated a duplicate GPS watcher bug (commit
+\texttt{81b3641}) where the same coordinates were being transmitted twice.
+
+\section{Order Assignment}
+
+When an admin (or the auto-assignment engine) calls \texttt{POST /admin/orders/:id/assign-delivery}:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item The system queries available DELIVERY users sorted by proximity to the restaurant
+  \item Updates \texttt{Order.agentId} and \texttt{Order.estimatedDelivery}
+  \item Emits \texttt{order:assigned} to the rider's \texttt{agent-\{id\}} room
+  \item Emits \texttt{agent:assigned} to the order room and restaurant room
+\end{enumerate}
+
+\section{Earnings \& Sessions}
+
+RiderSession records are created when a rider goes online and closed when they
+go offline.  The earnings endpoint aggregates sessions and delivered orders to
+compute:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Total online time for the period
+  \item Number of deliveries completed
+  \item Earnings per delivery and total earnings
+  \item Session timeline for the leaderboard
+\end{itemize}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 8 — PAYMENTS \& FINANCE                     ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Payments \& Finance}
+
+\section{Cashfree Integration Architecture}
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  box/.style={rectangle,rounded corners=4pt,draw=dark,fill=light,
+    minimum width=3cm,minimum height=0.8cm,font=\footnotesize\bfseries,align=center},
+  arrow/.style={-Stealth,thick},
+  dashed arrow/.style={-Stealth,dashed,color=muted}
+]
+\node[box,fill=brand!15,draw=brand] (fe) at (0,6) {Frontend\\Checkout};
+\node[box,fill=info!15,draw=info]   (be) at (5,6) {Backend\\/payments};
+\node[box,fill=warn!15,draw=warn]   (cf) at (10,6) {Cashfree PG\\API};
+\node[box,fill=ok!15,draw=ok]       (pg) at (5,3) {PostgreSQL\\Payment};
+\node[box,fill=purple!15,draw=purple] (wh) at (10,3) {Cashfree\\Webhook};
+
+\draw[arrow] (fe) -- (be) node[midway,above,font=\tiny] {POST create-order};
+\draw[arrow] (be) -- (cf) node[midway,above,font=\tiny] {PGCreateOrder};
+\draw[arrow,dashed arrow] (cf) to[bend right=15] (be) node[midway,right,font=\tiny] {session\_id};
+\draw[arrow,dashed arrow] (be) to[bend right=15] (fe) node[midway,below,font=\tiny] {session\_id};
+\draw[arrow] (fe) -- (cf) node[midway,above,font=\tiny,sloped] {cashfree.checkout()};
+\draw[arrow] (wh) -- (be) node[midway,above,font=\tiny] {POST webhook\\+ HMAC sig};
+\draw[arrow] (be) -- (pg) node[midway,left,font=\tiny] {upsert payment};
+\node[font=\tiny,color=ok,right=0.1cm of wh] {HMAC-SHA256};
+\end{tikzpicture}
+\caption{End-to-end payment flow with Cashfree PG}
+\end{figure}
+
+\section{Webhook Security}
+
+Cashfree delivers payment results via webhook.  The webhook handler is the most
+security-critical endpoint in the platform:
+
+\begin{lstlisting}[language=JavaScript,caption={HMAC verification (payment.controller.js)}]
+// Raw body preserved before Express JSON parsing
+app.use("/api/payments/webhook", express.raw({ type: "application/json" }),
+  (req, _res, next) => { req.rawBody = req.body; next(); });
+
+// In webhook handler:
+const signature = req.headers["x-webhook-signature"]
+               || req.headers["x-cf-signature"];
+if (!signature) return res.status(400).json({ message: "Missing signature" });
+// Timing-safe HMAC comparison on rawBody
+\end{lstlisting}
+
+The raw body is stored before Express JSON parsing because the HMAC is computed
+over the exact wire bytes — JSON re-serialisation would produce a different hash.
+
+\section{Refund Engine}
+
+The refund flow supports two paths:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Customer-initiated}: \texttt{POST /payments/my-refunds} — creates a Refund record, calls \texttt{cashfree.PGCreateRefund}, returns the Cashfree refund ID.
+  \item \textbf{Admin-initiated}: \texttt{POST /payments/refunds} — same flow but without the ownership check.
+\end{itemize}
+
+A critical production bug discovered in the supply-chain audit: the service was
+calling \texttt{cashfree.PGFetchRefund()} which does not exist in the SDK.  The
+correct method is \texttt{PGOrderFetchRefund()}.  This meant every
+\texttt{syncRefundStatus} call would 502 in production.  Fixed in commit
+\texttt{00bfc3d}.
+
+\section{Supply Chain Security}
+
+The \texttt{cashfree-pg} npm package pinned \texttt{axios@1.15.0} — a version
+with 21 reported CVEs including SSRF and prototype pollution advisories.
+The audit determined that:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{SSRF}: not exploitable — Cashfree SDK calls a hardcoded API URL
+  \item \textbf{Prototype pollution}: not exploitable — all user input validated by Zod before SDK
+  \item \textbf{Proxy leakage}: not exploitable — no user-controlled axios configuration
+\end{itemize}
+
+Even with low exploitability, the exposure was remediated via npm \texttt{overrides}:
+
+\begin{lstlisting}[language=json,caption={package.json axios override}]
+"overrides": { "axios": "^1.17.0" }
+\end{lstlisting}
+
+This forces all transitive dependencies to use the patched version. Post-override:
+\texttt{npm audit} reports 0 vulnerabilities.
+
+\section{Payout System}
+
+The Payouts section in the admin Finance nav (commit \texttt{a662bca}) provides
+visibility into refund status and pending payouts.  Direct bank transfer
+integration is a roadmap item; the current implementation tracks refund states
+through the Cashfree refund API.
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 9 — REAL-TIME SYSTEMS                       ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Real-Time Systems}
+
+\section{Socket.IO Architecture}
+
+Socket.IO sits alongside the Express HTTP server, sharing the Node.js \texttt{http.Server}
+instance.  In production the Redis adapter (\texttt{@socket.io/redis-adapter})
+is mounted to fan events across all backend instances.
+
+\begin{lstlisting}[language=JavaScript,caption={Redis adapter initialization (socketServer.js)}]
+const pub = new Redis(env.REDIS_URL);
+const sub = pub.duplicate();
+io.adapter(createAdapter(pub, sub));
+logger.info("Socket.IO Redis adapter mounted");
+\end{lstlisting}
+
+On Redis unavailability, the adapter falls back to in-memory mode (single-instance
+only), and \texttt{/health/extended} reports \texttt{adapterType: "in-memory"}.
+
+\section{Room Design}
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{3cm}p{6cm}}
+\toprule
+\rowcolor{headbg}\th{Room} & \th{Members} & \th{Events Received} \\
+\midrule
+\texttt{admin}           & Admin users    & All order events, rider locations, incidents \\
+\rowcolor{rowalt}\texttt{user:\{id\}}       & Logged-in user & \texttt{notification:new} \\
+\texttt{shop-\{restId\}} & Restaurant owner & \texttt{order:new}, \texttt{agent:assigned} \\
+\rowcolor{rowalt}\texttt{order-\{id\}}      & Customer, rider & \texttt{order:status-updated}, \texttt{agent:location} \\
+\texttt{agent-\{id\}}   & Rider          & \texttt{order:assigned} \\
+\rowcolor{rowalt}\texttt{delivery:\{id\}}   & Legacy alias   & (deprecated, superseded by agent-\{id\}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Room Authorization — The Ownership Gate}
+
+The critical security advance of the socket hardening sprint was converting
+\texttt{order-*} rooms from capability-URL security (anyone who knows the order
+ID can join) to server-side ownership verification:
+
+\begin{lstlisting}[language=JavaScript,caption={checkOrderRoomAccess — Prisma ownership gate}]
+export const checkOrderRoomAccess = async (orderId, user) => {
+  if (!user) return false;
+  if (!orderId || typeof orderId !== "string" || orderId.length > 100) return false;
+  if (user.roles?.includes("ADMIN")) return true;
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, agentId: true, restaurantId: true },
+    });
+    if (!order) return false;
+    if (order.customerId === user.id) return true;
+    if (order.agentId === user.id) return true;
+    if (user.restaurantId && order.restaurantId === user.restaurantId) return true;
+    return false;
+  } catch { return false; }  // fail-closed on DB error
+};
+\end{lstlisting}
+
+The gate is \emph{fail-closed}: any database error denies access rather than
+defaulting to permit — the only safe default for a security control.
+
+\section{Event Map}
+
+\begin{center}\small
+\begin{tabular}{p{3.8cm}p{3.5cm}p{5.5cm}}
+\toprule
+\rowcolor{headbg}\th{Event} & \th{Emitter} & \th{Purpose} \\
+\midrule
+\texttt{order:new}            & Order service      & Notify restaurant of incoming order \\
+\rowcolor{rowalt}\texttt{order:status-updated} & Order service      & Customer + admin tracking update \\
+\texttt{agent:assigned}       & Admin/auto-assign  & Notify customer + restaurant of rider \\
+\rowcolor{rowalt}\texttt{order:assigned}        & Order service      & Notify specific rider of their delivery \\
+\texttt{rider:location:update} & Delivery route    & Admin live map position refresh \\
+\rowcolor{rowalt}\texttt{agent:location}        & Delivery route     & Customer track page position update \\
+\texttt{notification:new}     & Notification svc   & In-app notification badge \\
+\rowcolor{rowalt}\texttt{maintenance:started}   & Config service     & All clients: show maintenance banner \\
+\texttt{maintenance:ended}    & Config service     & All clients: remove banner \\
+\rowcolor{rowalt}\texttt{maintenance:scheduled} & Config service     & All clients: show scheduled warning \\
+\texttt{maintenance:cancelled}& Config service     & All clients: remove scheduled warning \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 10 — SECURITY EVOLUTION                     ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Security Evolution}
+
+\section{Original Posture (Era I)}
+
+The initial prototype had minimal security controls:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Single-role JWT with no refresh token rotation
+  \item CORS wildcard (\texttt{*}) on all origins
+  \item No rate limiting
+  \item No input sanitisation beyond basic Express JSON parsing
+  \item No HMAC verification on payment webhook
+  \item No audit trail
+  \item Prices trusted from client payload (price manipulation vulnerable)
+\end{itemize}
+
+The first security commit (\texttt{fef47ec}, March 28) fixed the price
+manipulation vulnerability on day 2, but the other gaps persisted through Era II.
+
+\section{Security Hardening Sprint Part 1 (June 14)}
+
+Commit \texttt{02c7962} implemented comprehensive OWASP coverage:
+
+\begin{center}\small
+\begin{longtable}{p{4cm}p{8.5cm}}
+\toprule
+\rowcolor{headbg}\th{Category} & \th{Controls Implemented} \\
+\midrule
+Injection & Zod schema validation on all request bodies; xss library sanitises strings \\
+\rowcolor{rowalt}Authentication & Helmet, CORS strict allowlist, no credentials in error messages \\
+RBAC & Three-layer authorization; role checked from JWT, not request body \\
+\rowcolor{rowalt}Sensitive Data & No prices/amounts from client; PII stripped from error responses in production \\
+DoS Protection & express-rate-limit with Redis backing; tiered limits per endpoint sensitivity \\
+\rowcolor{rowalt}Security Headers & Helmet CSP, HSTS (1yr + preload), X-Frame-Options, X-Content-Type \\
+Permissions-Policy & Camera, microphone, geolocation, payment, USB — all denied \\
+\rowcolor{rowalt}Info Leakage & Stack traces hidden in production; error codes not messages in API responses \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Security Hardening Sprint Part 2 (June 14)}
+
+Commit \texttt{0f21179} added the institutional security layer:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{AuditLog} — every admin mutation writes an immutable log entry with userId, action, resource, IP, and user-agent
+  \item \textbf{Audit export} — CSV export of the audit log for compliance review
+  \item \textbf{Permissions-Policy header} — restricts browser APIs the API server has no reason to use
+  \item \textbf{Security regression suite} — 47 tests covering RBAC bypass, token forgery, price manipulation, IDOR, and coupon fraud
+\end{itemize}
+
+\section{IDOR Closure (June 12)}
+
+Commit \texttt{eecf1c9} closed the IDOR gaps identified in the security audit:
+
+\begin{tcolorbox}[crit,title=IDOR Vulnerabilities Found \& Fixed]
+\begin{itemize}[leftmargin=1em,nosep]
+  \item \textbf{Order IDOR}: \texttt{GET /orders/:id} returned any order to any authenticated user → Fixed with \texttt{canAccessOrder()} ownership gate
+  \item \textbf{Restaurant IDOR}: \texttt{PUT /restaurants/:id} accepted updates from any RESTAURANT user → Fixed with \texttt{getRestaurantByIdAndOwner()} check
+  \item \textbf{Menu IDOR}: Same pattern on all 4 menu operations → Fixed with same ownership check
+  \item \textbf{Refund IDOR}: Customer could initiate refund on another customer's payment → Fixed with payment ownership verification
+\end{itemize}
+\end{tcolorbox}
+
+\section{Socket Room Security (June 14)}
+
+Before the hardening sprint, \texttt{order-*} socket rooms used capability-URL
+security: any client that knew an order ID (a CUID, not truly secret) could join
+and receive real-time status updates for that order.  The hardening replaced this
+with a Prisma ownership query on every join, verified from the authenticated
+JWT — not the client payload.
+
+\section{JWT \& Refresh Token Security}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{4cm}p{5cm}}
+\toprule
+\rowcolor{headbg}\th{Property} & \th{Before} & \th{After} \\
+\midrule
+Token storage      & Cookie (third-party blocked) & Authorization header in localStorage \\
+\rowcolor{rowalt}Refresh token      & Stored cleartext in DB & SHA-256 hash only \\
+Rotation           & None (token valid until expiry) & Rotate-on-use; replay rejected \\
+\rowcolor{rowalt}Race condition     & Not handled & \texttt{deleteMany} returns count; 0 → 401 \\
+Block enforcement  & Token valid until expiry & Revoke all tokens on block/suspend \\
+\rowcolor{rowalt}Token payload      & userId only & userId + roles[] + activeRole + restaurantId \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{OWASP Top 10 Coverage Matrix}
+
+\begin{center}\small
+\begin{tabular}{p{4.5cm}lp{6cm}}
+\toprule
+\rowcolor{headbg}\th{OWASP Category} & \th{Status} & \th{Evidence} \\
+\midrule
+A01 Broken Access Control     & \yes{} & RBAC + IDOR gates on all resources \\
+\rowcolor{rowalt}A02 Cryptographic Failures  & \yes{} & HMAC-SHA256 webhooks; bcrypt passwords; hashed tokens \\
+A03 Injection                 & \yes{} & Zod validation; xss library; Prisma parameterised queries \\
+\rowcolor{rowalt}A04 Insecure Design         & \yes{} & Fail-closed socket gate; server-derived prices \\
+A05 Security Misconfiguration & \yes{} & Helmet; strict CORS; no stack traces in prod \\
+\rowcolor{rowalt}A06 Vulnerable Components   & \yes{} & axios override; 0 audit vulnerabilities \\
+A07 Auth Failures             & \yes{} & Rate limiting on /auth; token rotation; revocation \\
+\rowcolor{rowalt}A08 Software Integrity      & \yes{} & npm overrides; HMAC webhook; Sentry release tags \\
+A09 Logging \& Monitoring     & \yes{} & Structured JSON logs; Sentry; audit log; health endpoints \\
+\rowcolor{rowalt}A10 SSRF                   & \yes{} & No user-controlled URLs in server-side requests \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Security Test Suites}
+
+\begin{center}\small
+\begin{tabular}{lrp{7cm}}
+\toprule
+\rowcolor{headbg}\th{Suite} & \th{Tests} & \th{Coverage} \\
+\midrule
+\texttt{security.idor.test.js}        & 24 & Order/restaurant/refund IDOR gates \\
+\rowcolor{rowalt}\texttt{security.regression.test.js}  & 47 & RBAC bypass, price manipulation, coupon fraud, token forgery \\
+\texttt{security.sprint2.test.js}     & 18 & Input hardening, rate limiting, headers, audit trail \\
+\rowcolor{rowalt}\texttt{security.platform.test.js}    & 31 & Cross-role contamination, admin endpoints, exec auth \\
+\texttt{security.socket-rooms.test.js}& 14 & Socket ownership gate, edge cases, fail-closed \\
+\rowcolor{rowalt}\texttt{security.supply-chain.test.js}& 19 & Webhook HMAC, SDK smoke, payment flow, refund flow \\
+\midrule
+\textbf{Total security tests}         & \textbf{153} & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 11 — OPS INTELLIGENCE & ADMIN CONSOLE      ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Ops Intelligence \& Admin Console}
+
+\section{Admin Architecture}
+
+The admin console is a Next.js dashboard at \texttt{/admin/*} gated behind
+\texttt{requireRole("ADMIN")}.  It integrates 37 API endpoints across 8
+functional areas and is the operations nerve centre of the platform.
+
+\begin{tcolorbox}[insight,title=Bootstrap Admin]
+The first admin cannot be created through the normal registration flow — that
+would create a chicken-and-egg problem where anyone can make themselves admin
+before a real admin exists.  Commit \texttt{bc9090d} introduced \texttt{POST /admin/bootstrap-admin}:
+an endpoint that is \textbf{only callable when zero admin users exist}.  After
+the first admin is created, all subsequent calls return 403.
+\end{tcolorbox}
+
+\section{User Management}
+
+\begin{center}\small
+\begin{tabular}{p{4.5cm}p{8cm}}
+\toprule
+\rowcolor{headbg}\th{Operation} & \th{Behaviour} \\
+\midrule
+List users          & Paginated, searchable; shows role badges and status \\
+\rowcolor{rowalt}Suspend user        & Sets \texttt{isSuspended=true}; revokes all refresh tokens immediately \\
+Block user          & Sets \texttt{isBlocked=true}; prevents login; revokes all tokens \\
+\rowcolor{rowalt}Unblock/Unsuspend   & Clears flag; user must re-login for new tokens \\
+Delete user         & Cascades via Prisma; requires admin confirmation \\
+\rowcolor{rowalt}Change role         & Appends to roles[] array; re-issues token not required (takes effect on next login) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Incident Engine}
+
+Introduced in Ops Intelligence Wave A (commit \texttt{0e36a14}), the incident
+engine runs every 2 minutes and detects operational anomalies:
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{3cm}p{5.5cm}}
+\toprule
+\rowcolor{headbg}\th{Detection Rule} & \th{Severity} & \th{Trigger Condition} \\
+\midrule
+Stalled order       & HIGH       & Order in PREPARING/CONFIRMED for $>$45 min \\
+\rowcolor{rowalt}Payment failure spike & CRITICAL  & $>$3 failed payments in 15 minutes \\
+Offline restaurant  & MEDIUM     & Restaurant closed during listed hours \\
+\rowcolor{rowalt}No available riders & HIGH       & Zero riders online and open orders waiting \\
+Slow delivery       & MEDIUM     & OUT\_FOR\_DELIVERY for $>$60 min \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Wave B (commit \texttt{d33f5cb}) added escalation:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item Unacknowledged incidents auto-escalate after 30 minutes (severity upgrades one level)
+  \item \texttt{escalationCount} tracks how many times an incident has escalated
+  \item \texttt{IncidentEvent} provides an immutable timeline of every state change (opened, acknowledged, escalated, resolved)
+\end{itemize}
+
+\section{Performance Scoring}
+
+Wave B's scoring endpoint computes a performance score (0–100) for each
+restaurant, combining:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Acceptance rate (restaurant confirmed orders / received orders): weight 0.4
+  \item Average preparation time vs. declared \texttt{estimatedDelivery}: weight 0.3
+  \item Review rating (1–5 normalised to 0–100): weight 0.3
+\end{itemize}
+
+Scores power the leaderboard (top performers surfaced to customers in the
+recommendations algorithm).
+
+\section{Rider Leaderboard}
+
+The rider leaderboard (Wave B, commit \texttt{d33f5cb}) aggregates RiderSession
+data to produce:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Deliveries completed in the selected period
+  \item Online hours
+  \item Earnings
+  \item On-time delivery rate (delivered within \texttt{estimatedDelivery})
+\end{itemize}
+
+\section{SLA Monitoring}
+
+The \texttt{/ops/sla} endpoint returns current breach counts across:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Orders awaiting confirmation for $>$10 min
+  \item Orders awaiting pickup for $>$15 min
+  \item Active deliveries exceeding \texttt{estimatedDelivery}
+\end{itemize}
+
+\section{Executive Analytics}
+
+Wave C (commit \texttt{51f0a80}) delivered the executive dashboard at
+\texttt{/admin/analytics/executive} with five sub-views:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{KPIs} — GMV, order count, average order value, active users (DAU/WAU/MAU)
+  \item \textbf{Fleet} — rider count online/offline, avg delivery time, leaderboard
+  \item \textbf{Customers} — new vs. returning, cohort retention, top spenders
+  \item \textbf{Restaurants} — revenue ranking, acceptance rates, performance scores
+  \item \textbf{Trends} — GMV by day/week, order volume heat map by hour, cuisine breakdown
+\end{enumerate}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 12 — SCALING ARCHITECTURE                   ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Scaling Architecture}
+
+\section{Design Premise}
+
+GhostKitchen was designed from Era III onwards to run on multiple backend
+instances without synchronisation bugs.  Two critical shared-state problems
+required explicit solutions:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Cron jobs} — if three instances each run the incident engine independently, incidents are tripled and notifications sent three times per event.
+  \item \textbf{SiteConfig cache} — if each instance caches the SiteConfig independently, a maintenance mode change takes up to 5 seconds to propagate on the instance that made the change but potentially longer on others.
+\end{enumerate}
+
+\section{Distributed Locks}
+
+The \texttt{redisLock.js} utility implements Redis SETNX with atomic expiry:
+
+\begin{lstlisting}[language=JavaScript,caption={Distributed lock (utils/redisLock.js)}]
+export async function acquireRedisLock(key, ttlSeconds = 30) {
+  const result = await redis.set(key, "locked", "EX", ttlSeconds, "NX");
+  return result === "OK";
+}
+export async function releaseRedisLock(key) {
+  await redis.del(key);
+}
+\end{lstlisting}
+
+\texttt{SET NX EX} is a single atomic Redis command — there is no
+TOCTOU race between checking and setting.  If the acquiring instance crashes,
+the TTL ensures the lock expires automatically (housekeeping: 540s, incident:
+110s, maintenance: 50s).
+
+Three cron jobs use distributed locks:
+
+\begin{center}\small
+\begin{tabular}{p{3.5cm}p{2cm}p{3cm}p{4cm}}
+\toprule
+\rowcolor{headbg}\th{Job} & \th{Schedule} & \th{Lock Key} & \th{TTL} \\
+\midrule
+Incident engine    & \texttt{*/2 * * * *} & \texttt{lock:incident-engine}  & 110s \\
+\rowcolor{rowalt}Housekeeping       & \texttt{*/10 * * * *} & \texttt{lock:housekeeping}     & 540s \\
+Maintenance cron   & \texttt{* * * * *}   & \texttt{lock:maintenance-cron} & 50s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Three-Layer SiteConfig Cache}
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  cache/.style={rectangle,rounded corners=4pt,draw=dark,fill=light,
+    minimum width=3.5cm,minimum height=0.8cm,font=\footnotesize\bfseries,align=center},
+  arrow/.style={-Stealth,thick}
+]
+\node[cache,fill=brand!15,draw=brand] (req) at (0,6) {Incoming Request};
+\node[cache,fill=info!20,draw=info]   (l1)  at (0,4.5) {L1: In-Process\\(5s TTL)};
+\node[cache,fill=warn!20,draw=warn]   (l2)  at (0,3)   {L2: Redis\\(30s TTL)};
+\node[cache,fill=ok!15,draw=ok]       (l3)  at (0,1.5) {L3: PostgreSQL\\(source of truth)};
+
+\draw[arrow] (req) -- (l1) node[midway,right,font=\tiny] {check};
+\draw[arrow,dashed] (l1.south) -- (l2.north) node[midway,right,font=\tiny] {miss → check};
+\draw[arrow,dashed] (l2.south) -- (l3.north) node[midway,right,font=\tiny] {miss → read};
+\node[font=\tiny,color=muted,right=2.5cm of l1] {$<$1ms — sub-millisecond object access};
+\node[font=\tiny,color=muted,right=2.5cm of l2] {$\sim$2ms — Redis network round-trip};
+\node[font=\tiny,color=muted,right=2.5cm of l3] {$\sim$20ms — PostgreSQL read};
+\end{tikzpicture}
+\caption{Three-layer SiteConfig cache with falling-through miss chain}
+\end{figure}
+
+The cache is invalidated on write — \texttt{updateSiteConfig} clears the Redis
+key and resets the in-process TTL to zero.  On the next request from any
+instance, L1 and L2 are both cold and the DB read repopulates both layers.
+
+\section{Socket.IO Horizontal Scaling}
+
+Without the Redis adapter, a Socket.IO event emitted on instance A would only
+reach clients connected to instance A.  With \texttt{@socket.io/redis-adapter},
+emits are published to Redis pub/sub and all instances consume and forward them
+to their locally-connected clients.
+
+\begin{lstlisting}[language=JavaScript,caption={Redis adapter with dual-client ioredis}]
+const pub = new Redis(env.REDIS_URL);
+const sub = pub.duplicate();   // separate connection for subscribe
+io.adapter(createAdapter(pub, sub));
+\end{lstlisting}
+
+Two clients are required: Redis does not allow a connection to both publish and
+subscribe simultaneously.  The \texttt{duplicate()} call inherits all connection
+options from the pub client.
+
+\section{Upstash REST Fallback}
+
+The Redis client module supports two connection modes, selected by environment
+variable:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{\texttt{REDIS\_URL} set}: ioredis TCP connection (used for Socket.IO adapter; pub/sub required)
+  \item \textbf{\texttt{UPSTASH\_REDIS\_REST\_URL} set}: Upstash REST client (HTTP-only hosting environments; no pub/sub)
+\end{itemize}
+
+The fallback degrades gracefully: if both are unavailable, the platform boots in
+single-instance mode with in-memory socket state, logging a WARNING rather than
+crashing.
+
+\section{Horizontal Scale Checklist}
+
+\begin{center}\small
+\begin{tabular}{p{5cm}lp{6cm}}
+\toprule
+\rowcolor{headbg}\th{Concern} & \th{Status} & \th{Solution} \\
+\midrule
+Cron duplication          & \yes{} & Distributed Redis locks \\
+\rowcolor{rowalt}Socket fan-out            & \yes{} & Redis adapter pub/sub \\
+SiteConfig consistency    & \yes{} & Cache invalidation on write; 30s max lag \\
+\rowcolor{rowalt}Session sharing           & \yes{} & JWTs (stateless); refresh tokens in DB \\
+Rate limiting             & \half{} & In-process; Redis-backed RL planned \\
+\rowcolor{rowalt}File uploads              & \half{} & Not implemented (image URLs only) \\
+Sticky sessions           & \yes{} & Not required (stateless design) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 13 — OBSERVABILITY                          ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Observability}
+
+\section{The Three Pillars}
+
+GhostKitchen's observability stack implements all three pillars:
+logs (Winston), traces (X-Request-ID correlation), and errors (Sentry).
+
+\section{Structured Logging}
+
+The Winston logger emits in two formats:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Production} (JSON): machine-parseable, compatible with log aggregators (Datadog, Papertrail, Render Logs)
+  \item \textbf{Development} (printf): coloured, human-readable with timestamp prefix
+\end{itemize}
+
+\begin{lstlisting}[language=JavaScript,caption={Winston configuration (utils/logger.js)}]
+const consoleFormat = isProduction
+  ? winston.format.combine(
+      winston.format.errors({ stack: true }),
+      winston.format.json()        // pure JSON — no printf
+    )
+  : winston.format.combine(
+      winston.format.colorize(),
+      winston.format.timestamp({ format: "HH:mm:ss" }),
+      winston.format.printf(({ level, message, timestamp, ...meta }) =>
+        `${timestamp} ${level}: ${message} ${
+          Object.keys(meta).length ? JSON.stringify(meta) : ""
+        }`
+      )
+    );
+\end{lstlisting}
+
+\section{Request Tracing}
+
+The request tracing middleware assigns a UUID to every incoming request:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item Reads \texttt{X-Request-ID} from incoming headers (if the gateway already assigned one) or generates \texttt{crypto.randomUUID()}
+  \item Attaches \texttt{req.id} for downstream use
+  \item Sets \texttt{X-Request-ID} response header for client-side correlation
+  \item On \texttt{res.finish}: logs a structured access record with requestId, method, path, statusCode, durationMs, ip, userAgent, userId
+\end{enumerate}
+
+Every Sentry capture includes \texttt{requestId} as a tag, enabling a single
+search in Sentry to retrieve the exact Winston log line that preceded an error.
+
+\section{Sentry Integration}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{8.5cm}}
+\toprule
+\rowcolor{headbg}\th{Feature} & \th{Implementation} \\
+\midrule
+Release tracking  & \texttt{release: process.env.SENTRY\_RELEASE || process.env.RENDER\_GIT\_COMMIT || "unknown"} \\
+\rowcolor{rowalt}Error capture     & \texttt{captureException(err, \{ requestId, userId \})} from all error surfaces \\
+Request ID tag    & \texttt{scope.setTag("requestId", requestId)} — correlates Sentry with logs \\
+\rowcolor{rowalt}User context      & \texttt{scope.setUser(\{ id: userId \})} — privacy-safe (no email in Sentry) \\
+Cron visibility   & Incident engine, housekeeping, and maintenance-cron all report to Sentry \\
+\rowcolor{rowalt}Global safety net & \texttt{process.on("unhandledRejection")} and \texttt{"uncaughtException"} captured \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Health Endpoints}
+
+Two health endpoints are registered before all middleware (so they always respond):
+
+\subsection{\texttt{GET /health} — Readiness Check}
+
+Returns 200 OK (or 503) based on DB and Redis connectivity:
+
+\begin{lstlisting}[language=json,caption={/health response when degraded}]
+{
+  "status": "DEGRADED",
+  "timestamp": "2026-06-14T12:00:00.000Z",
+  "release": "a7b4c9d",
+  "checks": {
+    "database": { "status": "UP", "responseTimeMs": 12 },
+    "redis":    { "status": "DOWN", "error": "Connection refused" }
+  }
+}
+\end{lstlisting}
+
+Status semantics: \texttt{DOWN} (503) if DB fails; \texttt{DEGRADED} (200) if
+Redis fails; \texttt{OK} (200) if both healthy.
+
+\subsection{\texttt{GET /health/extended} — Deep Diagnostic}
+
+Returns everything the readiness check reports plus:
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Maintenance mode state (on/off, reason, scheduledAt, endsAt)
+  \item Socket adapter type (\texttt{"redis"} or \texttt{"in-memory"})
+  \item Cron job status: lastRunAt, lastError for incident engine and housekeeping
+  \item Release version
+\end{itemize}
+
+This endpoint is intended for on-call engineers — it exposes no authentication
+tokens or user data, only operational metadata.
+
+\section{Observability Gap Closure}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{4.5cm}p{4cm}}
+\toprule
+\rowcolor{headbg}\th{Gap} & \th{Before Hardening} & \th{After Hardening} \\
+\midrule
+Log format            & Colourised printf in prod  & Pure JSON in prod \\
+\rowcolor{rowalt}Request correlation   & No request IDs             & UUID on every request \\
+Sentry release        & "unknown" always           & Git commit SHA \\
+\rowcolor{rowalt}Cron visibility       & Silent on error            & Sentry capture + status export \\
+Health depth          & \{status: "ok"\} only      & Full diagnostic payload \\
+\rowcolor{rowalt}Error context         & Error only                 & Error + requestId + userId \\
+Socket adapter vis.   & Not exposed                & adapterType in /health/extended \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 14 — TESTING ARCHITECTURE                   ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Testing Architecture}
+
+\section{Test Strategy}
+
+GhostKitchen uses Vitest as the test runner on both backend and frontend, with
+Supertest for HTTP integration tests and the React Testing Library for
+component tests.
+
+\begin{center}\small
+\begin{tabular}{lrrrr}
+\toprule
+\rowcolor{headbg}\th{Suite} & \th{Files} & \th{Tests} & \th{Pass Rate} & \th{Coverage} \\
+\midrule
+Backend (unit + integration) & 36 & 927 & 100\% & 76.6\% \\
+\rowcolor{rowalt}Frontend (component + E2E)  & 6  & 109 & 100\% & Partial \\
+\textbf{Total}               & \textbf{42} & \textbf{1,036} & \textbf{100\%} & — \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Coverage Journey}
+
+The backend test coverage story is one of the most dramatic arcs in the project:
+
+\begin{center}\small
+\begin{tabular}{lrl}
+\toprule
+\rowcolor{headbg}\th{Date} & \th{Coverage} & \th{What Changed} \\
+\midrule
+June 3  & 0\%    & Rebuild started; no tests inherited from Era I \\
+\rowcolor{rowalt}June 11 & 17.6\% & First test files committed (\texttt{d8c97e4}) \\
+June 12 & 24.8\% & 103 tests added across payment, auth, orders \\
+\rowcolor{rowalt}June 13 & 76.6\% & 927-test marathon sprint (commits \texttt{ed0b03d}–\texttt{cd7462b}) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The 76.6\% figure represents 36 test files and 927 assertions landing in a
+single day — a rate of approximately one test every 10 minutes of actual
+development time.
+
+\section{Backend Test Files}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{5.5cm}p{7cm}}
+\toprule
+\rowcolor{headbg}\th{File} & \th{Coverage} \\
+\midrule
+\texttt{auth.test.js}                  & Registration, login, token refresh, logout, concurrent rotation \\
+\rowcolor{rowalt}\texttt{orders.test.js}                & Placement, status transitions, IDOR, reorder \\
+\texttt{payment.test.js}               & Create, verify, webhook idempotency, refund \\
+\rowcolor{rowalt}\texttt{restaurant.test.js}            & CRUD, menu management, availability, analytics \\
+\texttt{delivery.test.js}              & Online/offline, location ping, assignment, earnings \\
+\rowcolor{rowalt}\texttt{admin.test.js}                 & User management, bootstrap admin, operations \\
+\texttt{security.idor.test.js}         & 24 IDOR scenarios across all resource types \\
+\rowcolor{rowalt}\texttt{security.regression.test.js}   & 47 regression tests for known vulnerability patterns \\
+\texttt{security.sprint2.test.js}      & 18 hardening tests (headers, rate limiting, audit) \\
+\rowcolor{rowalt}\texttt{security.platform.test.js}     & 31 cross-role contamination tests \\
+\texttt{security.socket-rooms.test.js} & 14 socket ownership gate tests \\
+\rowcolor{rowalt}\texttt{security.supply-chain.test.js} & 19 supply chain and webhook security tests \\
+\texttt{middleware.extended.test.js}   & Tracing, error handler, CORS, sanitisation \\
+\rowcolor{rowalt}\texttt{socket.rooms.test.js}          & Room join/leave, event fan-out, Redis adapter \\
+\texttt{incident.job.test.js}          & Detection rules, escalation, Sentry integration \\
+\rowcolor{rowalt}\texttt{housekeeping.job.test.js}       & Payment expiry, token purge, distributed lock \\
+\texttt{config.service.test.js}        & Three-layer cache, maintenance mode, socket events \\
+\rowcolor{rowalt}\texttt{ops.test.js}                   & Performance scoring, leaderboard, SLA monitoring \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{CI/CD Pipeline}
+
+The GitHub Actions pipeline (commit \texttt{f065ac6}) runs on every push:
+
+\begin{lstlisting}[language=yaml,caption={CI pipeline (.github/workflows/ci.yml)}]
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres: { image: postgres:15, env: { POSTGRES_DB: ghostkitchen_test } }
+      redis:    { image: redis:7 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4 with: node-version: "20"
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npm test -- --coverage
+      - uses: codecov/codecov-action@v4
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci && npm test
+\end{lstlisting}
+
+The pipeline tests against real PostgreSQL and Redis services (not mocks),
+following the lesson from Era II where mocked tests missed production failures.
+
+\section{Vitest Configuration}
+
+\begin{lstlisting}[language=JavaScript,caption={vitest.config.js}]
+export default defineConfig({
+  test: {
+    environment: "node",
+    globals: true,
+    setupFiles: ["./src/__tests__/setup.js"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: ["node_modules", "coverage", "src/__tests__"],
+      thresholds: { lines: 70, functions: 70 },
+    },
+    poolOptions: { threads: { singleThread: true } },
+  },
+});
+\end{lstlisting}
+
+\texttt{singleThread: true} prevents test isolation failures from parallel
+database access across test files.
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 15 — MAJOR BUGS & RESOLUTIONS               ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Major Bugs \& Resolutions}
+
+\section{Hall of Fame: The Worst Bugs}
+
+This chapter documents the most significant bugs encountered during GhostKitchen's
+development — not to catalogue mistakes, but because each one produced a durable
+engineering lesson that influenced the final architecture.
+
+\subsection{Bug 1: The NextAuth Cookie Crisis (April 7)}
+
+\textbf{Symptom}: All API calls returned 401 in production despite the user being
+logged in.  Worked perfectly on localhost.
+
+\textbf{Root Cause}: NextAuth stored session data in cookies.  Vercel (frontend)
+and Render (backend) operate on different domains.  Safari and Firefox block
+third-party cookies by default.  The session cookie set by Vercel was never
+sent to Render.
+
+\textbf{Resolution}: Replaced NextAuth with custom JWT tokens passed via
+Authorization header.  Tokens stored in localStorage.  This is intentional and
+documented — it bypasses the Safari restriction because Authorization headers
+are not subject to cookie third-party blocking.
+
+\textbf{Lesson}: Cross-origin deployments cannot rely on cookies for authentication
+unless both origins share a parent domain.
+
+\subsection{Bug 2: The Payment Race Condition (April 7)}
+
+\textbf{Symptom}: Duplicate payments created for single orders.  Cashfree's
+webhook retry logic was sending the same webhook 2–3 times within seconds.
+
+\textbf{Root Cause}: The webhook handler used SELECT-then-UPDATE: check if the
+payment exists, then create or update it.  Two concurrent webhook requests both
+passed the SELECT (neither payment existed yet) and both proceeded to INSERT.
+
+\textbf{Resolution}: Introduced the \texttt{PaymentWebhook} idempotency table with
+a unique key \texttt{eventId = \$\{orderId\}\_\$\{status\}\_\$\{cfPaymentId\}}.
+The first request inserts; any duplicate \texttt{findUnique} finds the existing
+record and returns early.
+
+\textbf{Lesson}: Webhook handlers must be idempotent.  External payment providers
+will retry on timeout or failure; the handler must handle duplicates.
+
+\subsection{Bug 3: The Token Loop (June 4)}
+
+\textbf{Symptom}: Logging in with the new JWT system on the frontend caused an
+infinite re-render loop.  The login page kept flashing.
+
+\textbf{Root Cause}: The Zustand auth store had a hydration timing issue.  On
+mount, it would restore tokens from localStorage, then immediately call
+\texttt{/auth/me} to validate — but if this call returned 401 for any reason
+(including a legitimate expiry), the store would clear state, which triggered
+the component to redirect to login, which triggered another mount, repeat.
+
+\textbf{Resolution}: Added a \texttt{hydrated} boolean to the Zustand store.
+All auth redirect logic was gated behind \texttt{if (!hydrated) return null}.
+Six commits across June 4–5 progressively tightened the hydration guard.
+
+\textbf{Lesson}: Persisted client-side state that depends on server validation
+requires a stable hydration gate before auth redirects fire.
+
+\subsection{Bug 4: The Ghost Restaurant (June 5)}
+
+\textbf{Symptom}: Restaurant owners who registered their restaurant would lose
+their restaurant dashboard after the next token refresh.  The token was correctly
+issued at registration, but the refreshed token had no \texttt{restaurantId}.
+
+\textbf{Root Cause}: The token refresh service re-derived the token payload from
+\texttt{buildTokenPayload(user)} — which pulled from the User record.  The
+User's \texttt{restaurantId} field was only updated on the Restaurant row, not
+the User row.
+
+\textbf{Resolution}: The \texttt{/auth/me} endpoint now auto-heals: if the user
+has RESTAURANT in their roles array but no \texttt{restaurantId} in their
+decoded token, the server queries \texttt{Restaurant.findFirst(\{where:\{ownerId\}\})}
+and re-issues a corrected token.
+
+\textbf{Lesson}: Derived state in JWTs becomes stale.  Any field that can change
+after token issuance needs a re-validation path.
+
+\subsection{Bug 5: The OOM Crash (June 12)}
+
+\textbf{Symptom}: Admin analytics endpoint caused the Render server to run out of
+memory on large datasets and restart.
+
+\textbf{Root Cause}: The analytics query fetched all Order rows for a restaurant
+with no date range filter — on a restaurant with thousands of orders, this
+loaded megabytes of data into Node.js heap for in-process aggregation.
+
+\textbf{Resolution}: Date range filters (\texttt{startDate/endDate}) are now
+required parameters on analytics endpoints.  The query pushes aggregation into
+PostgreSQL (using Prisma's \texttt{groupBy} and \texttt{\_sum}) rather than
+loading raw rows.
+
+\textbf{Lesson}: Never load unbounded result sets into application memory.
+Push aggregation to the database; paginate everything else.
+
+\subsection{Bug 6: The Refund SDK Miss (June 12)}
+
+\textbf{Symptom}: Every refund status sync call returned 502 in production.
+
+\textbf{Root Cause}: The refund sync service called \texttt{cashfree.PGFetchRefund()},
+which does not exist in the \texttt{cashfree-pg} SDK v4.  The correct method
+is \texttt{cashfree.PGOrderFetchRefund()}.  In development, the code path was
+never hit (no real Cashfree credentials); the bug was invisible until the
+production refund flow was exercised.
+
+\textbf{Resolution}: Corrected the method call and added a test that stubs the
+SDK and verifies the correct method name is called.
+
+\textbf{Lesson}: SDK method names are not stable across major versions.  Any call
+to an external SDK should be covered by a test that verifies the method exists
+and is called with the expected signature.
+
+\subsection{Bug 7: The Duplicate GPS Watcher (June 14)}
+
+\textbf{Symptom}: Rider GPS position updates were arriving at the server twice for
+every physical movement, causing double notifications on the admin map.
+
+\textbf{Root Cause}: The delivery dashboard had two separate \texttt{useEffect}
+hooks, each calling \texttt{navigator.geolocation.watchPosition}.  Both watchers
+triggered on every GPS update.
+
+\textbf{Resolution}: Commit \texttt{81b3641} extracted all GPS tracking logic
+into a single \texttt{riderTracker} service module with a singleton watcher.
+The \texttt{useEffect} cleanup function calls \texttt{watchPosition.clear()} to
+prevent stale watchers on re-mount.
+
+\textbf{Lesson}: \texttt{watchPosition} must be cleaned up on unmount.  Browser
+geolocation watchers persist across React re-renders unless explicitly cleared.
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 16 — FINAL ARCHITECTURE                     ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Final Architecture}
+
+\section{System Topology}
+
+\begin{figure}[h!]\centering
+\begin{tikzpicture}[
+  svc/.style={rectangle,rounded corners=5pt,draw=dark,fill=light,
+    minimum width=3.5cm,minimum height=1cm,font=\small\bfseries,align=center},
+  ext/.style={rectangle,rounded corners=5pt,draw=muted,fill=muted!10,
+    minimum width=3.5cm,minimum height=1cm,font=\small,align=center},
+  arrow/.style={-Stealth,thick},
+  darrow/.style={Stealth-Stealth,thick,dashed,color=muted}
+]
+% User tier
+\node[svc,fill=info!15,draw=info] (cust) at (0,9)   {Customer\\Browser};
+\node[svc,fill=info!15,draw=info] (rest) at (4,9)   {Restaurant\\Browser};
+\node[svc,fill=info!15,draw=info] (rider) at (8,9)  {Rider\\Mobile};
+\node[svc,fill=info!15,draw=info] (admin) at (12,9) {Admin\\Browser};
+
+% CDN
+\node[ext] (vercel) at (6,7) {Vercel Edge\\(Next.js 15 SSR)};
+
+% API
+\node[svc,fill=brand!15,draw=brand] (render) at (6,5) {Render\\(Node.js 20 Express)};
+
+% Storage
+\node[svc,fill=ok!15,draw=ok]       (pg)    at (2,3)  {Neon PostgreSQL\\(Primary)};
+\node[svc,fill=warn!15,draw=warn]   (redis) at (6,3)  {Redis / Upstash\\(Cache + PubSub)};
+\node[svc,fill=purple!15,draw=purple] (sentry) at (10,3) {Sentry\\(Error Tracking)};
+
+% External
+\node[ext] (cf)    at (2,1)  {Cashfree PG\\(Payments)};
+\node[ext] (resend) at (6,1) {Resend\\(Email)};
+\node[ext] (render2) at (10,1) {Render Logs\\(Structured JSON)};
+
+% Arrows
+\draw[arrow] (cust) -- (vercel);
+\draw[arrow] (rest) -- (vercel);
+\draw[arrow] (rider) -- (vercel);
+\draw[arrow] (admin) -- (vercel);
+\draw[arrow] (vercel) -- (render) node[midway,right,font=\tiny] {REST + WS};
+\draw[arrow] (render) -- (pg);
+\draw[arrow] (render) -- (redis);
+\draw[arrow] (render) -- (sentry);
+\draw[arrow] (render) -- (cf);
+\draw[arrow] (render) -- (resend);
+\draw[arrow,dashed,color=muted] (render) -- (render2);
+\draw[darrow] (cf) to[bend left=20] (render) node[midway,left,font=\tiny] {webhook};
+\end{tikzpicture}
+\caption{Complete production system topology}
+\end{figure}
+
+\section{Dependency Inventory}
+
+\subsection{Backend Dependencies (23 runtime)}
+
+\begin{center}\footnotesize
+\begin{tabular}{p{4.5cm}p{3.5cm}p{4.5cm}}
+\toprule
+\rowcolor{headbg}\th{Package} & \th{Version} & \th{Purpose} \\
+\midrule
+express               & \^{}4.18         & HTTP framework \\
+\rowcolor{rowalt}@prisma/client        & \^{}6.9          & Database ORM \\
+jsonwebtoken          & \^{}9.0          & JWT signing/verification \\
+\rowcolor{rowalt}bcryptjs              & \^{}2.4          & Password hashing \\
+socket.io             & \^{}4.8          & WebSocket server \\
+\rowcolor{rowalt}@socket.io/redis-adapter & \^{}8.3      & Multi-instance socket fan-out \\
+ioredis               & \^{}5.6          & Redis client (TCP) \\
+\rowcolor{rowalt}@upstash/redis        & \^{}1.34         & Redis REST client (fallback) \\
+node-cron             & \^{}3.0          & Cron job scheduler \\
+\rowcolor{rowalt}cashfree-pg           & \^{}4.0          & Cashfree payment SDK \\
+@sentry/node          & \^{}8.52         & Error tracking \\
+\rowcolor{rowalt}winston               & \^{}3.17         & Structured logging \\
+helmet                & \^{}8.0          & HTTP security headers \\
+\rowcolor{rowalt}cors                  & \^{}2.8          & CORS middleware \\
+express-rate-limit    & \^{}7.5          & Rate limiting \\
+\rowcolor{rowalt}compression           & \^{}1.7          & gzip responses \\
+zod                   & \^{}3.23         & Request validation schemas \\
+\rowcolor{rowalt}xss                   & \^{}1.0          & Input sanitisation \\
+resend                & \^{}4.5          & Transactional email \\
+\rowcolor{rowalt}uuid                  & \^{}11.0         & Request ID generation \\
+dotenv                & \^{}16.5         & Env var loading \\
+\rowcolor{rowalt}axios                 & \^{}1.17         & HTTP client (overridden) \\
+multer                & \^{}1.4          & Multipart form handling \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Frontend Dependencies (26 runtime)}
+
+\begin{center}\footnotesize
+\begin{tabular}{p{4.5cm}p{3cm}p{5cm}}
+\toprule
+\rowcolor{headbg}\th{Package} & \th{Version} & \th{Purpose} \\
+\midrule
+next                  & 15.2.4       & App router framework \\
+\rowcolor{rowalt}react                 & \^{}19.0        & UI rendering \\
+zustand               & \^{}5.0         & Client state management \\
+\rowcolor{rowalt}@tanstack/react-query & \^{}5.75        & Server state, caching \\
+socket.io-client      & \^{}4.8         & WebSocket client \\
+\rowcolor{rowalt}axios                 & \^{}1.8         & HTTP client \\
+tailwindcss           & \^{}3.4         & Utility CSS \\
+\rowcolor{rowalt}leaflet               & \^{}1.9         & Map rendering \\
+react-leaflet         & \^{}4.2         & React Leaflet bindings \\
+\rowcolor{rowalt}@dnd-kit/core         & \^{}6.3         & Drag-and-drop \\
+@sentry/nextjs        & \^{}8.52        & Frontend error tracking \\
+\rowcolor{rowalt}react-hot-toast       & \^{}2.5         & Toast notifications \\
+lucide-react          & \^{}0.511       & Icon library \\
+\rowcolor{rowalt}date-fns              & \^{}4.1         & Date formatting \\
+recharts              & \^{}2.15        & Analytics charts \\
+\rowcolor{rowalt}clsx                  & \^{}2.1         & Conditional classnames \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Environment Configuration}
+
+\begin{center}\small
+\begin{tabular}{p{5cm}p{7.5cm}}
+\toprule
+\rowcolor{headbg}\th{Variable} & \th{Purpose} \\
+\midrule
+\texttt{DATABASE\_URL}          & Prisma connection string (Neon/Supabase) \\
+\rowcolor{rowalt}\texttt{JWT\_SECRET}            & Access token signing key \\
+\texttt{REFRESH\_TOKEN\_SECRET} & Refresh token signing key (separate secret) \\
+\rowcolor{rowalt}\texttt{REDIS\_URL}             & ioredis connection string \\
+\texttt{UPSTASH\_REDIS\_REST\_URL} & Upstash REST endpoint (fallback) \\
+\rowcolor{rowalt}\texttt{UPSTASH\_REDIS\_REST\_TOKEN} & Upstash authentication token \\
+\texttt{CASHFREE\_CLIENT\_ID}   & Cashfree API key \\
+\rowcolor{rowalt}\texttt{CASHFREE\_CLIENT\_SECRET} & Cashfree API secret \\
+\texttt{CASHFREE\_ENV}          & \texttt{PRODUCTION} or \texttt{SANDBOX} \\
+\rowcolor{rowalt}\texttt{CASHFREE\_WEBHOOK\_SECRET} & HMAC-SHA256 webhook signing key \\
+\texttt{RESEND\_API\_KEY}       & Transactional email API key \\
+\rowcolor{rowalt}\texttt{SENTRY\_DSN}            & Sentry project endpoint \\
+\texttt{SENTRY\_RELEASE}        & Build identifier (commit SHA) \\
+\rowcolor{rowalt}\texttt{RENDER\_GIT\_COMMIT}    & Render-injected commit SHA (fallback) \\
+\texttt{CLIENT\_URL}            & Frontend origin for CORS allowlist \\
+\rowcolor{rowalt}\texttt{NODE\_ENV}              & \texttt{production} | \texttt{development} | \texttt{test} \\
+\texttt{PORT}                   & HTTP listen port (default 10000) \\
+\rowcolor{rowalt}\texttt{FRONTEND\_URL}          & Frontend URL for email links \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 17 — PRODUCTION READINESS                   ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Production Readiness}
+
+\section{Deployment Pipeline}
+
+\subsection{Backend — Render}
+
+Render detects pushes to \texttt{main} and runs the build command:
+
+\begin{lstlisting}[language=bash]
+# Build command
+npm install && npx prisma generate && npx prisma migrate deploy
+
+# Start command
+node src/server.js
+\end{lstlisting}
+
+\texttt{prisma migrate deploy} applies any pending migrations without
+interactive prompts and without resetting data — safe for production.
+
+\subsection{Frontend — Vercel}
+
+Vercel's zero-config Next.js detection handles the frontend.  The only
+configuration is the environment variable for the backend API URL
+(\texttt{NEXT\_PUBLIC\_API\_URL}).
+
+\section{Self-Healing Migrations}
+
+Render can lock the deployment process if a previous migration deployment
+crashed mid-run, leaving Prisma's \texttt{\_prisma\_migrations} table in an
+error state.  This manifests as error code \texttt{P3009}.
+
+The repair script (\texttt{scripts/repair-migration.js}) executes:
+
+\begin{lstlisting}[language=JavaScript,caption={P3009 repair script}]
+await prisma.$executeRaw`
+  DELETE FROM "_prisma_migrations"
+  WHERE "finished_at" IS NULL
+`;
+\end{lstlisting}
+
+This removes the stuck migration record and allows \texttt{prisma migrate deploy}
+to re-run.  The script is documented in the README and linked from the Render
+deployment docs.
+
+\section{Maintenance Mode}
+
+The SiteConfig \texttt{maintenanceMode} flag causes the global middleware to
+return 503 on all routes except \texttt{/health} and \texttt{/auth/login}.
+This enables zero-downtime maintenance without stopping the server process.
+
+\begin{lstlisting}[language=JavaScript,caption={Maintenance mode gate}]
+if (config.maintenanceMode && !ALLOWED_DURING_MAINTENANCE.includes(req.path)) {
+  return res.status(503).json({
+    message: config.maintenanceReason || "Platform under maintenance",
+    retry_after: 300,
+  });
+}
+\end{lstlisting}
+
+Scheduled maintenance uses \texttt{maintenanceScheduledAt} and
+\texttt{maintenanceEndsAt}: a frontend banner appears 24h before the window,
+and the cron job atomically flips \texttt{maintenanceMode} at the scheduled time.
+
+\section{Production Readiness Checklist}
+
+\begin{center}\small
+\begin{tabular}{p{5.5cm}lp{6cm}}
+\toprule
+\rowcolor{headbg}\th{Criterion} & \th{Status} & \th{Evidence} \\
+\midrule
+\multicolumn{3}{l}{\textbf{Security}} \\
+\midrule
+OWASP Top 10         & \yes{} & Full coverage matrix (Chapter 10) \\
+\rowcolor{rowalt}SQL injection         & \yes{} & Prisma parameterised queries only \\
+Auth hardening        & \yes{} & Token rotation, revocation, bcrypt \\
+\rowcolor{rowalt}Input validation      & \yes{} & Zod + xss on all endpoints \\
+Rate limiting         & \yes{} & Tiered per endpoint sensitivity \\
+\rowcolor{rowalt}CORS lockdown         & \yes{} & Strict allowlist + preview pattern \\
+Dependency audit      & \yes{} & 0 npm audit findings \\
+\midrule
+\multicolumn{3}{l}{\textbf{Reliability}} \\
+\midrule
+Health endpoints      & \yes{} & \texttt{/health} + \texttt{/health/extended} \\
+\rowcolor{rowalt}Distributed locks     & \yes{} & All 3 cron jobs locked \\
+Graceful shutdown     & \yes{} & SIGTERM handler + DB disconnect \\
+\rowcolor{rowalt}Error capture         & \yes{} & Sentry + unhandledRejection + uncaughtException \\
+Maintenance mode      & \yes{} & Scheduled + manual + auto-end \\
+\midrule
+\multicolumn{3}{l}{\textbf{Observability}} \\
+\midrule
+Structured logging    & \yes{} & Winston JSON in production \\
+\rowcolor{rowalt}Request tracing       & \yes{} & X-Request-ID on every request \\
+Sentry release tags   & \yes{} & Git SHA attached to every event \\
+\rowcolor{rowalt}Cron visibility       & \yes{} & lastRunAt, lastError exported \\
+\midrule
+\multicolumn{3}{l}{\textbf{Data Integrity}} \\
+\midrule
+Migration strategy    & \yes{} & \texttt{migrate deploy} (never db push) \\
+\rowcolor{rowalt}Idempotent DDL        & \yes{} & IF NOT EXISTS from migration 5 \\
+Payment idempotency   & \yes{} & Webhook deduplication table \\
+\rowcolor{rowalt}Coupon atomicity      & \yes{} & Prisma transaction on order + coupon decrement \\
+\midrule
+\multicolumn{3}{l}{\textbf{Testing}} \\
+\midrule
+Test coverage         & \yes{} & 76.6\% backend, 1,036 total tests \\
+\rowcolor{rowalt}Security test suite   & \yes{} & 153 tests across 6 security files \\
+CI/CD pipeline        & \yes{} & GitHub Actions on every push \\
+\rowcolor{rowalt}Integration tests     & \yes{} & Real PostgreSQL + Redis in CI \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Outstanding Items}
+
+\begin{tcolorbox}[warn,title=Known Gaps (Non-Blocking)]
+\begin{enumerate}[leftmargin=1.4em,nosep]
+  \item \textbf{Frontend test coverage}: 109 tests covering 6 of 44 pages; 38 pages untested
+  \item \textbf{Redis-backed rate limiting}: current in-process rate limiting resets on deploy
+  \item \textbf{Image upload}: image URLs only; no CDN or file storage integration
+  \item \textbf{Dead code}: 5 minor react-hooks lint warnings; 6 dead-code items documented in audit
+  \item \textbf{Payment webhook retry}: no exponential backoff or dead-letter queue for failed webhook processing
+  \item \textbf{Database backups}: Neon provides point-in-time recovery but no explicit backup schedule documented
+\end{enumerate}
+\end{tcolorbox}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 18 — LESSONS LEARNED                        ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Lessons Learned}
+
+\section{On Architecture}
+
+\subsection{Cross-origin authentication needs explicit design}
+NextAuth's cookie-based session management is excellent within a monorepo
+deployment.  When the frontend and backend run on different domains — as they do
+in the Vercel + Render deployment model — cookies become unreliable.  Design the
+auth architecture for the deployment topology from day one.
+
+\subsection{JSON Web Tokens are a cache, not a source of truth}
+The ``Ghost Restaurant'' bug (Chapter 15) demonstrated that any state encoded in
+a JWT becomes stale the moment the underlying data changes.  A JWT's claims
+should be treated as a snapshot that might be up to 15 minutes old.  Critical
+state (\texttt{isBlocked}, active restaurant) must be validated against the
+database at token-refresh time.
+
+\subsection{In-memory state is invisible in multi-instance deployments}
+Both the cron duplication bug and the socket fan-out problem had the same root
+cause: in-memory state that was correct for single-instance development but
+wrong for multi-instance production.  Redis is not a performance optimisation
+in this context — it is a correctness requirement.
+
+\section{On Database Design}
+
+\subsection{Add idempotency guards from migration 1, not migration 15}
+The self-healing \texttt{IF NOT EXISTS} DDL should have been the default from
+the first migration.  Production databases cannot be reset; every migration must
+be safe to replay.
+
+\subsection{Push aggregation into the database}
+The OOM bug (Chapter 15) was caused by loading raw rows for in-process
+aggregation.  PostgreSQL can aggregate millions of rows in milliseconds.  Never
+load a result set into application memory when the database can compute the
+answer.
+
+\subsection{Index for the queries you actually run}
+The order analytics index on \texttt{(restaurantId, createdAt)} improved
+analytics query performance by 10–50× on large datasets.  Indexing should be
+driven by query plans, not intuition.
+
+\section{On Security}
+
+\subsection{IDOR is the highest-probability vulnerability class}
+Of all the security gaps closed, IDOR (Insecure Direct Object Reference) had
+the highest ratio of instances to time-to-find.  Every resource endpoint that
+accepts an ID parameter should have an ownership check, always.
+
+\subsection{Webhook security is non-negotiable}
+The payment webhook is the most security-critical endpoint in a payment-enabled
+application.  HMAC verification, raw body preservation, and idempotency are not
+optional.  They should be in place before the first line of business logic.
+
+\subsection{Security controls must be fail-closed}
+The socket room ownership gate returns \texttt{false} on any error, including
+database errors.  This is the only safe default.  A security control that
+``fails open'' on error provides no protection in the scenarios where something
+has already gone wrong.
+
+\section{On Testing}
+
+\subsection{Test what you deploy, not what you mock}
+The CI pipeline runs against real PostgreSQL and Redis — not mocked versions.
+This came directly from the Era II lesson where in-process mocks passed but
+the production database state caused failures.
+
+\subsection{Coverage is a proxy, not a goal}
+The push from 17.6\% to 76.6\% coverage in a single day was productive because
+the tests were written against real interfaces and uncovered real bugs.
+Coverage numbers are meaningless if the tests don't exercise failure paths.
+
+\section{On Velocity}
+
+\subsection{A 54-day gap is a feature, not a failure}
+The 54 days between Era II (April 10) and Era III (June 3) with no commits
+appear as a gap in the commit history.  The actual work — architectural design,
+database schema redesign, multi-role RBAC planning — happened offline.  The
+subsequent 52-commit rebuild week was fast precisely because the design was done
+before the coding started.
+
+\subsection{Name things for what they are}
+The field-name audit sweep (commit \texttt{a0a72bd}) renamed 14 inconsistently-
+named fields across the schema and codebase.  Consistent naming prevents class
+of bugs that stem from using the wrong field name — bugs that are invisible to
+type checkers if the types are compatible.
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 19 — FRONTEND ARCHITECTURE                  ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Frontend Architecture}
+
+\section{Next.js 15 App Router}
+
+The frontend uses Next.js 15 with the App Router — all routes live under
+\texttt{app/} with \texttt{page.tsx} components.  Server components are used
+where possible for SEO; client components are marked with \texttt{"use client"}
+for interactivity.
+
+\section{State Management}
+
+\begin{center}\small
+\begin{tabular}{p{3cm}p{4cm}p{6cm}}
+\toprule
+\rowcolor{headbg}\th{Library} & \th{Scope} & \th{What It Manages} \\
+\midrule
+Zustand          & Client global     & Auth state, user profile, active role \\
+\rowcolor{rowalt}React Query      & Server state      & Restaurant data, orders, menu items, caching \\
+React local state & Component        & Form values, UI toggles, modal state \\
+\rowcolor{rowalt}Socket.IO client & Real-time events  & Order status, rider location, notifications \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Page Inventory (44 pages)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{5.5cm}p{7cm}}
+\toprule
+\rowcolor{headbg}\th{Route} & \th{Purpose} \\
+\midrule
+\texttt{/}                          & Smart homepage — favourites, trending, search \\
+\rowcolor{rowalt}\texttt{/restaurants/[id]}            & Restaurant menu with cart integration \\
+\texttt{/checkout}                  & Cashfree drop-in payment \\
+\rowcolor{rowalt}\texttt{/checkout/callback}           & Post-payment status (pending state) \\
+\texttt{/orders/[id]}               & Order tracking with real-time GPS \\
+\rowcolor{rowalt}\texttt{/orders}                      & Order history with re-order \\
+\texttt{/favorites}                 & Favourite restaurants \\
+\rowcolor{rowalt}\texttt{/profile}                     & Customer profile and addresses \\
+\texttt{/auth/login}                & JWT-based login \\
+\rowcolor{rowalt}\texttt{/auth/register}               & Multi-step registration \\
+\texttt{/onboarding/restaurant}     & Restaurant registration (6,708 cities) \\
+\rowcolor{rowalt}\texttt{/onboarding/rider}            & Rider registration \\
+\texttt{/shop}                      & Restaurant dashboard: menu, orders \\
+\rowcolor{rowalt}\texttt{/shop/menu}                   & Menu CRUD with drag-and-drop \\
+\texttt{/shop/orders}               & Order management for restaurant \\
+\rowcolor{rowalt}\texttt{/shop/analytics}              & Restaurant revenue analytics \\
+\texttt{/delivery/home}             & Rider dashboard: online toggle, current order \\
+\rowcolor{rowalt}\texttt{/delivery/earnings}           & Rider earnings and session history \\
+\texttt{/admin}                     & Admin landing: quick stats \\
+\rowcolor{rowalt}\texttt{/admin/users}                 & User management table \\
+\texttt{/admin/restaurants}         & Restaurant management \\
+\rowcolor{rowalt}\texttt{/admin/orders}                & Order pipeline view \\
+\texttt{/admin/delivery}            & Live rider map (Leaflet) \\
+\rowcolor{rowalt}\texttt{/admin/operations}            & Incident list, SLA view \\
+\texttt{/admin/analytics}           & Executive analytics (5 sub-views) \\
+\rowcolor{rowalt}\texttt{/admin/finance}               & Payments and refunds \\
+\texttt{/admin/settings}            & SiteConfig management \\
+\rowcolor{rowalt}\texttt{/admin/maintenance}           & Maintenance mode controls \\
+\texttt{/admin/coupons}             & Coupon management \\
+\rowcolor{rowalt}\texttt{/admin/notifications}         & Broadcast notification management \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Real-Time Integration}
+
+The Socket.IO client initialises on login and tears down on logout.  A single
+connection is shared across all page components via a React context
+(\texttt{SocketContext}).  Components subscribe to events via \texttt{useEffect}
+hooks that register listeners on mount and remove them on cleanup:
+
+\begin{lstlisting}[language=JavaScript,caption={Socket listener pattern}]
+useEffect(() => {
+  if (!socket) return;
+  const handler = (data) => setOrderStatus(data.status);
+  socket.on("order:status-updated", handler);
+  return () => socket.off("order:status-updated", handler);
+}, [socket]);
+\end{lstlisting}
+
+\section{Accessibility (WCAG 2.1 AA)}
+
+Commit \texttt{e4c58a7} addressed WCAG 2.1 AA compliance:
+
+\begin{itemize}[leftmargin=1.4em]
+  \item All interactive elements have ARIA labels
+  \item Colour contrast meets 4.5:1 ratio for normal text
+  \item Focus indicators visible on keyboard navigation
+  \item Form inputs have associated \texttt{<label>} elements
+  \item Images have descriptive \texttt{alt} text
+  \item Screen reader announcements on order status changes
+\end{itemize}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  CHAPTER 20 — FUTURE ROADMAP                         ║
+% ╚══════════════════════════════════════════════════════╝
+\chapter{Future Roadmap}
+
+\section{Near-Term (1–3 months)}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{3cm}p{5.5cm}}
+\toprule
+\rowcolor{headbg}\th{Feature} & \th{Priority} & \th{Notes} \\
+\midrule
+Redis-backed rate limiting & High & Replace in-process; survives redeploys \\
+\rowcolor{rowalt}Redis-backed rate limiting & High & Replace in-process; survives redeploys \\
+Frontend test coverage  & High    & Target 60\%+ across all 44 pages \\
+\rowcolor{rowalt}Image upload (S3/R2)    & Medium  & Replace URL-only model \\
+Dead letter queue        & Medium  & Webhook retry with exponential backoff \\
+\rowcolor{rowalt}Push notifications       & Medium  & PWA + Firebase for mobile riders \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Medium-Term (3–6 months)}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Multi-tenant}: Each restaurant gets its own subdomain with
+        isolated data view; shared infrastructure.
+  \item \textbf{Auto-assignment engine}: Replace manual admin assignment with
+        proximity-based automatic dispatch using RiderLocation data.
+  \item \textbf{Customer mobile app}: React Native with the same Zustand + React
+        Query stack; shared service layer.
+  \item \textbf{Surge pricing engine}: Dynamic delivery fee based on demand
+        (rider count vs open order count) in real time.
+  \item \textbf{ML recommendations}: Replace the weighted-composite algorithm
+        with a collaborative filtering model trained on the order history dataset.
+\end{itemize}
+
+\section{Long-Term (6–12 months)}
+
+\begin{itemize}[leftmargin=1.4em]
+  \item \textbf{Operator white-label}: Each restaurant chain deploys a branded
+        instance with custom domain, logo, and colour palette.
+  \item \textbf{Bank payouts}: Direct payout integration so rider earnings are
+        transferred to bank accounts automatically.
+  \item \textbf{Restaurant POS integration}: Webhook-based order push to POS
+        systems (Petpooja, UrbanPiper) so orders appear in the kitchen display.
+  \item \textbf{Subscription tiers}: Restaurant subscription plans with tiered
+        commission (0\% for self-hosted, 5\% for platform-managed).
+\end{itemize}
+
+% ╔══════════════════════════════════════════════════════╗
+% ║  APPENDICES                                          ║
+% ╚══════════════════════════════════════════════════════╝
+\appendix
+
+\chapter{Complete Commit Timeline}
+
+This appendix lists the five engineering eras with representative commits.
+The full 194-commit history is available in the Git log (\texttt{git log --oneline}).
+
+\section{Era I — Genesis (March 26 – April 7)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{2cm}p{10.5cm}}
+\toprule
+\rowcolor{headbg}\th{Hash} & \th{Message} \\
+\midrule
+\texttt{cad7cd2} & Phase 1: Production-Ready Auth System with Refresh Tokens \\
+\rowcolor{rowalt}\texttt{8aaa7ff} & Phase 2: Cart system with database persistence \\
+\texttt{b36822c} & Phase 3: Order System — Cart→Checkout→Order Flow \\
+\rowcolor{rowalt}\texttt{b6a92f1} & Cashfree Payment Integration with create, verify, webhook flow \\
+\texttt{b8b7fe4} & Phase 2: Real-time order tracking with Socket.IO \\
+\rowcolor{rowalt}\texttt{c13d76b} & Phase 3: Admin panel and dashboard \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Era II — Production Crisis (April 7–10)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{2cm}p{10.5cm}}
+\toprule
+\rowcolor{headbg}\th{Hash} & \th{Message} \\
+\midrule
+\texttt{---} & ISSUE 1–3: Production deployment fixes \\
+\rowcolor{rowalt}\texttt{---} & ISSUE 5: Add transaction locking for race condition prevention \\
+\texttt{---} & ISSUE 6: Fix order status override with conditional update \\
+\rowcolor{rowalt}\texttt{---} & ISSUE 7: Optimize cron job with single atomic updateMany \\
+\texttt{---} & ISSUE 8: Add database indexes for Order model queries \\
+\rowcolor{rowalt}\texttt{---} & FINAL PRODUCTION GAPS: Fix 3 critical vulnerabilities \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Era III — The Great Rebuild (June 3–7)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{2cm}p{10.5cm}}
+\toprule
+\rowcolor{headbg}\th{Hash} & \th{Message} \\
+\midrule
+\texttt{bef7fcf} & Wait for Zustand hydration before auth redirect \\
+\rowcolor{rowalt}\texttt{15d1a98} & Don't clear auth state on cross-origin 401 \\
+\texttt{24f47a6} & Use Authorization header to bypass third-party cookie blocking \\
+\rowcolor{rowalt}\texttt{17a035e} & Allow Authorization header in preflight CORS response \\
+\texttt{02c1bf8} & Shop menu page with drag-and-drop reordering \\
+\rowcolor{rowalt}\texttt{4216492} & Add 6,708 Indian cities dataset for restaurant onboarding \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Era IV — Product Maturity (June 10–13)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{2cm}p{10.5cm}}
+\toprule
+\rowcolor{headbg}\th{Hash} & \th{Message} \\
+\midrule
+\texttt{bc9090d} & Bootstrap admin endpoint (zero-admin guard) \\
+\rowcolor{rowalt}\texttt{59ff07a} & Recommendations engine with personalised weighting \\
+\texttt{eecf1c9} & IDOR closure — ownership gates on all resource endpoints \\
+\rowcolor{rowalt}\texttt{e4c58a7} & WCAG 2.1 AA accessibility fixes \\
+\texttt{ed0b03d} & Backend test coverage push — begin 927-test sprint \\
+\rowcolor{rowalt}\texttt{cd7462b} & Backend test coverage sprint complete — 76.6\% \\
+\texttt{f065ac6} & GitHub Actions CI/CD pipeline \\
+\rowcolor{rowalt}\texttt{a0a72bd} & Field-name audit sweep — 14 inconsistencies resolved \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\section{Era V — Operations Excellence (June 14)}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{2cm}p{10.5cm}}
+\toprule
+\rowcolor{headbg}\th{Hash} & \th{Message} \\
+\midrule
+\texttt{0e36a14} & feat(ops): Ops Intelligence Wave A — incident engine \\
+\rowcolor{rowalt}\texttt{d33f5cb} & feat(ops): Ops Intelligence Wave B — escalation + scoring \\
+\texttt{51f0a80} & feat(ops): Ops Intelligence Wave C — executive analytics \\
+\rowcolor{rowalt}\texttt{02c7962} & feat(security): OWASP hardening sprint part 1 \\
+\texttt{0f21179} & feat(security): Security sprint part 2 — audit trail + regression suite \\
+\rowcolor{rowalt}\texttt{7fe0497} & feat(scale): Distributed locks for cron jobs + Redis-backed SiteConfig cache \\
+\texttt{2d606b3} & feat(obs): Production observability hardening — Phases 1--3 \\
+\rowcolor{rowalt}\texttt{987e9b5} & feat(obs): Phase 4 — route cron job errors to Sentry \\
+\texttt{37593ee} & fix(delivery): extract riderTracker service, eliminate duplicate GPS watcher \\
+\rowcolor{rowalt}\texttt{00bfc3d} & fix(payment): correct Cashfree refund SDK method name \\
+\texttt{1395454} & docs(obs): GhostKitchen\_Production\_Observability\_Report.tex \\
+\rowcolor{rowalt}\texttt{f8516e5} & docs(audit): Master Project Lifecycle Audit \& Certification Report \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\chapter{Prisma Schema Reference}
+
+The complete schema is defined in \texttt{food-delivery-backend/prisma/schema.prisma}.
+This appendix documents the 20 models and their field counts.
+
+\begin{center}\small
+\begin{longtable}{p{3.5cm}rp{8cm}}
+\toprule
+\rowcolor{headbg}\th{Model} & \th{Fields} & \th{Key Relationships} \\
+\midrule
+User          & 31 & RefreshToken[], Order[], Restaurant, RiderLocation, AuditLog[], Address[], Favorite[], RiderSession[] \\
+\rowcolor{rowalt}Restaurant    & 23 & User(owner), MenuItem[], Order[], Review[], Coupon[], Favorite[] \\
+Order         & 24 & User(customer), Restaurant, User(agent), CartItem[], Payment, Refund \\
+\rowcolor{rowalt}Payment       & 12 & Order, PaymentWebhook[], Refund[] \\
+MenuItem      & 15 & Restaurant, CartItem[] \\
+\rowcolor{rowalt}CartItem      & 8  & User, MenuItem, Order \\
+Coupon        & 12 & Restaurant, Order[] \\
+\rowcolor{rowalt}Review        & 9  & User, Restaurant, Order \\
+Address       & 14 & User \\
+\rowcolor{rowalt}Favorite      & 6  & User, Restaurant (unique constraint) \\
+Notification  & 9  & User \\
+\rowcolor{rowalt}AuditLog      & 9  & User \\
+RefreshToken  & 7  & User \\
+\rowcolor{rowalt}RiderLocation & 8  & User (unique on riderId) \\
+RiderSession  & 9  & User \\
+\rowcolor{rowalt}Incident      & 20 & IncidentEvent[] \\
+IncidentEvent & 9  & Incident \\
+\rowcolor{rowalt}PaymentWebhook & 7  & Payment \\
+Refund        & 9  & Order, Payment \\
+\rowcolor{rowalt}SiteConfig    & 17 & Singleton (no FK) \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\chapter{API Endpoint Reference}
+
+\begin{center}\footnotesize
+\begin{longtable}{p{1.5cm}p{5cm}p{6cm}}
+\toprule
+\rowcolor{headbg}\th{Method} & \th{Path} & \th{Description} \\
+\midrule
+\multicolumn{3}{l}{\textbf{Auth — /api/auth}} \\
+\midrule
+POST & /register               & Create account (email, password, name) \\
+\rowcolor{rowalt}POST & /login                  & Email + password → access + refresh tokens \\
+GET  & /me                     & Validate token; auto-heal restaurantId if missing \\
+\rowcolor{rowalt}POST & /refresh                & Rotate refresh token; return new access token \\
+POST & /logout                 & Revoke current refresh token \\
+\rowcolor{rowalt}POST & /logout-all             & Revoke all refresh tokens for user \\
+\midrule
+\multicolumn{3}{l}{\textbf{Role — /api/role}} \\
+\midrule
+POST & /switch                 & Switch active role; re-issue token \\
+\rowcolor{rowalt}POST & /register-restaurant    & Add RESTAURANT role + create Restaurant row \\
+POST & /register-rider         & Add DELIVERY role + create RiderLocation row \\
+\rowcolor{rowalt}POST & /add-restaurant         & Admin: add restaurant to existing user \\
+GET  & /my-restaurant          & Get calling user's restaurant \\
+\midrule
+\multicolumn{3}{l}{\textbf{Restaurant — /api/restaurants}} \\
+\midrule
+GET  & /                       & List restaurants (filter, paginate, search) \\
+\rowcolor{rowalt}GET  & /:id                    & Get restaurant with menu \\
+POST & /                       & Create restaurant (RESTAURANT role) \\
+\rowcolor{rowalt}PUT  & /:id                    & Update restaurant (owner only) \\
+PATCH & /:id/set-status        & Toggle open/closed + statusNote \\
+\rowcolor{rowalt}GET  & /:id/analytics          & Revenue, orders, top items \\
+POST & /:id/menu               & Add menu item \\
+\rowcolor{rowalt}PUT  & /:id/menu/:itemId       & Update menu item \\
+DELETE & /:id/menu/:itemId     & Delete menu item \\
+\rowcolor{rowalt}POST & /trending               & Top 10 by recent order volume \\
+GET  & /recommendations        & Personalised restaurant list \\
+\midrule
+\multicolumn{3}{l}{\textbf{Orders — /api/orders}} \\
+\midrule
+GET  & /                       & List orders for calling user's role \\
+\rowcolor{rowalt}GET  & /:id                    & Get order (ownership check) \\
+POST & /                       & Place order (transactional) \\
+\rowcolor{rowalt}PATCH & /:id/status            & Transition order status (role-gated) \\
+POST & /:id/reorder            & Clone order to new cart \\
+\midrule
+\multicolumn{3}{l}{\textbf{Payments — /api/payments}} \\
+\midrule
+POST & /create-order           & Cashfree PGCreateOrder; return session\_id \\
+\rowcolor{rowalt}GET  & /verify/:orderId        & Check payment status from Cashfree \\
+POST & /webhook                & HMAC-verified Cashfree webhook handler \\
+\rowcolor{rowalt}GET  & /history                & Payment history for calling user \\
+POST & /my-refunds             & Customer-initiated refund request \\
+\rowcolor{rowalt}GET  & /my-refunds             & List customer's refunds \\
+POST & /refunds                & Admin: initiate refund \\
+\rowcolor{rowalt}GET  & /refunds                & Admin: list all refunds \\
+PATCH & /refunds/:id/sync      & Sync refund status from Cashfree \\
+\midrule
+\multicolumn{3}{l}{\textbf{Delivery — /api/delivery}} \\
+\midrule
+PATCH & /status                & Toggle online/offline + GPS coordinates \\
+\rowcolor{rowalt}POST & /location              & Update GPS position (every 5s) \\
+GET  & /earnings               & Earnings + session analytics \\
+\rowcolor{rowalt}GET  & /current-order         & Active delivery order \\
+\midrule
+\multicolumn{3}{l}{\textbf{Admin — /api/admin (selection)}} \\
+\midrule
+POST & /bootstrap-admin        & Create first admin (zero-admin guard) \\
+\rowcolor{rowalt}GET  & /users                  & List all users (paginated) \\
+PATCH & /users/:id/suspend     & Suspend user + revoke tokens \\
+\rowcolor{rowalt}PATCH & /users/:id/block       & Block user + revoke tokens \\
+GET  & /orders                 & All orders with filters \\
+\rowcolor{rowalt}POST & /orders/:id/assign-delivery & Assign rider to order \\
+GET  & /analytics/revenue      & Platform-wide revenue analytics \\
+\rowcolor{rowalt}GET  & /audit-log              & Immutable admin action log \\
+GET  & /audit-log/export       & CSV export of audit log \\
+\midrule
+\multicolumn{3}{l}{\textbf{Health — /health}} \\
+\midrule
+GET  & /health                 & Readiness: DB + Redis status \\
+\rowcolor{rowalt}GET  & /health/extended        & Full diagnostic with cron, socket, maintenance \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\chapter{Security Quick Reference}
+
+\section{RBAC Matrix}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}cccc}
+\toprule
+\rowcolor{headbg}\th{Operation} & \th{CUSTOMER} & \th{RESTAURANT} & \th{DELIVERY} & \th{ADMIN} \\
+\midrule
+Place order          & \yes{} & \no{}  & \no{}  & \yes{} \\
+\rowcolor{rowalt}Confirm/prepare order & \no{}  & \yes{} & \no{}  & \yes{} \\
+Accept delivery      & \no{}  & \no{}  & \yes{} & \yes{} \\
+\rowcolor{rowalt}Manage menu          & \no{}  & \yes{} & \no{}  & \yes{} \\
+View own orders      & \yes{} & \yes{} & \yes{} & \yes{} \\
+\rowcolor{rowalt}View all orders      & \no{}  & \no{}  & \no{}  & \yes{} \\
+Manage users         & \no{}  & \no{}  & \no{}  & \yes{} \\
+\rowcolor{rowalt}Access exec analytics & \no{}  & \no{}  & \no{}  & \yes{} \\
+Initiate refund      & \yes{} & \no{}  & \no{}  & \yes{} \\
+\rowcolor{rowalt}Manage coupons       & \no{}  & \yes{} & \no{}  & \yes{} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Rate Limits}
+
+\begin{center}\small
+\begin{tabular}{p{4cm}p{2.5cm}p{6cm}}
+\toprule
+\rowcolor{headbg}\th{Endpoint Group} & \th{Limit} & \th{Rationale} \\
+\midrule
+General (all)    & 200 / 15 min & Baseline traffic protection \\
+\rowcolor{rowalt}Auth endpoints   & 10 / 15 min  & Brute-force protection on login/register \\
+Payment creation & 20 / 1 min   & Fraud prevention \\
+\rowcolor{rowalt}Admin operations & 100 / 15 min & Admin workflows need higher throughput \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\chapter{Glossary}
+
+\begin{description}[leftmargin=4.5cm,style=nextline]
+  \item[CUID2] Collision-resistant unique identifier v2 — used as primary keys.
+  \item[Distributed Lock] Redis SETNX pattern ensuring only one instance executes a critical section.
+  \item[HMAC-SHA256] Hash-based Message Authentication Code — used to verify Cashfree webhooks.
+  \item[IDOR] Insecure Direct Object Reference — accessing resources via guessable IDs without ownership check.
+  \item[Idempotent DDL] Database schema changes that are safe to apply multiple times (IF NOT EXISTS).
+  \item[Paise] Smallest Indian currency unit: ₹1 = 100 paise. All monetary values stored in paise.
+  \item[Prisma] TypeScript ORM for Node.js providing type-safe database access and migration management.
+  \item[Refresh Token Rotation] Invalidating the old refresh token on every use and issuing a new one.
+  \item[Socket Room] A Socket.IO channel scoped to a specific resource (order, restaurant, or rider).
+  \item[SiteConfig] Singleton database table holding platform-wide settings (maintenance mode, fees, flags).
+  \item[Three-Layer Cache] In-process (5s) → Redis (30s) → PostgreSQL. Used for SiteConfig.
+  \item[Upstash] Redis-compatible serverless data store accessible via HTTP REST.
+  \item[WCAG 2.1 AA] Web Content Accessibility Guidelines Level AA — the accessibility standard implemented.
+  \item[Zod] TypeScript-first schema validation library used for all API request validation.
+\end{description}
+
+\backmatter
+
+\chapter*{Colophon}
+\addcontentsline{toc}{chapter}{Colophon}
+
+\begin{center}
+\begin{tabular}{p{4cm}p{9cm}}
+\toprule
+\textbf{Document}      & GhostKitchen Complete Engineering Journey \\
+\textbf{Version}       & 1.0 \\
+\textbf{Date}          & June 2026 \\
+\textbf{Format}        & \LaTeX\ (book class, 11pt, A4) \\
+\textbf{Typeset with}  & pdflatex + TikZ + pgfplots + tcolorbox \\
+\textbf{Data sources}  & git log, prisma/schema.prisma, package.json, CI coverage reports \\
+\textbf{LOC verified}  & June 14, 2026 (cloc) \\
+\textbf{Commit count}  & 194 (March 26 – June 14, 2026) \\
+\bottomrule
+\end{tabular}
+
+\vspace{2cm}
+
+\begin{tcolorbox}[colback=brand!6,colframe=brand,width=12cm]
+\centering
+\textbf{GhostKitchen Engineering}\\[4pt]
+\small Production-ready platform built in 81 days.\\
+22,767 + 27,188 source lines. 1,036 tests. 194 commits.
+\end{tcolorbox}
+\end{center}
+
+\end{document}
+
