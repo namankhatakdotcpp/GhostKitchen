@@ -571,7 +571,7 @@ function canJoin(room, user) {
     if (user.roles?.includes("ADMIN")) return true;
     return user.restaurantId === target;
   }
-  if (room.startsWith("order-")) return true;
+  if (room.startsWith("order-")) return false; // async check via checkOrderRoomAccess
   return false;
 }
 
@@ -648,9 +648,9 @@ describe("E — Socket room RBAC (canJoin)", () => {
   });
 
   describe("E5: order tracking rooms", () => {
-    it("anyone can join an order tracking room (rooms are unguessable cuids)", () => {
-      expect(canJoin("order-abc123", customerUser)).toBe(true);
-      expect(canJoin("order-abc123", null)).toBe(true);
+    it("sync canJoin returns false — ownership verified async via checkOrderRoomAccess", () => {
+      expect(canJoin("order-abc123", customerUser)).toBe(false);
+      expect(canJoin("order-abc123", null)).toBe(false);
     });
   });
 

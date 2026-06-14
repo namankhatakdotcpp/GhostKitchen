@@ -4,8 +4,31 @@ import { parse as parseCookies } from "cookie";
 import { logger } from "../utils/logger.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 import { getRedis } from "../config/redis.js";
+import { prisma } from "../config/prisma.js";
 
 let io;
+
+// Exported for unit testing. Verifies that `user` owns or is authorised to
+// observe `orderId` before allowing the socket to join `order-{id}` rooms.
+// Never trusts the client payload — ownership is always resolved via Prisma.
+export const checkOrderRoomAccess = async (orderId, user) => {
+  if (!user) return false;
+  if (!orderId || typeof orderId !== "string" || orderId.length > 100) return false;
+  if (user.roles?.includes("ADMIN")) return true;
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { customerId: true, agentId: true, restaurantId: true },
+    });
+    if (!order) return false;
+    if (order.customerId === user.id) return true;
+    if (order.agentId && order.agentId === user.id) return true;
+    if (user.restaurantId && order.restaurantId === user.restaurantId) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
 
 export const initSocket = async (server) => {
   // Mirror the HTTP CORS allowlist (env ALLOWED_ORIGINS + project previews)
@@ -131,10 +154,9 @@ export const initSocket = async (server) => {
         if (user.roles?.includes("ADMIN")) return true;
         return user.restaurantId === target;
       }
-      // Order tracking rooms: emitted data is status-only; verifying order
-      // ownership per join would need a DB hit per event — tokens are unguessable
-      // cuids so the room name itself is the capability.
-      if (room.startsWith("order-")) return true;
+      // Order rooms are handled asynchronously in the join-room handler via
+      // checkOrderRoomAccess — sync canJoin never admits them.
+      if (room.startsWith("order-")) return false;
       return false;
     };
 
@@ -155,8 +177,26 @@ export const initSocket = async (server) => {
       socket.join(`agent-${deliveryUserId}`);
     });
 
-    // Generic room join used by order tracking page and shop
-    socket.on("join-room", (room) => {
+    // Generic room join. Order rooms get an async DB ownership check; all
+    // other rooms go through the synchronous canJoin guard above.
+    socket.on("join-room", async (room) => {
+      if (typeof room !== "string" || room.length > 120) return;
+
+      if (room.startsWith("order-")) {
+        const orderId = room.slice(6);
+        const allowed = await checkOrderRoomAccess(orderId, user);
+        if (allowed) {
+          socket.join(room);
+        } else {
+          logger.warn("Socket order room access denied", {
+            socketId: socket.id,
+            orderId,
+            userId: user?.id ?? "unauthenticated",
+          });
+        }
+        return;
+      }
+
       if (canJoin(room)) socket.join(room);
     });
 
