@@ -73,6 +73,16 @@ app.use(helmet({
   },
 }));
 
+// Permissions-Policy — restrict browser APIs the API server has no reason to use.
+// Helmet does not set this header by default.
+app.use((_req, res, next) => {
+  res.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), accelerometer=()"
+  );
+  next();
+});
+
 // ── 2. Request tracing ────────────────────────────────────────────────────────
 app.use(requestTracingMiddleware);
 

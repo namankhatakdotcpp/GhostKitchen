@@ -74,6 +74,7 @@ export const updateOrderStatus = async (req, res, next) => {
     }
 
     const order = await adminService.updateOrderStatus(id, status, reason);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_ORDER_STATUS", entityType: "Order", entityId: id, meta: { status, reason }, req }); } catch { /* non-fatal */ }
 
     res.json({
       success: true,
@@ -94,10 +95,8 @@ export const cancelOrder = async (req, res, next) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    const order = await adminService.cancelOrder(
-      id,
-      reason || "Admin cancelled"
-    );
+    const order = await adminService.cancelOrder(id, reason || "Admin cancelled");
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_CANCEL_ORDER", entityType: "Order", entityId: id, meta: { reason }, req }); } catch { /* non-fatal */ }
 
     res.json({
       success: true,
@@ -161,6 +160,7 @@ export const getAdminCoupons = async (req, res, next) => {
 export const createAdminCoupon = async (req, res, next) => {
   try {
     const coupon = await adminService.createAdminCoupon(req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_CREATE_COUPON", entityType: "Coupon", entityId: coupon.id, meta: { code: coupon.code }, req }); } catch { /* non-fatal */ }
     res.json({ success: true, coupon });
   } catch (error) { next(error); }
 };
@@ -168,6 +168,7 @@ export const createAdminCoupon = async (req, res, next) => {
 export const updateAdminCoupon = async (req, res, next) => {
   try {
     const coupon = await adminService.updateAdminCoupon(req.params.id, req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_COUPON", entityType: "Coupon", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
     res.json({ success: true, coupon });
   } catch (error) { next(error); }
 };
@@ -175,6 +176,7 @@ export const updateAdminCoupon = async (req, res, next) => {
 export const deleteAdminCoupon = async (req, res, next) => {
   try {
     await adminService.deleteAdminCoupon(req.params.id);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_DELETE_COUPON", entityType: "Coupon", entityId: req.params.id, req }); } catch { /* non-fatal */ }
     res.json({ success: true });
   } catch (error) { next(error); }
 };
@@ -185,6 +187,7 @@ export const updateUserRole = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Cannot modify your own role" });
     }
     const user = await adminService.updateUserRole(req.params.id, req.body);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_UPDATE_USER_ROLE", entityType: "User", entityId: req.params.id, meta: req.body, req }); } catch { /* non-fatal */ }
     res.json({ success: true, user });
   } catch (error) { next(error); }
 };
@@ -192,6 +195,7 @@ export const updateUserRole = async (req, res, next) => {
 export const suspendRestaurant = async (req, res, next) => {
   try {
     const restaurant = await adminService.suspendRestaurant(req.params.id);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_SUSPEND_RESTAURANT", entityType: "Restaurant", entityId: req.params.id, req }); } catch { /* non-fatal */ }
     res.json({ success: true, restaurant });
   } catch (error) { next(error); }
 };
@@ -209,6 +213,7 @@ export const assignDeliveryPartner = async (req, res, next) => {
     }
 
     const order = await adminService.assignDeliveryPartner(id, deliveryUserId);
+    try { await auditLog({ userId: req.user.userId, action: "ADMIN_ASSIGN_DELIVERY", entityType: "Order", entityId: id, meta: { deliveryUserId }, req }); } catch { /* non-fatal */ }
 
     res.json({
       success: true,
@@ -464,6 +469,7 @@ export const toggleAgentSuspend = async (req, res, next) => {
     const { id } = req.params;
     const { suspend } = req.body;
     const user = await adminService.suspendUser(id, { suspend });
+    try { await auditLog({ userId: req.user.userId, action: suspend ? "ADMIN_SUSPEND_AGENT" : "ADMIN_UNSUSPEND_AGENT", entityType: "User", entityId: id, req }); } catch { /* non-fatal */ }
     res.json({ user });
   } catch (error) { next(error); }
 };
