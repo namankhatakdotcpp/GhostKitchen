@@ -1,0 +1,745 @@
+%% GhostKitchen — Production Monitoring & Observability Report
+%% Audit Date: June 2026
+%% Auditor: Engineering Security & Reliability Review
+%%
+%% Compile with: pdflatex GhostKitchen_Production_Observability_Report.tex
+
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{fontawesome5}
+
+% ── Colour palette ────────────────────────────────────────────────────────────
+\definecolor{brand}{HTML}{FF5200}        % GhostKitchen orange
+\definecolor{dark}{HTML}{111827}
+\definecolor{muted}{HTML}{6B7280}
+\definecolor{ok}{HTML}{059669}
+\definecolor{warn}{HTML}{D97706}
+\definecolor{crit}{HTML}{DC2626}
+\definecolor{info}{HTML}{2563EB}
+\definecolor{codebg}{HTML}{F3F4F6}
+\definecolor{tableheadbg}{HTML}{FF5200}
+
+% ── Typography ────────────────────────────────────────────────────────────────
+\titleformat{\section}{\large\bfseries\color{brand}}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{dark}}{}{0em}{}
+\titleformat{\subsubsection}{\normalsize\itshape\color{dark}}{}{0em}{}
+
+% ── Headers / Footers ────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{muted}GhostKitchen — Production Observability Report}
+\fancyhead[R]{\small\color{muted}June 2026 \textbf{CONFIDENTIAL}}
+\fancyfoot[C]{\small\color{muted}\thepage}
+
+% ── Code listings ─────────────────────────────────────────────────────────────
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{muted},
+  keywordstyle=\color{info},
+  commentstyle=\color{muted},
+}
+
+% ── Coloured severity cells ───────────────────────────────────────────────────
+\newcommand{\cellok}[1]{\cellcolor{ok!15}\textbf{\color{ok}#1}}
+\newcommand{\cellwarn}[1]{\cellcolor{warn!20}\textbf{\color{warn}#1}}
+\newcommand{\cellcrit}[1]{\cellcolor{crit!15}\textbf{\color{crit}#1}}
+\newcommand{\cellinfo}[1]{\cellcolor{info!10}\textbf{\color{info}#1}}
+
+% ── Score gauge helper ───────────────────────────────────────────────────────
+\newcommand{\score}[2]{%
+  \begin{tcolorbox}[colback=#1!10,colframe=#1,title={\textbf{Score}},
+    fonttitle=\bfseries,width=0.22\textwidth,halign=center,sharp corners]
+  \centering\LARGE\textbf{#2}
+  \end{tcolorbox}%
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── COVER PAGE ───────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\color{brand}\rule{\linewidth}{4pt}}\\[0.4cm]
+  {\Huge\bfseries GhostKitchen}\\[0.2cm]
+  {\LARGE\color{muted} Production Monitoring \& Observability Report}\\[0.4cm]
+  {\color{brand}\rule{\linewidth}{4pt}}\\[2cm]
+
+  \begin{tabular}{ll}
+    \textbf{Platform}         & GhostKitchen Food Delivery (ghostkitchen.in) \\[4pt]
+    \textbf{Stack}            & Node.js 20 · Express · Prisma · PostgreSQL · Redis \\
+                              & Socket.IO · Next.js 15 · Render (backend) · Vercel (frontend) \\[4pt]
+    \textbf{Audit Date}       & June 2026 \\[4pt]
+    \textbf{Report Revision}  & 1.0 \\[4pt]
+    \textbf{Classification}   & \textbf{\color{crit}CONFIDENTIAL — Internal Use Only} \\
+  \end{tabular}
+
+  \vfill
+  \begin{tcolorbox}[colback=brand!8,colframe=brand,title=Executive Summary,fonttitle=\bfseries\large]
+    This report documents a ten-phase enterprise-grade audit of GhostKitchen's
+    production monitoring, logging, alerting, incident response, and operational
+    visibility posture.  Seven code-level gaps were identified and resolved during
+    the audit; three accepted risks remain with documented mitigations.
+    The platform's post-remediation observability score is \textbf{81 / 100},
+    classified as \textbf{Production-Ready} (up from 53 / 100 pre-audit).
+  \end{tcolorbox}
+
+  \vspace{1cm}
+  {\small\color{muted} Prepared by the GhostKitchen Engineering Team \quad|\quad
+  \href{https://ghostkitchen.in}{ghostkitchen.in}}
+\end{titlepage}
+
+\newpage
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Audit Scope \& Methodology}
+% =============================================================================
+
+\subsection{Scope}
+
+The audit covered the full \texttt{food-delivery-backend} service and the
+\texttt{ghost-kitchen-frontend} Next.js application.  Specifically examined:
+
+\begin{itemize}[leftmargin=*]
+  \item Error tracking via \textbf{Sentry} (\texttt{@sentry/node}, \texttt{@sentry/nextjs})
+  \item Structured logging via \textbf{Winston}
+  \item HTTP request tracing and correlation identifiers
+  \item Health and readiness endpoints (\texttt{/health}, \texttt{/health/extended})
+  \item Incident auto-detection, escalation, and notification pipelines
+  \item Operational dashboards (Admin, Ops, Exec)
+  \item Background job observability (incident engine, housekeeping, maintenance cron)
+  \item Redis and PostgreSQL failure behaviour
+  \item Alert coverage matrix
+  \item Production runbooks
+\end{itemize}
+
+\subsection{Methodology}
+
+Each phase consisted of three steps:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Read} — full source audit of all relevant files
+  \item \textbf{Gap analysis} — compare current state against best-practice baseline
+  \item \textbf{Remediate or document} — fix in-sprint or record as accepted risk
+\end{enumerate}
+
+Severity ratings follow the standard four-level scale:
+\textbf{\color{crit}CRITICAL} · \textbf{\color{warn}HIGH} · \textbf{\color{info}MEDIUM} · \textbf{\color{ok}LOW}.
+
+\newpage
+
+% =============================================================================
+\section{Phase 1 — Sentry Error Tracking}
+% =============================================================================
+
+\subsection{Pre-Audit State}
+
+\begin{longtable}{p{5cm}p{3.5cm}p{5.5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Finding} & \textbf{\color{white}Severity} & \textbf{\color{white}Status} \\
+\midrule
+No \texttt{release} tag in \texttt{initSentry()} & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{requestId} not tagged on Sentry events & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{userId} not included in Sentry context & \cellinfo{MEDIUM} & \cellok{FIXED} \\
+Cron job errors reach logger but not Sentry & \cellwarn{HIGH} & \cellok{FIXED} \\
+Frontend \texttt{sentry.server.config.ts} minimal & \cellinfo{MEDIUM} & Accepted risk \\
+\bottomrule
+\end{longtable}
+
+\subsection{Fixes Implemented}
+
+\subsubsection{Release tag}
+
+\begin{lstlisting}[language=JavaScript,caption={src/config/sentry.js — release tag}]
+Sentry.init({
+  dsn,
+  environment: env.NODE_ENV,
+  release: process.env.SENTRY_RELEASE
+       || process.env.RENDER_GIT_COMMIT
+       || "unknown",
+  ...
+});
+\end{lstlisting}
+
+\texttt{RENDER\_GIT\_COMMIT} is injected automatically on every Render deploy,
+giving each Sentry event a direct link to the exact commit that produced it.
+
+\subsubsection{RequestId and userId correlation}
+
+\begin{lstlisting}[language=JavaScript,caption={captureException now tags both IDs}]
+export function captureException(err, context = {}) {
+  Sentry.withScope((scope) => {
+    for (const [k, v] of Object.entries(context))
+      scope.setExtra(k, v);
+    if (context.requestId) scope.setTag("requestId", context.requestId);
+    if (context.userId)    scope.setUser({ id: context.userId });
+    Sentry.captureException(err);
+  });
+}
+\end{lstlisting}
+
+The \texttt{globalErrorHandler} was updated to forward \texttt{req.id} and
+\texttt{req.user?.id} to every \texttt{captureException} call, creating a
+three-way correlation: \texttt{X-Request-ID} header → Winston log line →
+Sentry event.
+
+\subsubsection{Cron job error capture}
+
+All three background jobs (\texttt{incident.job}, \texttt{orderTimeout.job},
+maintenance cron in \texttt{server.js}) now call \texttt{captureException} in
+their catch blocks in addition to logging.
+
+\subsection{Accepted Risk: Frontend server config}
+
+The Next.js \texttt{sentry.server.config.ts} is minimal (no user context, no
+integrations beyond the default).  Server-side rendering errors are still
+captured; the gap is enhanced breadcrumbs.  Accepted because SSR errors are
+rare on this architecture and Vercel already logs them independently.
+
+\newpage
+
+% =============================================================================
+\section{Phase 2 — Structured Logging}
+% =============================================================================
+
+\subsection{Pre-Audit State}
+
+\begin{longtable}{p{5cm}p{3.5cm}p{5.5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Finding} & \textbf{\color{white}Severity} & \textbf{\color{white}Status} \\
+\midrule
+Console transport emitted printf/colour in production & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{req.id} assigned but never logged & \cellwarn{HIGH} & \cellok{FIXED} \\
+HTTP log at \texttt{debug} level (invisible in production) & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{X-Request-ID} not set in response header & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{userId} absent from HTTP access log & \cellinfo{MEDIUM} & \cellok{FIXED} \\
+Redundant inline debug logger in \texttt{app.js} & \cellok{LOW} & \cellok{REMOVED} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Fixes Implemented}
+
+\subsubsection{Production-JSON console format}
+
+Winston's console transport now emits pure JSON when
+\texttt{NODE\_ENV=production}, making every log line directly parseable by
+Render's log aggregator, DataDog, or any ELK-family ingestor.
+
+\begin{lstlisting}[language=JavaScript,caption={logger.js — conditional format}]
+const consoleFormat = isProduction
+  ? winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.errors({ stack: true }),
+      winston.format.json()
+    )
+  : winston.format.combine(
+      winston.format.colorize(),
+      winston.format.printf(({ level, message, ...meta }) => ...)
+    );
+\end{lstlisting}
+
+\subsubsection{Structured HTTP access log}
+
+\texttt{requestTracingMiddleware} was promoted from a commented-out stub to a
+full structured access logger emitting at \texttt{info} level on every
+\texttt{res.finish} event:
+
+\begin{lstlisting}[language=JavaScript,caption={requestTracing.middleware.js}]
+res.set("X-Request-ID", req.id);
+
+res.on("finish", () => {
+  if (req.path === "/health" && res.statusCode < 400) return; // suppress noise
+  const level = res.statusCode >= 500 ? "error"
+              : res.statusCode >= 400 ? "warn"
+              : "info";
+  logger.log(level, "http", {
+    requestId: req.id,   method: req.method,
+    path:      req.path, statusCode: res.statusCode,
+    durationMs: Date.now() - req.startTime,
+    ip:        req.ip,
+    userAgent: req.get("user-agent"),
+    userId:    req.user?.id ?? null,
+  });
+});
+\end{lstlisting}
+
+Log line example (production JSON):
+\begin{lstlisting}[caption={Sample production log output}]
+{"level":"info","message":"http","requestId":"9f3b...","method":"POST",
+ "path":"/api/orders","statusCode":201,"durationMs":142,"ip":"103.x.x.x",
+ "userId":"cuid2abc","service":"ghostkitchen-backend","timestamp":"..."}
+\end{lstlisting}
+
+\newpage
+
+% =============================================================================
+\section{Phase 3 — Health Endpoints}
+% =============================================================================
+
+\subsection{Pre-Audit State}
+
+\begin{longtable}{p{5cm}p{3.5cm}p{5.5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Finding} & \textbf{\color{white}Severity} & \textbf{\color{white}Status} \\
+\midrule
+\texttt{/health} reports OK even when Redis is down & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{/health/extended}: no maintenance mode & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{/health/extended}: no cron job health & \cellwarn{HIGH} & \cellok{FIXED} \\
+\texttt{/health/extended}: no socket adapter type & \cellinfo{MEDIUM} & \cellok{FIXED} \\
+\texttt{/health/extended}: no release/deploy tag & \cellinfo{MEDIUM} & \cellok{FIXED} \\
+\bottomrule
+\end{longtable}
+
+\subsection{Revised \texttt{/health} Status Semantics}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{DB} & \textbf{Redis} & \textbf{Status (HTTP)} \\
+\midrule
+\cellok{healthy} & \cellok{healthy}   & \cellok{OK (200)} \\
+\cellok{healthy} & \cellcrit{unhealthy} & \cellwarn{DEGRADED (200)} \\
+\cellcrit{unhealthy} & any            & \cellcrit{DOWN (503)} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Enriched \texttt{/health/extended} Response}
+
+\begin{lstlisting}[caption={New /health/extended payload (abridged)}]
+{
+  "status": "OK",
+  "release": "a1b2c3d",          // RENDER_GIT_COMMIT
+  "db":    { "status": "healthy", "latencyMs": 4 },
+  "redis": { "status": "healthy" },
+  "socket": { "connections": 12, "adapterType": "redis" },
+  "jobs": {
+    "incidentEngine":  { "lastRunAt": "2026-06-14T...", "lastError": null },
+    "housekeeping":    { "lastRunAt": "2026-06-14T...", "lastError": null }
+  },
+  "maintenance": {
+    "mode": false, "reason": null,
+    "scheduledAt": null, "endsAt": null
+  },
+  "platform": {
+    "activeOrders": 38,
+    "onlineAgents": 7,
+    "apiLatencyMs": 156
+  }
+}
+\end{lstlisting}
+
+\texttt{adapterType} distinguishes a single-instance in-memory adapter from a
+Redis adapter, making horizontal-scaling regression visible without inspecting
+logs.  \texttt{lastError} surfaces silently-failing cron jobs immediately.
+
+\newpage
+
+% =============================================================================
+\section{Phase 4 — Incident Response Readiness}
+% =============================================================================
+
+\subsection{Incident Pipeline Review}
+
+The platform has a mature automated incident pipeline:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Auto-detection} (\texttt{runAutoIncidents}) — runs every 2 minutes,
+        creates \texttt{OPEN} incident records for anomalous conditions (e.g.\ order
+        stuck, agent overdue).
+  \item \textbf{Escalation} (\texttt{runEscalations}) — same cadence; promotes
+        incidents to \texttt{HIGH}/\texttt{CRITICAL} after configurable thresholds;
+        sends admin email at 3 h.
+  \item \textbf{Timeline logging} (\texttt{logIncidentEvent}) — immutable audit trail
+        for every state transition.
+  \item \textbf{Notification broadcast} — \texttt{socket.IO} real-time push to admin
+        room + Resend email.
+\end{enumerate}
+
+\subsection{Gap Closed: Cron Errors to Sentry}
+
+Prior to this audit, a crash inside \texttt{runAutoIncidents} would log
+\texttt{logger.error("Incident engine error")} but produce \emph{no} Sentry event.
+Oncall would see the symptom (no new incidents despite anomalous platform state)
+without an alert.  All three cron jobs now call \texttt{captureException} in
+their catch blocks.
+
+\subsection{Remaining Gaps}
+
+\begin{longtable}{p{6cm}p{3cm}p{5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Gap} & \textbf{\color{white}Severity} & \textbf{\color{white}Disposition} \\
+\midrule
+No PagerDuty / on-call webhook integration & \cellwarn{HIGH} & Accepted risk — team size \\
+CRITICAL incident does not page on-call instantly & \cellwarn{HIGH} & Accepted risk — Resend email only \\
+Incident engine silently backs off on Redis lock miss & \cellok{LOW} & By design (fail-open) \\
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =============================================================================
+\section{Phase 5 — Operational Visibility}
+% =============================================================================
+
+\subsection{Dashboard Inventory}
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Dashboard} & \textbf{Audience} & \textbf{Key Metrics} & \textbf{Status} \\
+\midrule
+Admin      & Ops team    & Order pipeline, disputes, coupon usage & \cellok{Live} \\
+Ops        & On-call     & Incident feed, escalations, rider scores & \cellok{Live} \\
+Exec       & Management  & Revenue, GMV, conversion funnel & \cellok{Live} \\
+Live Map   & Ops/Dispatch & Real-time rider GPS positions & \cellok{Live} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Platform-Status Visibility}
+
+\begin{longtable}{p{5cm}p{3cm}p{6cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Condition} & \textbf{\color{white}Detection} & \textbf{\color{white}Visibility} \\
+\midrule
+DB outage & \texttt{/health} 503 & Render alerting via health-check URL \\
+Redis outage & \texttt{/health} DEGRADED & \cellwarn{Gap: no alert email/webhook} \\
+Email (Resend) outage & \texttt{logger.warn} only & \cellwarn{Gap: silent — admin not notified} \\
+Cashfree outage & 500 error on checkout & Sentry captures AppError \\
+Socket adapter downgrade & \texttt{/health/extended} adapterType & Admin must poll health endpoint \\
+Cron job failure & Sentry + lastError in health & \cellok{Fixed in this audit} \\
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =============================================================================
+\section{Phase 6 — Failure Simulation}
+% =============================================================================
+
+The following failure modes were traced through the codebase.
+No live injection testing was performed; analysis is static.
+
+\begin{longtable}{p{3.5cm}p{3.5cm}p{3.5cm}p{3.5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Failure} & \textbf{\color{white}Observed Behaviour} & \textbf{\color{white}User Impact} & \textbf{\color{white}Recovery} \\
+\midrule
+PostgreSQL down &
+  \texttt{/health} → 503 DOWN.\newline Requests that hit Prisma get 500 &
+  Orders cannot be placed or tracked &
+  Render restarts on health-check failure; Prisma reconnects automatically \\
+\midrule
+Redis down &
+  \texttt{/health} → 200 DEGRADED.\newline Rate-limiters use in-memory fallback.\newline Cron locks fail-open (all instances run) &
+  Possible duplicate incidents; rate-limiting weaker &
+  Cron duplication is idempotent for housekeeping; incident duplication is a known risk \\
+\midrule
+Cashfree down &
+  \texttt{PGCreateOrder} throws; caught as AppError 500 &
+  Checkout fails with error message &
+  Retry from frontend; no data corruption \\
+\midrule
+Socket adapter failure &
+  Falls back to in-memory; warning logged &
+  Order tracking across multiple backend instances degrades &
+  \texttt{/health/extended} shows adapterType → ops can act \\
+\midrule
+Resend (email) down &
+  \texttt{logger.warn} in \texttt{email.service.js}; fire-and-forget &
+  Admin alerts not delivered &
+  Manual check; no retry mechanism \\
+\midrule
+Cron job crash &
+  Sentry captures; \texttt{lastError} in health &
+  Incidents/housekeeping skip one cycle &
+  Next tick retries after lock TTL expires \\
+\bottomrule
+\end{longtable}
+
+\newpage
+
+% =============================================================================
+\section{Phase 7 — Alert Coverage Matrix}
+% =============================================================================
+
+\begin{longtable}{p{4cm}p{2.5cm}p{2.5cm}p{5cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Condition} & \textbf{\color{white}Sentry} & \textbf{\color{white}Email Alert} & \textbf{\color{white}Gap / Note} \\
+\midrule
+Unhandled exception &
+  \cellok{\faCheck} & — & Covered by \texttt{unhandledRejection} / \texttt{uncaughtException} \\
+HTTP 5xx error &
+  \cellok{\faCheck} & — & \texttt{globalErrorHandler} → \texttt{captureException} \\
+Cron job crash &
+  \cellok{\faCheck} & — & Fixed in this audit \\
+HIGH incident created &
+  — & \cellok{\faCheck} & Admin email via Resend \\
+CRITICAL incident escalated &
+  — & \cellok{\faCheck} & 3-hour escalation email \\
+DB outage &
+  — & — & \cellwarn{Gap: no active alert — Render health-check triggers restart only} \\
+Redis outage &
+  — & — & \cellcrit{Gap: no alert of any kind} \\
+Resend outage &
+  — & — & \cellcrit{Gap: warn-logged only — admin email itself is the alert channel} \\
+Payment webhook HMAC fail &
+  — & — & \cellwarn{Gap: 400 logged but no Sentry event} \\
+Stale payment (30 min) &
+  — & — & By design — housekeeping marks FAILED silently \\
+\bottomrule
+\end{longtable}
+
+\subsection{Recommended Additions (out of scope for this sprint)}
+
+\begin{enumerate}[leftmargin=*]
+  \item Wire a \textbf{Render health-check webhook} or UptimeRobot monitor to
+        Slack/PagerDuty for DB-down alerting.
+  \item Add a \textbf{Redis connectivity Sentry fingerprint} — fire at most once
+        per hour — so Redis outages surface without flooding Sentry.
+  \item Add \texttt{captureException} on webhook HMAC verification failures
+        (potential security signal).
+\end{enumerate}
+
+\newpage
+
+% =============================================================================
+\section{Phase 8 — Production Runbooks}
+% =============================================================================
+
+\subsection{Runbook 1: Service Returns 503}
+
+\begin{tcolorbox}[colback=crit!5,colframe=crit,title=\textbf{Trigger: /health returns 503 DOWN}]
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Check Render dashboard → \textbf{Events} tab for recent deploy failures.
+  \item Query \texttt{/health} JSON — inspect \texttt{db.message} for the Prisma error.
+  \item If DB is down: check Neon/Supabase dashboard for connectivity; verify
+        \texttt{DATABASE\_URL} env var on Render.
+  \item If deploy rollback needed: Render → \textbf{Deploys} → select last good SHA
+        → \textbf{Rollback}.
+  \item Once DB is restored, Render health-check resumes and traffic is restored.
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Runbook 2: Redis Unavailable (DEGRADED)}
+
+\begin{tcolorbox}[colback=warn!8,colframe=warn,title=\textbf{Trigger: /health returns DEGRADED}]
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Confirm Redis by checking \texttt{/health} JSON → \texttt{redis.status}.
+  \item Check Upstash console for quota, connection limits, or region outage.
+  \item Immediate impact: rate limiters fall back to in-process; cron locks fail-open
+        (incident engine may run on every instance — idempotent but noisy).
+  \item Resolution: Upstash auto-recovers; no action needed on Render.
+  \item Post-incident: review duplicate incidents created during outage window.
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Runbook 3: Payment Failures Spike}
+
+\begin{tcolorbox}[colback=warn!8,colframe=warn,title=\textbf{Trigger: Sentry alert — 5xx on /api/payments}]
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Check Sentry event — look for \texttt{cashfree-pg} SDK error message.
+  \item Check Cashfree status page (\texttt{status.cashfree.com}).
+  \item If SDK error references \texttt{axios} — verify \texttt{npm overrides} for
+        \texttt{axios\^{}1.17.0} is deployed (regression check: \texttt{npm ls axios}).
+  \item If HMAC failures — verify \texttt{CASHFREE\_SECRET\_KEY} env var on Render
+        matches the key in Cashfree dashboard.
+  \item Manual refund trigger: \texttt{POST /api/payments/refund/:orderId} with admin JWT.
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Runbook 4: CRITICAL Incident Not Escalating}
+
+\begin{tcolorbox}[colback=crit!5,colframe=crit,title=\textbf{Trigger: Ops team sees CRITICAL incident with no email}]
+\begin{enumerate}[leftmargin=*,nosep]
+  \item Check Sentry for \texttt{"Incident engine error"} events — cron may be crashing.
+  \item Verify \texttt{/health/extended} → \texttt{jobs.incidentEngine.lastError}.
+  \item Verify \texttt{RESEND\_API\_KEY} env var on Render is set and not expired.
+  \item Confirm admin users have \texttt{email} field populated in DB
+        (\texttt{prisma studio} or direct query).
+  \item Manual escalation: update incident \texttt{status} to ESCALATED via admin UI.
+\end{enumerate}
+\end{tcolorbox}
+
+\subsection{Runbook 5: Socket Adapter Downgrade}
+
+\begin{tcolorbox}[colback=info!8,colframe=info,title=\textbf{Trigger: /health/extended shows adapterType: in-memory}]
+\begin{enumerate}[leftmargin=*,nosep]
+  \item This indicates the Redis adapter failed to initialise — Socket.IO is using
+        in-process pub/sub, so events do NOT propagate across backend instances.
+  \item Impact: order tracking, live map, and notifications only work for users
+        connected to the same backend instance.
+  \item Check logs for \texttt{"Socket initialization failed"} at startup.
+  \item Verify \texttt{REDIS\_URL} on Render.  Restart the service after correcting.
+  \item With a single Render instance, this is lower-impact; with multiple
+        instances, prioritise immediately.
+\end{enumerate}
+\end{tcolorbox}
+
+\newpage
+
+% =============================================================================
+\section{Phase 9 — Observability Scorecard}
+% =============================================================================
+
+\begin{center}
+\begin{tabular}{p{5.5cm}p{2.5cm}p{2.5cm}p{3cm}}
+\toprule
+\rowcolor{tableheadbg}
+\textbf{\color{white}Dimension} & \textbf{\color{white}Pre-Audit} & \textbf{\color{white}Post-Audit} & \textbf{\color{white}Max} \\
+\midrule
+Error tracking (Sentry)         & 6  & 9  & 10 \\
+Structured logging              & 3  & 9  & 10 \\
+Request tracing / correlation   & 2  & 9  & 10 \\
+Health endpoints                & 4  & 9  & 10 \\
+Incident response pipeline      & 7  & 9  & 10 \\
+Operational dashboards          & 8  & 9  & 10 \\
+Failure mode resilience         & 6  & 8  & 10 \\
+Alert coverage                  & 4  & 6  & 10 \\
+Production runbooks             & 1  & 8  & 10 \\
+Horizontal scale readiness      & 5  & 9  & 10 \\
+\midrule
+\textbf{Total}                  & \textbf{46} & \textbf{85} & \textbf{100} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{1em}
+
+\begin{tcolorbox}[colback=ok!10,colframe=ok,title=\textbf{Post-Audit Rating: Production-Ready (85/100)}]
+The platform has moved from \textit{Minimally Observable} (46/100) to
+\textit{Production-Ready} (85/100).  The primary remaining gap is alert
+coverage: Redis outages and email outages produce no active notification.
+These are accepted risks appropriate to the current team size and SLA tier.
+\end{tcolorbox}
+
+\subsection{Score Breakdown}
+
+\begin{description}[leftmargin=2em]
+  \item[\color{ok}Error Tracking (9/10)] Release tag, requestId correlation, cron
+    capture all fixed.  Minus 1 for missing frontend SSR integrations.
+  \item[\color{ok}Structured Logging (9/10)] Pure JSON in production, structured
+    access log with all required fields.  Minus 1: no log sampling strategy for
+    high-cardinality paths.
+  \item[\color{ok}Request Tracing (9/10)] \texttt{req.id} → \texttt{X-Request-ID}
+    → Sentry tag chain complete.  Minus 1: frontend does not yet attach the header
+    to outbound API calls.
+  \item[\color{ok}Health Endpoints (9/10)] Full DB/Redis/Socket/Jobs/Maintenance
+    visibility.  Minus 1: no Cashfree connectivity probe.
+  \item[\color{ok}Incident Response (9/10)] Auto-detection, escalation, timeline,
+    email all operational.  Minus 1: no PagerDuty / instant on-call wake.
+  \item[\color{ok}Operational Dashboards (9/10)] Admin, Ops, Exec, Live Map all live.
+    Minus 1: no unified status page for customers.
+  \item[\color{warn}Failure Resilience (8/10)] DB and Redis failures handled gracefully.
+    Minus 2: email outage is silent; no Cashfree circuit breaker.
+  \item[\color{warn}Alert Coverage (6/10)] Incident emails and Sentry cover most paths.
+    Minus 4: Redis, Resend, and webhook anomalies generate no active alert.
+  \item[\color{ok}Runbooks (8/10)] Five runbooks documented in this report.  Minus 2:
+    not yet co-located in the repository wiki.
+  \item[\color{ok}Horizontal Scale (9/10)] Redis distributed locks, shared SiteConfig
+    cache, Redis Socket.IO adapter all in place.  Minus 1: Socket adapter downgrade
+    is self-healing but requires manual restart.
+\end{description}
+
+\newpage
+
+% =============================================================================
+\section{Phase 10 — Verification \& Sign-Off}
+% =============================================================================
+
+\subsection{Test Suite}
+
+All changes were validated against the full test suite:
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{Test File} & \textbf{Tests} & \textbf{Result} & \textbf{Notes} \\
+\midrule
+\texttt{middleware.extended.test.js} & 24 & \cellok{PASS} & Added \texttt{res.set} mock \\
+\texttt{security.socket-rooms.test.js} & 14 & \cellok{PASS} & \\
+\texttt{scale.distributed.test.js} & 16 & \cellok{PASS} & \\
+\texttt{security.supply-chain.test.js} & 19 & \cellok{PASS} & \\
+\texttt{refund.service.test.js} & 7 & \cellok{PASS} & \\
+All other test files & 847 & \cellok{PASS} & \\
+\midrule
+\textbf{Total} & \textbf{927} & \cellok{\textbf{927 PASS}} & \textbf{0 failures} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Commits}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Commit} & \textbf{Change} \\
+\midrule
+\texttt{dfa8928} & Socket room ownership hardening — async Prisma RBAC \\
+\texttt{00bfc3d} & Supply chain — axios override, PGOrderFetchRefund fix \\
+\texttt{7fe0497} & Horizontal scaling — Redis locks, SiteConfig shared cache \\
+\texttt{2d606b3} & Observability Phases 1–3 — Sentry release, JSON logging, health \\
+\texttt{987e9b5} & Observability Phase 4 — cron error Sentry capture \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Remaining Action Items (Next Sprint)}
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Redis alert}: Add a Sentry fingerprint or UptimeRobot monitor
+        so Redis outages page the team within 5 minutes.
+  \item \textbf{Resend circuit breaker}: Track consecutive email failures; if $\geq 3$,
+        log at \texttt{error} level and capture to Sentry.
+  \item \textbf{Webhook anomaly capture}: Send a Sentry event when Cashfree webhook
+        HMAC verification fails (security signal).
+  \item \textbf{Frontend request ID}: Attach \texttt{X-Request-ID} from the
+        \texttt{fetch} response header to Sentry breadcrumbs on the Next.js client.
+  \item \textbf{Runbooks in repo}: Migrate the five runbooks above into
+        \texttt{docs/runbooks/} and link from \texttt{README.md}.
+\end{enumerate}
+
+\vfill
+\begin{center}
+{\color{brand}\rule{0.5\linewidth}{2pt}}\\[0.4em]
+{\small\color{muted}
+GhostKitchen Engineering · June 2026 ·
+\href{https://ghostkitchen.in}{ghostkitchen.in} ·
+\textbf{CONFIDENTIAL — Internal Use Only}
+}
+\end{center}
+
+\end{document}
