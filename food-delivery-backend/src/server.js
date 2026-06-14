@@ -16,6 +16,7 @@ import { initSocket } from "./socket/socketServer.js";
 import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
 import { startIncidentJob } from "./jobs/incident.job.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
+import { acquireRedisLock, releaseRedisLock } from "./utils/redisLock.js";
 import cron from "node-cron";
 import { logger } from "./utils/logger.js";
 import { captureException } from "./config/sentry.js";
@@ -68,12 +69,19 @@ const startServer = async () => {
         logger.error("❌ Job initialisation failed", { error: jobError.message });
       }
 
-      // Maintenance schedule cron — runs every minute, activates/deactivates independently of traffic
+      // Maintenance schedule cron — runs every minute.
+      // Lock-guarded: without it, N instances each emit maintenance:started →
+      // every connected client receives N duplicate socket events per transition.
       cron.schedule("* * * * *", async () => {
         try {
           const cfg = await getSiteConfigCached();
-          if (cfg.maintenanceScheduledAt || cfg.maintenanceEndsAt) {
+          if (!cfg.maintenanceScheduledAt && !cfg.maintenanceEndsAt) return;
+          const acquired = await acquireRedisLock("lock:maintenance-cron", 50);
+          if (!acquired) return;
+          try {
             await applyMaintenanceSchedule(cfg);
+          } finally {
+            await releaseRedisLock("lock:maintenance-cron");
           }
         } catch { /* non-fatal */ }
       });

@@ -1,8 +1,6 @@
 import { updateAgentAvailability, updateOrderStatus } from "../modules/orders/orders.service.js";
 import { getIO } from "./socketServer.js";
 
-const activeOrderByAgent = new Map();
-
 function withSocketServer(callback) {
   try {
     const io = getIO();
@@ -43,8 +41,6 @@ export function emitOrderAssignedToAgent({
   dropoff,
   earnings,
 }) {
-  activeOrderByAgent.set(agentId, order.id);
-
   withSocketServer((io) => {
     io.to(`agent-${agentId}`).emit("order:assigned", {
       order,

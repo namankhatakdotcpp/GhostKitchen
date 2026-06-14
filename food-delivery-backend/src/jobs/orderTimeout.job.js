@@ -1,6 +1,10 @@
 import cron from "node-cron";
 import { prisma } from "../config/prisma.js";
 import { logger } from "../utils/logger.js";
+import { acquireRedisLock, releaseRedisLock } from "../utils/redisLock.js";
+
+const LOCK_KEY = "lock:housekeeping";
+const LOCK_TTL_SEC = 540; // 9 min — just under the 10-minute interval
 
 /**
  * Housekeeping job — runs every 10 minutes.
@@ -19,6 +23,9 @@ const PAYMENT_TIMEOUT_MINUTES = 30;
 
 export const startOrderTimeoutJob = () => {
   cron.schedule("*/10 * * * *", async () => {
+    const acquired = await acquireRedisLock(LOCK_KEY, LOCK_TTL_SEC);
+    if (!acquired) return; // another instance is handling this cycle
+
     try {
       const cutoff = new Date(Date.now() - PAYMENT_TIMEOUT_MINUTES * 60 * 1000);
 
@@ -39,10 +46,12 @@ export const startOrderTimeoutJob = () => {
       }
     } catch (error) {
       logger.error("Housekeeping job error", { error: error.message });
+    } finally {
+      await releaseRedisLock(LOCK_KEY);
     }
   });
 
-  logger.info("Housekeeping job scheduled (every 10 minutes)");
+  logger.info("Housekeeping job scheduled (every 10 minutes, distributed-lock guarded)");
 };
 
 export default startOrderTimeoutJob;

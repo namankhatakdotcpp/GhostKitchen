@@ -2,11 +2,18 @@ import { prisma } from "../../config/prisma.js";
 import { emitToAll } from "../../socket/socketServer.js";
 import { sendMaintenanceEmail } from "../../services/email.service.js";
 import { logger } from "../../utils/logger.js";
+import { cacheGet, cacheSet, cacheDelete } from "../../utils/cache.js";
 
-// In-process cache — avoids a DB round-trip on every request for maintenance check
+// Shared Redis key — when one instance invalidates this, all instances get fresh
+// data on their next cache miss (local TTL expires before the Redis key is checked).
+const REDIS_CONFIG_KEY = "siteconfig:singleton";
+const REDIS_CONFIG_TTL = 30; // seconds
+
+// In-process buffer — avoids a Redis round-trip on every request within 5 s.
+// Redis is the authoritative shared store; this is only a hot-path buffer.
 let _cache = null;
 let _cacheAt = 0;
-const CACHE_TTL = 30_000; // 30 seconds
+const LOCAL_CACHE_TTL = 5_000; // 5 seconds
 
 export async function getSiteConfig() {
   return prisma.siteConfig.upsert({
@@ -18,15 +25,29 @@ export async function getSiteConfig() {
 
 export async function getSiteConfigCached() {
   const now = Date.now();
-  if (_cache && now - _cacheAt < CACHE_TTL) return _cache;
-  _cache = await getSiteConfig();
+  // 1. In-process hot-path buffer
+  if (_cache && now - _cacheAt < LOCAL_CACHE_TTL) return _cache;
+  // 2. Shared Redis cache (populated by whichever instance last fetched from DB)
+  const cached = await cacheGet(REDIS_CONFIG_KEY);
+  if (cached !== null) {
+    _cache = cached;
+    _cacheAt = now;
+    return _cache;
+  }
+  // 3. DB fallback — repopulates both caches
+  const config = await getSiteConfig();
+  _cache = config;
   _cacheAt = now;
+  await cacheSet(REDIS_CONFIG_KEY, config, REDIS_CONFIG_TTL);
   return _cache;
 }
 
-export function invalidateConfigCache() {
+// Called after every config write. Deletes the Redis key so all instances lose
+// their shared cache simultaneously; next request on each instance hits DB.
+export async function invalidateConfigCache() {
   _cache = null;
   _cacheAt = 0;
+  await cacheDelete(REDIS_CONFIG_KEY);
 }
 
 export async function updateSiteConfig(data) {
@@ -46,7 +67,7 @@ export async function updateSiteConfig(data) {
     create: { id: "singleton", ...safe },
     update: safe,
   });
-  invalidateConfigCache();
+  await invalidateConfigCache();
   return result;
 }
 
