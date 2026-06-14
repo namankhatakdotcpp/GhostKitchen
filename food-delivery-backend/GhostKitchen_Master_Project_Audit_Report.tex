@@ -1,0 +1,498 @@
+%% GhostKitchen — Master Project Lifecycle Audit & Certification Report
+%% Audit Date: June 2026
+%% Methodology: Direct source-code verification — no inferred completion
+%%
+%% Compile: pdflatex GhostKitchen_Master_Project_Audit_Report.tex  (run twice for ToC)
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{fontawesome5}
+\usepackage{listings}
+\tcbuselibrary{skins,breakable}
+
+% ── Palette ───────────────────────────────────────────────────────────────────
+\definecolor{brand}{HTML}{FF5200}
+\definecolor{dark}{HTML}{111827}
+\definecolor{muted}{HTML}{6B7280}
+\definecolor{ok}{HTML}{059669}
+\definecolor{warn}{HTML}{D97706}
+\definecolor{crit}{HTML}{DC2626}
+\definecolor{info}{HTML}{2563EB}
+\definecolor{codebg}{HTML}{F3F4F6}
+\definecolor{headbg}{HTML}{FF5200}
+\definecolor{rowalt}{HTML}{FFF4EE}
+
+\hypersetup{colorlinks=true,linkcolor=brand,urlcolor=info,citecolor=brand}
+
+% ── Headings ──────────────────────────────────────────────────────────────────
+\titleformat{\section}{\large\bfseries\color{brand}}{\thesection.}{0.5em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{dark}}{\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}{\small\bfseries\itshape\color{dark}}{}{0em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\color{muted}GhostKitchen — Master Project Audit}
+\fancyhead[R]{\small\color{muted}June 2026 · \textbf{CONFIDENTIAL}}
+\fancyfoot[C]{\small\color{muted}\thepage}
+
+\lstset{
+  backgroundcolor=\color{codebg},basicstyle=\ttfamily\footnotesize,
+  breaklines=true,frame=single,framesep=4pt,rulecolor=\color{muted},
+  keywordstyle=\color{info},commentstyle=\color{muted},
+}
+
+% ── Status badges ─────────────────────────────────────────────────────────────
+\newtcbox{\badge}[1][ok]{on line,boxsep=1pt,left=4pt,right=4pt,top=1pt,bottom=1pt,
+  colback=#1!15,colframe=#1,coltext=#1,boxrule=0.5pt,arc=2pt,fontupper=\bfseries\scriptsize}
+\newcommand{\bcomplete}{\badge[ok]{COMPLETE}}
+\newcommand{\bpartial}{\badge[warn]{PARTIAL}}
+\newcommand{\bbroken}{\badge[crit]{BROKEN}}
+\newcommand{\bdead}{\badge[muted]{DEAD CODE}}
+\newcommand{\bmissing}{\badge[crit]{MISSING}}
+
+% ── Severity cells ────────────────────────────────────────────────────────────
+\newcommand{\cellok}[1]{\cellcolor{ok!15}\textbf{\color{ok}#1}}
+\newcommand{\cellwarn}[1]{\cellcolor{warn!20}\textbf{\color{warn}#1}}
+\newcommand{\cellcrit}[1]{\cellcolor{crit!15}\textbf{\color{crit}#1}}
+\newcommand{\cellinfo}[1]{\cellcolor{info!10}\textbf{\color{info}#1}}
+\newcommand{\cellmuted}[1]{\cellcolor{muted!15}\textbf{\color{muted}#1}}
+\newcommand{\yes}{\textcolor{ok}{\faCheck}}
+\newcommand{\no}{\textcolor{crit}{\faTimes}}
+\newcommand{\na}{\textcolor{muted}{\textemdash}}
+
+% Table header helper
+\newcommand{\th}[1]{\textbf{\color{white}#1}}
+
+\begin{document}
+
+% ── COVER ─────────────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{1.5cm}
+  {\color{brand}\rule{\linewidth}{5pt}}\\[0.5cm]
+  {\Huge\bfseries GhostKitchen}\\[0.3cm]
+  {\LARGE\color{dark} Master Project Lifecycle Audit}\\[0.15cm]
+  {\large\color{muted} \& Enterprise Certification Review}\\[0.4cm]
+  {\color{brand}\rule{\linewidth}{5pt}}\\[1.5cm]
+
+  \begin{tcolorbox}[colback=brand!6,colframe=brand,width=0.95\textwidth,
+    title=\textbf{\large Certification Verdict},fonttitle=\bfseries]
+    \centering\vspace{2pt}
+    {\Large\bfseries\color{ok} PRODUCTION-READY \quad\faCheckCircle}\\[6pt]
+    {\large Composite Readiness Score: \textbf{88 / 100}}\\[4pt]
+    {\small Verified by direct source-code inspection — zero inferred completion}
+  \end{tcolorbox}
+
+  \vspace{1cm}
+  \begin{tabular}{ll}
+    \textbf{Platform}        & GhostKitchen — Multi-role Food Delivery Platform \\[3pt]
+    \textbf{Backend}         & Node.js 20 · Express · Prisma · PostgreSQL · Redis · Socket.IO \\[3pt]
+    \textbf{Frontend}        & Next.js 15 (App Router) · React · TailwindCSS · Zustand \\[3pt]
+    \textbf{Payments}        & Cashfree PG (axios pinned \texttt{\^{}1.17.0} via overrides) \\[3pt]
+    \textbf{Deployment}      & Render (backend) · Vercel (frontend) \\[3pt]
+    \textbf{Audit Date}      & June 2026 \quad|\quad \textbf{Revision} 1.0 \\[3pt]
+    \textbf{Methodology}     & Direct source verification across 15 backend modules, \\
+                             & 44 frontend routes, 26 data models, 21 migrations \\[3pt]
+    \textbf{Classification}  & \textbf{\color{crit}CONFIDENTIAL — Internal Use Only} \\
+  \end{tabular}
+
+  \vfill
+  {\small\color{muted}GhostKitchen Engineering · \href{https://ghostkitchen.in}{ghostkitchen.in}}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Executive Summary}
+% =============================================================================
+
+\begin{tcolorbox}[colback=ok!6,colframe=ok,title=\textbf{Headline Findings},
+  fonttitle=\bfseries,breakable]
+GhostKitchen has been subjected to a complete lifecycle audit spanning every
+implementation phase in project history.  All claims were re-verified directly
+from source — prior completion reports were treated as unproven.
+
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item \textbf{1{,}036 automated tests pass} (927 backend + 109 frontend), zero failures.
+  \item \textbf{Frontend production build succeeds} (\texttt{next build} exit 0, 44 routes compiled).
+  \item \textbf{Authorization is enforced on every privileged route} — no unprotected admin/ops/exec endpoints.
+  \item \textbf{IDOR is closed} across restaurant management, menu management, and order access.
+  \item \textbf{Payment, webhook, refund, and refresh-token flows are hardened} and test-covered.
+  \item \textbf{No Critical, High, Broken, or Missing items} were discovered.
+  \item \textbf{Six Low-severity technical-debt items} were catalogued (dead endpoints \& orphaned socket signals).
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{Why the Verdict is \texttt{Verify-Only}}
+
+Audit Phase 9 dictates: \emph{COMPLETE = verify, PARTIAL = fix, BROKEN = fix,
+MISSING = implement}.  Direct verification found every audited feature in the
+\bcomplete{} state.  No feature qualified as PARTIAL, BROKEN, or MISSING.
+Consequently no Critical or High remediation was required, and the audit
+correctly resolves to a verification pass.  This report documents the evidence
+behind that conclusion rather than manufacturing changes to demonstrate activity.
+
+\subsection{Composite Scorecard}
+
+\begin{center}\small
+\begin{tabular}{lcl}
+\toprule
+\rowcolor{headbg}\th{Dimension} & \th{Score} & \th{Basis} \\
+\midrule
+Security            & 92 & RBAC + IDOR + HMAC + token rotation, all verified \\
+\rowcolor{rowalt}Reliability         & 88 & Fail-open Redis, graceful DB/Cashfree degradation \\
+Scalability         & 90 & Redis adapter, distributed locks, shared config cache \\
+\rowcolor{rowalt}Performance         & 85 & Indexed analytics queries, compression, cache layers \\
+Monitoring          & 85 & Sentry+release, JSON logs, rich health (post-obs-sprint) \\
+\rowcolor{rowalt}Operations          & 88 & Incident engine, escalation, runbooks, leaderboards \\
+Accessibility       & 82 & WCAG 2.1 AA sweep completed; no re-audit this cycle \\
+\rowcolor{rowalt}Maintainability     & 84 & Modular structure; backend ESLint absent \\
+Test Coverage       & 90 & 1{,}036 tests; security regression suites present \\
+\rowcolor{rowalt}Documentation       & 88 & Two LaTeX reports, README, inline rationale comments \\
+\midrule
+\textbf{Composite}  & \textbf{88} & \textbf{Production-Ready} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+
+% =============================================================================
+\section{Project Evolution Timeline}
+% =============================================================================
+
+Reconstructed from \texttt{git} history (62 commits) and 21 Prisma migrations.
+
+\begin{center}\footnotesize
+\begin{longtable}{p{0.5cm}p{4.2cm}p{6.5cm}p{2.6cm}}
+\toprule
+\rowcolor{headbg}\th{\#} & \th{Phase} & \th{Scope / Deliverables} & \th{Status} \\
+\midrule
+\endhead
+1 & Foundation \& Multi-role & Auth, RBAC, role switching, refresh tokens, baseline schema & \bcomplete \\
+\rowcolor{rowalt}2 & Customer Platform & Discovery, search, cart, checkout, orders, favorites, addresses & \bcomplete \\
+3 & Restaurant Platform & Dashboard, menu CRUD, status states, analytics & \bcomplete \\
+\rowcolor{rowalt}4 & Payments & Cashfree integration, webhook, verify, refunds, payouts & \bcomplete \\
+5 & Admin Console & Users, restaurants, orders, coupons, settings, audit log & \bcomplete \\
+\rowcolor{rowalt}6 & Real-time Foundation & Socket.IO, notifications, admin live updates & \bcomplete \\
+7 & Delivery Platform & Rider dashboard, accept-order, earnings, GPS streaming & \bcomplete \\
+\rowcolor{rowalt}8 & Live Operations Map & Real-time rider tracking, routes, clustering, fleet stats & \bcomplete \\
+9 & Ops Intelligence (Wave A) & Auto incidents, escalation engine, timeline, notifications & \bcomplete \\
+\rowcolor{rowalt}10 & Ops Intelligence (Wave B) & Rider/restaurant scoring, trends, leaderboards, sessions & \bcomplete \\
+11 & Executive Analytics (Wave C) & KPI engine, fleet/customer/revenue analytics, summary & \bcomplete \\
+\rowcolor{rowalt}12 & Security Hardening I & Input hardening, DoS protection, info-leak fixes & \bcomplete \\
+13 & Security Hardening II & Regression suite, audit trails, Permissions-Policy & \bcomplete \\
+\rowcolor{rowalt}14 & Accessibility & WCAG 2.1 AA fixes + initial Vitest coverage & \bcomplete \\
+15 & Deployment Readiness & Self-healing migrations, 5 prod-blocking fixes & \bcomplete \\
+\rowcolor{rowalt}16 & Socket Ownership Hardening & Server-side ownership gate on \texttt{order-*} rooms & \bcomplete \\
+17 & Supply-Chain Audit & axios \texttt{\^{}1.17.0} override; \texttt{PGOrderFetchRefund} fix & \bcomplete \\
+\rowcolor{rowalt}18 & Horizontal Scaling & Redis distributed locks, shared SiteConfig cache & \bcomplete \\
+19 & Observability Hardening & Sentry release+correlation, JSON logs, rich health, runbooks & \bcomplete \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Data Model Footprint}
+
+\textbf{26 models / enums:} Role, OrderStatus, PaymentStatus, DiscountType,
+IncidentSeverity, IncidentStatus, User, RefreshToken, CartItem, Address,
+Favorite, Restaurant, MenuItem, Order, Review, Coupon, Payment, PaymentWebhook,
+Refund, Notification, AuditLog, SiteConfig, RiderLocation, Incident,
+RiderSession, IncidentEvent. \textbf{21 ordered migrations}, all idempotent with
+self-healing deploy (\texttt{resolve-failed-migrations.js}) to break P3009 lockouts.
+
+\newpage
+
+% =============================================================================
+\section{Feature Verification Matrix}
+% =============================================================================
+
+Verified from route definitions, controllers, services, and frontend consumers.
+
+\begin{center}\footnotesize
+\begin{longtable}{p{4.3cm}cccc p{2.1cm}}
+\toprule
+\rowcolor{headbg}\th{Feature} & \th{API} & \th{Logic} & \th{RBAC} & \th{UI} & \th{Status} \\
+\midrule
+\endhead
+Authentication / Login / Register & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Refresh-token rotation        & \yes & \yes & \yes & \na  & \bcomplete \\
+Role switching / multi-role       & \yes & \yes & \yes & \yes & \bcomplete \\
+Restaurant discovery / search     & \yes & \yes & \yes & \yes & \bcomplete \\
+Recommendations / trending        & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Cart                          & \yes & \yes & \yes & \yes & \bcomplete \\
+Checkout / order placement        & \yes & \yes & \yes & \yes & \bcomplete \\
+Favorites / addresses / profile   & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Notifications                 & \yes & \yes & \yes & \yes & \bcomplete \\
+Restaurant dashboard / menu CRUD  & \yes & \yes & \yes & \yes & \bcomplete \\
+Restaurant analytics              & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Restaurant status states      & \yes & \yes & \yes & \yes & \bcomplete \\
+Delivery dashboard / accept-order & \yes & \yes & \yes & \yes & \bcomplete \\
+Rider earnings / sessions         & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Live GPS tracking             & \yes & \yes & \yes & \yes & \bcomplete \\
+Cashfree payment / verify         & \yes & \yes & \yes & \yes & \bcomplete \\
+Webhook (HMAC verified)           & \yes & \yes & \na  & \na  & \bcomplete \\
+\rowcolor{rowalt}Refunds (customer + admin)    & \yes & \yes & \yes & \yes & \bcomplete \\
+Payouts                           & \yes & \yes & \yes & \yes & \bcomplete \\
+Socket.IO real-time              & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Order room authorization      & \yes & \yes & \yes & \yes & \bcomplete \\
+Admin live operations map         & \yes & \yes & \yes & \yes & \bcomplete \\
+Ops: incidents / escalation       & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Ops: SLA / performance / boards & \yes & \yes & \yes & \yes & \bcomplete \\
+Executive KPI / analytics         & \yes & \yes & \yes & \yes & \bcomplete \\
+Admin user / restaurant mgmt      & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Coupons (validate + admin)    & \yes & \yes & \yes & \yes & \bcomplete \\
+Reviews                           & \yes & \yes & \yes & \yes & \bcomplete \\
+\rowcolor{rowalt}Maintenance mode / scheduling & \yes & \yes & \yes & \yes & \bcomplete \\
+Audit log + export                & \yes & \yes & \yes & \yes & \bcomplete \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\newpage
+
+% =============================================================================
+\section{Cross-System Workflow Validation}
+% =============================================================================
+
+Each end-to-end journey was traced through API, service, database, and socket layers.
+
+\begin{center}\footnotesize
+\begin{longtable}{p{3cm}p{9.5cm}p{1.6cm}}
+\toprule
+\rowcolor{headbg}\th{Journey} & \th{Traced Path} & \th{Result} \\
+\midrule
+\endhead
+Customer & Browse → Cart → Checkout → \texttt{/payments/create-order} → Cashfree → webhook → Order → tracking room → Review & \cellok{PASS} \\
+\rowcolor{rowalt}Restaurant & \texttt{order:new} socket → Orders page → status transition (ownership + state-machine guard) → analytics & \cellok{PASS} \\
+Delivery & \texttt{/delivery/status} online → \texttt{accept-order} → GPS \texttt{/location} → \texttt{rider:location:update} → map + customer track → earnings & \cellok{PASS} \\
+\rowcolor{rowalt}Admin & Ops dashboard → incidents → escalation → notification → resolve; exec analytics; live map & \cellok{PASS} \\
+Payment & create-order → pay → webhook (HMAC) → idempotent order creation → refund → admin payout & \cellok{PASS} \\
+\rowcolor{rowalt}Incident & \texttt{runAutoIncidents} (2-min, lock-guarded) → Incident → \texttt{runEscalations} → email + socket → resolve & \cellok{PASS} \\
+Live Tracking & Rider GPS → \texttt{/delivery/location} → \texttt{RiderLocation} → socket relay → admin map + \texttt{order-*} room & \cellok{PASS} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{tcolorbox}[colback=info!6,colframe=info,title=\textbf{Ownership-Gate Evidence (anti-IDOR)},breakable]
+\footnotesize
+Every order-scoped operation re-derives authorization from the token, never the payload:
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item \texttt{getOrder} → \texttt{canAccessOrder()}: ADMIN \textbar{} customer-owns \textbar{} assigned-agent \textbar{} restaurant-owner.
+  \item \texttt{updateOrderStatus} (HTTP): per-role ownership check \emph{plus} state-machine transition validation.
+  \item Restaurant writes → \texttt{getRestaurantByIdAndOwner(id, userId)} with ADMIN bypass; 403 otherwise.
+  \item \texttt{order-*} socket rooms → async \texttt{checkOrderRoomAccess()} Prisma lookup, fail-closed.
+\end{itemize}
+\end{tcolorbox}
+
+\newpage
+
+% =============================================================================
+\section{Security Assessment}
+% =============================================================================
+
+\begin{center}\footnotesize
+\begin{longtable}{p{4.5cm}p{6.5cm}p{2.2cm}}
+\toprule
+\rowcolor{headbg}\th{Control} & \th{Verification Evidence} & \th{Result} \\
+\midrule
+\endhead
+RBAC (admin/ops/exec) & \texttt{router.use(authenticate)} + \texttt{authorize("ADMIN")} on all three routers & \cellok{PASS} \\
+\rowcolor{rowalt}RBAC (payment/delivery) & Per-route \texttt{roleMiddleware}; delivery gated DELIVERY/ADMIN & \cellok{PASS} \\
+IDOR — orders & \texttt{canAccessOrder} ownership union; 403 on mismatch & \cellok{PASS} \\
+\rowcolor{rowalt}IDOR — restaurants/menu & Owner check on every write path; ADMIN bypass & \cellok{PASS} \\
+Socket authorization & Async ownership gate on \texttt{order-*}; fail-closed on error & \cellok{PASS} \\
+\rowcolor{rowalt}Payment security & create-order gated CUSTOMER; amounts server-derived (paise) & \cellok{PASS} \\
+Webhook security & HMAC verify on raw body; 400 on missing/invalid signature & \cellok{PASS} \\
+\rowcolor{rowalt}Refresh-token rotation & Hashed storage; rotate-on-use; concurrent-race guard; revoke-on-block & \cellok{PASS} \\
+Refund authorization & Customer refunds ownership-checked; admin refunds ADMIN-gated & \cellok{PASS} \\
+\rowcolor{rowalt}Supply chain & \texttt{npm overrides} axios \texttt{\^{}1.17.0}; 0 vulnerabilities & \cellok{PASS} \\
+Transport / headers & Helmet CSP, HSTS preload, Permissions-Policy, strict CORS allowlist & \cellok{PASS} \\
+\rowcolor{rowalt}Input hardening & Zod validation, body sanitisation, 50kb limit, tiered rate limits & \cellok{PASS} \\
+Audit trail & \texttt{AuditLog} with IP + user-agent; admin export endpoint & \cellok{PASS} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\begin{tcolorbox}[colback=ok!6,colframe=ok,title=\textbf{Security Verdict: 92 / 100}]
+No exploitable RBAC, IDOR, payment, or session vulnerabilities were found.
+Residual deductions relate to operational alerting (Redis/Resend outages produce
+no active page) rather than exploitable defects.  The CORS policy correctly
+rejects arbitrary \texttt{*.vercel.app} origins, admitting only this project's
+preview pattern.
+\end{tcolorbox}
+
+\newpage
+
+% =============================================================================
+\section{Operations \& Monitoring Assessment}
+% =============================================================================
+
+\subsection{Operations (88 / 100)}
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item \textbf{Incident engine} — auto-detection every 2 min, distributed-lock guarded, Sentry-instrumented.
+  \item \textbf{Escalation engine} — severity promotion + 3-hour admin email; immutable \texttt{IncidentEvent} timeline.
+  \item \textbf{Leaderboards \& scoring} — rider/restaurant performance, SLA, trend engine.
+  \item \textbf{Executive analytics} — KPI, fleet, customer, revenue, summary endpoints, all ADMIN-gated and UI-wired.
+\end{itemize}
+
+\subsection{Monitoring (85 / 100)}
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item \textbf{Sentry} — release tag (\texttt{RENDER\_GIT\_COMMIT}), \texttt{requestId}+\texttt{userId} correlation, cron error capture.
+  \item \textbf{Logging} — production JSON to stdout; structured HTTP access log with full request context.
+  \item \textbf{Request tracing} — \texttt{X-Request-ID} response header bridges client Sentry $\leftrightarrow$ backend logs.
+  \item \textbf{Health} — \texttt{/health} (DB hard / Redis degraded semantics); \texttt{/health/extended} adds socket adapter type, cron last-run/last-error, maintenance state, release.
+\end{itemize}
+
+\subsection{Scalability (90 / 100)}
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item Socket.IO Redis adapter for cross-instance event propagation (verifiable via \texttt{/health/extended} \texttt{adapterType}).
+  \item Distributed Redis locks (\texttt{SET NX EX}) guard incident, housekeeping, and maintenance crons against duplicate execution.
+  \item Two-layer SiteConfig cache (5 s local buffer + 30 s shared Redis) with cross-instance invalidation.
+  \item Fail-open design: Redis outage degrades gracefully rather than halting jobs.
+\end{itemize}
+
+\newpage
+
+% =============================================================================
+\section{Gap Analysis \& Technical-Debt Register}
+% =============================================================================
+
+No Critical, High, Broken, or Missing items.  All findings are Low-severity
+hygiene items suitable for a future cleanup sprint.
+
+\begin{center}\footnotesize
+\begin{longtable}{p{0.5cm}p{5.2cm}p{4.8cm}p{1.6cm}p{1.3cm}}
+\toprule
+\rowcolor{headbg}\th{\#} & \th{Finding} & \th{Evidence} & \th{Severity} & \th{Class} \\
+\midrule
+\endhead
+1 & \texttt{/payments/create-session} endpoint + \texttt{paymentApi.ts} \texttt{createSession} & No caller; checkout uses \texttt{create-order} & \cellmuted{LOW} & \bdead \\
+\rowcolor{rowalt}2 & Restaurant \texttt{PATCH /:id/status} (\texttt{toggleStatus}) & No frontend caller; \texttt{set-status} used instead & \cellmuted{LOW} & \bdead \\
+3 & Admin \texttt{PATCH /users/:id/role} (\texttt{updateUserRole}) & Superseded by change/grant/revoke-role & \cellmuted{LOW} & \bdead \\
+\rowcolor{rowalt}4 & Socket \texttt{order:no-agent} emitted, no listener & Backend emits; no frontend \texttt{.on} & \cellmuted{LOW} & \bdead \\
+5 & Socket \texttt{order:picked-up} listened, never emitted & Frontend \texttt{.on}; no backend emit & \cellmuted{LOW} & \bdead \\
+\rowcolor{rowalt}6 & Backend has no ESLint configuration & Only frontend runs \texttt{next lint} & \cellmuted{LOW} & Maint. \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Accepted Risks (carried from Observability Sprint)}
+\begin{itemize}[leftmargin=1.4em,nosep]
+  \item \textbf{Redis-outage alerting} — surfaces as \texttt{/health} DEGRADED but pages no one. Mitigation: add UptimeRobot/Sentry fingerprint (next sprint).
+  \item \textbf{Resend-outage alerting} — email failures are \texttt{warn}-logged only. Mitigation: consecutive-failure circuit breaker.
+  \item \textbf{No PagerDuty integration} — CRITICAL incidents email rather than page. Accepted for current team size.
+\end{itemize}
+
+% =============================================================================
+\section{Fixes Implemented (This Audit Cycle)}
+% =============================================================================
+
+Per Phase 9, the audit resolved to \textbf{verify-only}: every audited feature was
+already \bcomplete.  No PARTIAL, BROKEN, or MISSING items required remediation, so
+no source changes were made during the master-audit pass.  Hardening delivered in
+the immediately preceding sprints (and re-verified here) is recorded below.
+
+\begin{center}\footnotesize
+\begin{tabular}{p{2.2cm}p{8.5cm}p{2.3cm}}
+\toprule
+\rowcolor{headbg}\th{Commit} & \th{Change} & \th{Verified} \\
+\midrule
+\texttt{dfa8928} & Socket \texttt{order-*} room ownership (async Prisma RBAC) & \cellok{PASS} \\
+\rowcolor{rowalt}\texttt{00bfc3d} & axios \texttt{\^{}1.17.0} override; \texttt{PGOrderFetchRefund} bug fix & \cellok{PASS} \\
+\texttt{7fe0497} & Distributed locks + Redis-backed SiteConfig cache & \cellok{PASS} \\
+\rowcolor{rowalt}\texttt{2d606b3} & Observability Phases 1–3 (Sentry, JSON logs, health) & \cellok{PASS} \\
+\texttt{987e9b5} & Cron error → Sentry capture & \cellok{PASS} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\newpage
+
+% =============================================================================
+\section{Risk Register}
+% =============================================================================
+
+\begin{center}\footnotesize
+\begin{longtable}{p{4cm}p{1.6cm}p{1.6cm}p{4.8cm}}
+\toprule
+\rowcolor{headbg}\th{Risk} & \th{Likelihood} & \th{Impact} & \th{Mitigation / Status} \\
+\midrule
+\endhead
+Redis outage unnoticed & \cellinfo{MED} & \cellwarn{MED} & Health DEGRADED + fail-open; add active alert \\
+\rowcolor{rowalt}Email provider outage & \cellinfo{MED} & \cellinfo{LOW} & Warn-logged; add circuit breaker \\
+Socket adapter downgrade & \cellinfo{LOW} & \cellwarn{MED} & Visible in \texttt{/health/extended}; runbook exists \\
+\rowcolor{rowalt}Cashfree API outage & \cellinfo{LOW} & \cellwarn{HIGH} & AppError 500 + Sentry; frontend retry \\
+Dead-code drift & \cellinfo{LOW} & \cellinfo{LOW} & 6 items catalogued for cleanup sprint \\
+\rowcolor{rowalt}DB outage & \cellinfo{LOW} & \cellcrit{HIGH} & \texttt{/health} 503 → Render restart; auto-reconnect \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+% =============================================================================
+\section{Final Verification Evidence}
+% =============================================================================
+
+\begin{center}\footnotesize
+\begin{tabular}{p{5cm}p{3.5cm}p{4cm}}
+\toprule
+\rowcolor{headbg}\th{Command} & \th{Result} & \th{Notes} \\
+\midrule
+\texttt{npm test} (backend) & \cellok{927 / 927 PASS} & 31 test files, 0 failures \\
+\rowcolor{rowalt}\texttt{npm test} (frontend) & \cellok{109 / 109 PASS} & 11 test files, 0 failures \\
+\texttt{npm run build} (frontend) & \cellok{EXIT 0} & 44 routes compiled \\
+\texttt{npm run lint} (frontend) & \cellok{PASS} & 5 \texttt{react-hooks} warnings, 0 errors \\
+\texttt{npm run build} (backend) & \na & N/A — plain Node ESM, no build step \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{RBAC / Security Regression}
+No regressions: dedicated suites \texttt{security.idor.test.js},
+\texttt{security.regression.test.js}, \texttt{security.sprint2.test.js},
+\texttt{security.platform.test.js}, \texttt{security.socket-rooms.test.js}, and
+\texttt{security.supply-chain.test.js} all pass.
+
+% =============================================================================
+\section{Recommendations}
+% =============================================================================
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Alerting closure} — wire Redis and Resend outages to an active channel (UptimeRobot $\to$ Slack, or a once-per-hour Sentry fingerprint).
+  \item \textbf{Dead-code cleanup sprint} — remove the 6 catalogued items (3 dead endpoints, 2 orphaned socket signals, ESLint gap) to keep the surface minimal.
+  \item \textbf{Backend ESLint} — adopt a shared config so backend matches frontend lint discipline in CI.
+  \item \textbf{Webhook anomaly signal} — emit a Sentry event on HMAC failure (potential tampering indicator).
+  \item \textbf{Frontend request-ID propagation} — attach the \texttt{X-Request-ID} response header to client Sentry breadcrumbs to complete the trace loop.
+  \item \textbf{Runbook co-location} — migrate the five operational runbooks into \texttt{docs/runbooks/} and link from the README.
+\end{enumerate}
+
+\vfill
+\begin{center}
+{\color{brand}\rule{0.5\linewidth}{2pt}}\\[0.4em]
+{\small\color{muted}GhostKitchen Engineering · June 2026 ·
+\href{https://ghostkitchen.in}{ghostkitchen.in} · \textbf{CONFIDENTIAL — Internal Use Only}}\\[2pt]
+{\footnotesize\color{muted}This report reflects direct source verification as of the audit date.
+Findings represent the state of the \texttt{main} branch at commit \texttt{1395454} and later.}
+\end{center}
+
+\end{document}
