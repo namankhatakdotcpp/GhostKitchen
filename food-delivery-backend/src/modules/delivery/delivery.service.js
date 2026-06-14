@@ -22,6 +22,33 @@ const optionalNumber = (value, { min, max, label }) => {
   return n;
 };
 
+// ── Duty session tracking ────────────────────────────────────────────────────
+// Opens a new RiderSession row when a rider goes on-duty.
+// Calling checkIn while a session is already open closes the previous one first
+// (safety: prevents duplicate open sessions if the rider missed a check-out).
+export const checkInRider = async (riderId) => {
+  const open = await prisma.riderSession.findFirst({
+    where: { riderId, endedAt: null },
+    orderBy: { startedAt: "desc" },
+  });
+  if (open) {
+    const durationMin = Math.round((Date.now() - open.startedAt.getTime()) / 60000);
+    await prisma.riderSession.update({ where: { id: open.id }, data: { endedAt: new Date(), durationMin } });
+  }
+  return prisma.riderSession.create({ data: { riderId } });
+};
+
+// Closes the most recent open session for the rider.
+export const checkOutRider = async (riderId) => {
+  const open = await prisma.riderSession.findFirst({
+    where: { riderId, endedAt: null },
+    orderBy: { startedAt: "desc" },
+  });
+  if (!open) return null;
+  const durationMin = Math.round((Date.now() - open.startedAt.getTime()) / 60000);
+  return prisma.riderSession.update({ where: { id: open.id }, data: { endedAt: new Date(), durationMin } });
+};
+
 /**
  * Upserts a rider's live GPS position, mirrors it onto the User row (so the
  * existing nearest-agent assignment keeps working off currentLat/currentLng),

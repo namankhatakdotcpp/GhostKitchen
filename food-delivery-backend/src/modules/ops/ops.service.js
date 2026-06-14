@@ -8,6 +8,9 @@ import {
   computeSlaSummary,
   computeRiderPerformance,
   computeRestaurantPerformance,
+  computeRiderScore,
+  computeRestaurantScore,
+  computeTrend,
   computeAutoIncidents,
   nextEscalation,
   maxSeverity,
@@ -96,10 +99,16 @@ export const getSlaSummary = async ({ days = 7 } = {}) => {
   return { ...computeSlaSummary(orders), days: Number(days) };
 };
 
-// ── Rider performance ────────────────────────────────────────────────────────
+// ── Rider performance + score ────────────────────────────────────────────────
 export const getRiderPerformance = async ({ days = 7 } = {}) => {
-  const start = windowStart(days);
-  const [orders, riders] = await Promise.all([
+  const numDays = Number(days);
+  const start = windowStart(numDays);
+  // Previous window starts immediately before current window (same length).
+  const prevStart = new Date(start);
+  prevStart.setDate(prevStart.getDate() - numDays);
+
+  const [orders, riders, onTimeOrders, sessions, prevOrders] = await Promise.all([
+    // Current window: all assigned orders (delivery time, distance, cancellation)
     prisma.order.findMany({
       where: { agentId: { not: null }, createdAt: { gte: start } },
       select: {
@@ -108,32 +117,174 @@ export const getRiderPerformance = async ({ days = 7 } = {}) => {
       },
     }),
     prisma.user.findMany({ where: { roles: { has: "DELIVERY" } }, select: { id: true, name: true } }),
+    // On-time rate: only delivered orders that have an ETA to compare against
+    prisma.order.findMany({
+      where: {
+        agentId: { not: null }, status: "DELIVERED", createdAt: { gte: start },
+        deliveredAt: { not: null }, estimatedDelivery: { not: null },
+      },
+      select: { agentId: true, deliveredAt: true, estimatedDelivery: true },
+    }),
+    // Rider duty sessions for active-hour scoring
+    prisma.riderSession.findMany({
+      where: { startedAt: { gte: start } },
+      select: { riderId: true, durationMin: true },
+    }),
+    // Previous window delivered orders (trend: compare delivery count)
+    prisma.order.findMany({
+      where: {
+        agentId: { not: null }, status: "DELIVERED",
+        createdAt: { gte: prevStart, lt: start },
+      },
+      select: { agentId: true },
+    }),
   ]);
 
-  // Normalize restaurant coords onto the order shape the logic expects.
+  // On-time rate per rider
+  const onTimeByRider = new Map();
+  for (const o of onTimeOrders) {
+    if (!o.agentId) continue;
+    const e = onTimeByRider.get(o.agentId) ?? { onTime: 0, total: 0 };
+    e.total += 1;
+    if (new Date(o.deliveredAt) <= new Date(o.estimatedDelivery)) e.onTime += 1;
+    onTimeByRider.set(o.agentId, e);
+  }
+
+  // Active hours per rider from duty sessions
+  const activeHoursByRider = new Map();
+  for (const s of sessions) {
+    const prev = activeHoursByRider.get(s.riderId) ?? 0;
+    activeHoursByRider.set(s.riderId, prev + (s.durationMin ?? 0) / 60);
+  }
+
+  // Previous-window delivery count per rider (for trend)
+  const prevByRider = new Map();
+  for (const o of prevOrders) {
+    if (!o.agentId) continue;
+    prevByRider.set(o.agentId, (prevByRider.get(o.agentId) ?? 0) + 1);
+  }
+
   const shaped = orders.map((o) => ({
-    agentId: o.agentId,
-    status: o.status,
-    placedAt: o.placedAt,
-    deliveredAt: o.deliveredAt,
+    agentId: o.agentId, status: o.status, placedAt: o.placedAt, deliveredAt: o.deliveredAt,
     deliveryAddress: o.deliveryAddress && typeof o.deliveryAddress === "object" ? o.deliveryAddress : null,
     restaurant: o.restaurant,
   }));
 
-  return { riders: computeRiderPerformance(shaped, riders, haversineM), days: Number(days) };
+  const base = computeRiderPerformance(shaped, riders, haversineM);
+
+  // Attach score, grade, rank, trend
+  const enhanced = base.map((r) => {
+    const ot = onTimeByRider.get(r.riderId);
+    const onTimeRate = ot && ot.total > 0 ? Math.round((ot.onTime / ot.total) * 100) : null;
+    const activeHours = Math.round((activeHoursByRider.get(r.riderId) ?? 0) * 10) / 10;
+    const { score, grade } = computeRiderScore({
+      onTimeRate, avgDeliveryMin: r.avgDeliveryMin, cancellationRate: r.cancellationRate,
+      activeHoursInWindow: activeHours, days: numDays,
+    });
+    const trend = computeTrend(r.deliveries, prevByRider.get(r.riderId) ?? 0);
+    return { ...r, onTimeRate, activeHours, score, grade, trend };
+  });
+
+  // Rank: highest score first; ties broken by deliveries
+  enhanced.sort((a, b) => b.score - a.score || b.deliveries - a.deliveries);
+  const ranked = enhanced.map((r, i) => ({ ...r, rank: i + 1 }));
+
+  return { riders: ranked, days: numDays };
 };
 
-// ── Restaurant performance ───────────────────────────────────────────────────
+// ── Restaurant performance + health score ────────────────────────────────────
 export const getRestaurantPerformance = async ({ days = 7 } = {}) => {
-  const start = windowStart(days);
-  const [orders, restaurants] = await Promise.all([
+  const numDays = Number(days);
+  const start = windowStart(numDays);
+  const prevStart = new Date(start);
+  prevStart.setDate(prevStart.getDate() - numDays);
+
+  const [orders, restaurants, prepOrders, prevOrders] = await Promise.all([
     prisma.order.findMany({
       where: { createdAt: { gte: start } },
       select: { restaurantId: true, status: true, total: true },
     }),
     prisma.restaurant.findMany({ select: { id: true, name: true, rating: true } }),
+    // Prep-time data: orders that have a readyAt timestamp (after Wave B migration)
+    prisma.order.findMany({
+      where: { createdAt: { gte: start }, readyAt: { not: null } },
+      select: { restaurantId: true, placedAt: true, readyAt: true },
+    }),
+    // Previous window revenue (for trend)
+    prisma.order.findMany({
+      where: { status: "DELIVERED", createdAt: { gte: prevStart, lt: start } },
+      select: { restaurantId: true, total: true },
+    }),
   ]);
-  return { restaurants: computeRestaurantPerformance(orders, restaurants), days: Number(days) };
+
+  // Avg prep time per restaurant (readyAt - placedAt)
+  const prepByRestaurant = new Map();
+  for (const o of prepOrders) {
+    if (!o.readyAt || !o.placedAt) continue;
+    const prepMin = Math.round((new Date(o.readyAt) - new Date(o.placedAt)) / 60000);
+    if (prepMin < 0 || prepMin > 180) continue; // sanity bounds
+    const e = prepByRestaurant.get(o.restaurantId) ?? { total: 0, count: 0 };
+    e.total += prepMin;
+    e.count += 1;
+    prepByRestaurant.set(o.restaurantId, e);
+  }
+
+  // Previous-window revenue per restaurant (for trend)
+  const prevRevByRestaurant = new Map();
+  for (const o of prevOrders) {
+    prevRevByRestaurant.set(o.restaurantId, (prevRevByRestaurant.get(o.restaurantId) ?? 0) + Number(o.total));
+  }
+
+  const base = computeRestaurantPerformance(orders, restaurants);
+  const topRevenue = base.reduce((m, r) => Math.max(m, r.revenuePaise), 1);
+
+  const enhanced = base.map((r) => {
+    const pe = prepByRestaurant.get(r.restaurantId);
+    const avgPrepMin = pe && pe.count > 0 ? Math.round(pe.total / pe.count) : null;
+    const cancellationRate = r.orderVolume > 0
+      ? Math.round(((r.orderVolume - r.deliveredOrders) / r.orderVolume) * 100)
+      : 0;
+    const { score, grade } = computeRestaurantScore(
+      { revenuePaise: r.revenuePaise, rating: r.rating, avgPrepMin, cancellationRate },
+      topRevenue,
+    );
+    const trend = computeTrend(r.revenuePaise, prevRevByRestaurant.get(r.restaurantId) ?? 0);
+    return { ...r, avgPrepMin, cancellationRate, score, healthGrade: grade, trend };
+  });
+
+  enhanced.sort((a, b) => b.score - a.score);
+  const ranked = enhanced.map((r, i) => ({ ...r, rank: i + 1 }));
+
+  return { restaurants: ranked, days: numDays };
+};
+
+// ── Leaderboards (Phase 5) ───────────────────────────────────────────────────
+
+export const getRiderLeaderboard = async ({ order = "top", limit = 10, days = 7 } = {}) => {
+  const result = await getRiderPerformance({ days });
+  // Performance already sorted by score DESC; bottom = reverse
+  const list = order === "bottom"
+    ? [...result.riders].sort((a, b) => a.score - b.score)
+    : result.riders;
+  return {
+    riders: list.slice(0, Math.min(Number(limit) || 10, 50)),
+    total: result.riders.length,
+    order,
+    days: result.days,
+  };
+};
+
+export const getRestaurantLeaderboard = async ({ order = "top", limit = 10, days = 7 } = {}) => {
+  const result = await getRestaurantPerformance({ days });
+  const list = order === "bottom"
+    ? [...result.restaurants].sort((a, b) => a.score - b.score)
+    : result.restaurants;
+  return {
+    restaurants: list.slice(0, Math.min(Number(limit) || 10, 50)),
+    total: result.restaurants.length,
+    order,
+    days: result.days,
+  };
 };
 
 // ── Incident Center ──────────────────────────────────────────────────────────

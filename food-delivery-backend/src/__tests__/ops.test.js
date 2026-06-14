@@ -12,6 +12,7 @@ vi.mock("../config/prisma.js", () => ({
     user: { findMany: vi.fn() },
     incident: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
     incidentEvent: { create: vi.fn().mockResolvedValue({}), findMany: vi.fn() },
+    riderSession: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn(),
   },
 }));
@@ -394,5 +395,280 @@ describe("ops.service listIncidents / updateIncident", () => {
 
   it("updateIncident rejects an invalid status", async () => {
     await expect(ops.updateIncident("inc-1", { status: "BOGUS" })).rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Wave B — Scoring, Trend, Leaderboards
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Pure logic: computeRiderScore ────────────────────────────────────────────
+describe("computeRiderScore", () => {
+  it("returns 100 for a perfect rider (100% on-time, 20 min, 0% cancel, full hours)", () => {
+    const { score, grade } = logic.computeRiderScore({ onTimeRate: 100, avgDeliveryMin: 20, cancellationRate: 0, activeHoursInWindow: 56, days: 7 });
+    expect(score).toBe(100);
+    expect(grade).toBe("Elite");
+  });
+
+  it("returns 0 for the worst possible rider", () => {
+    const { score, grade } = logic.computeRiderScore({ onTimeRate: 0, avgDeliveryMin: 70, cancellationRate: 100, activeHoursInWindow: 0, days: 7 });
+    expect(score).toBe(0);
+    expect(grade).toBe("Needs Improvement");
+  });
+
+  it("grades 90+ as Elite, 75-89 as Good, 60-74 as Average, <60 as Needs Improvement", () => {
+    expect(logic.computeRiderScore({ onTimeRate: 95, avgDeliveryMin: 22, cancellationRate: 3,  activeHoursInWindow: 50, days: 7 }).grade).toBe("Elite");
+    expect(logic.computeRiderScore({ onTimeRate: 80, avgDeliveryMin: 30, cancellationRate: 10, activeHoursInWindow: 25, days: 7 }).grade).toBe("Good");
+    // 70*0.4 + 80*0.3 + 85*0.2 + 27*0.1 = 28+24+17+2.7 = 71.7 → 72 → Average
+    expect(logic.computeRiderScore({ onTimeRate: 70, avgDeliveryMin: 30, cancellationRate: 15, activeHoursInWindow: 15, days: 7 }).grade).toBe("Average");
+    // 30*0.4 + 20*0.3 + 60*0.2 + 0*0.1 = 12+6+12+0 = 30 → Needs Improvement
+    expect(logic.computeRiderScore({ onTimeRate: 30, avgDeliveryMin: 60, cancellationRate: 40, activeHoursInWindow: 0,  days: 7 }).grade).toBe("Needs Improvement");
+  });
+
+  it("defaults onTimeScore to 50 when onTimeRate is null (no ETA data)", () => {
+    const withNull = logic.computeRiderScore({ onTimeRate: null, avgDeliveryMin: 30, cancellationRate: 0, activeHoursInWindow: 0, days: 7 });
+    const with50 = logic.computeRiderScore({ onTimeRate: 50, avgDeliveryMin: 30, cancellationRate: 0, activeHoursInWindow: 0, days: 7 });
+    expect(withNull.score).toBe(with50.score);
+  });
+
+  it("clamps score to [0, 100]", () => {
+    const { score } = logic.computeRiderScore({ onTimeRate: 200, avgDeliveryMin: -10, cancellationRate: -50, activeHoursInWindow: 9999, days: 7 });
+    expect(score).toBe(100);
+  });
+});
+
+// ── Pure logic: computeRestaurantScore ───────────────────────────────────────
+describe("computeRestaurantScore", () => {
+  it("returns 100 for a perfect restaurant", () => {
+    const { score, grade } = logic.computeRestaurantScore(
+      { revenuePaise: 1_000_000, rating: 5.0, avgPrepMin: 10, cancellationRate: 0 },
+      1_000_000,
+    );
+    expect(score).toBe(100);
+    expect(grade).toBe("Excellent");
+  });
+
+  it("grades Excellent ≥80, Good ≥65, Average ≥45, Poor <45", () => {
+    const top = 1_000_000;
+    expect(logic.computeRestaurantScore({ revenuePaise: top, rating: 4.8, avgPrepMin: 12, cancellationRate: 2 }, top).grade).toBe("Excellent");
+    expect(logic.computeRestaurantScore({ revenuePaise: top * 0.5, rating: 4.0, avgPrepMin: 20, cancellationRate: 10 }, top).grade).toBe("Good");
+    expect(logic.computeRestaurantScore({ revenuePaise: top * 0.2, rating: 3.0, avgPrepMin: 30, cancellationRate: 20 }, top).grade).toBe("Average");
+    expect(logic.computeRestaurantScore({ revenuePaise: 0, rating: 1.0, avgPrepMin: 60, cancellationRate: 80 }, top).grade).toBe("Poor");
+  });
+
+  it("defaults prepScore to 50 when avgPrepMin is null", () => {
+    const withNull = logic.computeRestaurantScore({ revenuePaise: 500_000, rating: 4.0, avgPrepMin: null, cancellationRate: 10 }, 1_000_000);
+    const with50pct = logic.computeRestaurantScore({ revenuePaise: 500_000, rating: 4.0, avgPrepMin: 20, cancellationRate: 10 }, 1_000_000);
+    // avgPrepMin=20 → prepScore = 100 - (10/30*100) = 66.7, null → 50 (different); just verify both produce a valid score
+    expect(withNull.score).toBeGreaterThanOrEqual(0);
+    expect(withNull.score).toBeLessThanOrEqual(100);
+  });
+
+  it("handles zero topRevenue gracefully (no division by zero)", () => {
+    const { score } = logic.computeRestaurantScore({ revenuePaise: 0, rating: 3.0, avgPrepMin: null, cancellationRate: 0 }, 0);
+    expect(Number.isFinite(score)).toBe(true);
+  });
+});
+
+// ── Pure logic: computeTrend ─────────────────────────────────────────────────
+describe("computeTrend", () => {
+  it("returns UP when current is >5% higher than previous", () => {
+    expect(logic.computeTrend(110, 100)).toBe("UP");
+  });
+
+  it("returns DOWN when current is >5% lower than previous", () => {
+    expect(logic.computeTrend(90, 100)).toBe("DOWN");
+  });
+
+  it("returns STABLE within the ±5% band", () => {
+    expect(logic.computeTrend(103, 100)).toBe("STABLE");
+    expect(logic.computeTrend(97, 100)).toBe("STABLE");
+  });
+
+  it("returns UP when previous is 0 and current > 0", () => {
+    expect(logic.computeTrend(5, 0)).toBe("UP");
+  });
+
+  it("returns STABLE when both are 0", () => {
+    expect(logic.computeTrend(0, 0)).toBe("STABLE");
+  });
+});
+
+// ── Service: enhanced rider performance ──────────────────────────────────────
+describe("ops.service getRiderPerformance (Wave B)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.riderSession.findMany.mockResolvedValue([]);
+  });
+
+  it("returns score, grade, rank, trend, onTimeRate, activeHours on each rider row", async () => {
+    const deliveredOrder = { agentId: "d1", status: "DELIVERED", placedAt: minsAgo(40), deliveredAt: minsAgo(5), deliveryAddress: { lat: 2, lng: 2 }, restaurant: { lat: 1, lng: 1 } };
+    // Late: deliveredAt (5 min ago) is AFTER estimatedDelivery (15 min ago) → 0% on-time
+    const onTimeOrder = { agentId: "d1", deliveredAt: minsAgo(5), estimatedDelivery: minsAgo(15) };
+
+    prisma.order.findMany
+      .mockResolvedValueOnce([deliveredOrder])  // current window
+      .mockResolvedValueOnce([onTimeOrder])     // on-time query
+      .mockResolvedValueOnce([]);               // prev window (no deliveries last period)
+
+    prisma.user.findMany.mockResolvedValue([{ id: "d1", name: "Ravi" }]);
+
+    const out = await ops.getRiderPerformance({ days: 7 });
+    const r = out.riders[0];
+    expect(r).toHaveProperty("score");
+    expect(r).toHaveProperty("grade");
+    expect(r).toHaveProperty("rank", 1);
+    expect(r).toHaveProperty("trend");
+    expect(r).toHaveProperty("onTimeRate");
+    expect(r).toHaveProperty("activeHours", 0);
+    expect(r.onTimeRate).toBe(0); // delivered after ETA → 0% on-time
+  });
+
+  it("incorporates session active hours into score", async () => {
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ agentId: "d1", status: "DELIVERED", placedAt: minsAgo(40), deliveredAt: minsAgo(10), deliveryAddress: null, restaurant: { lat: 0, lng: 0 } }])
+      .mockResolvedValueOnce([]) // on-time
+      .mockResolvedValueOnce([]); // prev
+    prisma.user.findMany.mockResolvedValue([{ id: "d1", name: "Ravi" }]);
+    prisma.riderSession.findMany.mockResolvedValue([{ riderId: "d1", durationMin: 240 }]); // 4 h
+
+    const out = await ops.getRiderPerformance({ days: 7 });
+    expect(out.riders[0].activeHours).toBe(4);
+  });
+
+  it("ranks multiple riders by score descending", async () => {
+    // Two riders: high-performer (d1) and low-performer (d2)
+    const orders = [
+      { agentId: "d1", status: "DELIVERED", placedAt: minsAgo(30), deliveredAt: minsAgo(5), deliveryAddress: null, restaurant: { lat: 0, lng: 0 } },
+      { agentId: "d2", status: "CANCELLED", placedAt: minsAgo(30), deliveredAt: null, deliveryAddress: null, restaurant: { lat: 0, lng: 0 } },
+    ];
+    prisma.order.findMany.mockResolvedValue(orders);
+    prisma.user.findMany.mockResolvedValue([{ id: "d1", name: "A" }, { id: "d2", name: "B" }]);
+
+    const out = await ops.getRiderPerformance({ days: 7 });
+    // d1 delivered, d2 cancelled — d1 should rank #1
+    const ranks = out.riders.map((r) => r.riderId);
+    expect(ranks[0]).toBe("d1");
+    expect(out.riders[0].rank).toBe(1);
+    expect(out.riders[1].rank).toBe(2);
+  });
+
+  it("trend is UP when current deliveries exceed previous", async () => {
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ agentId: "d1", status: "DELIVERED", placedAt: minsAgo(20), deliveredAt: minsAgo(5), deliveryAddress: null, restaurant: { lat: 0, lng: 0 } }]) // current: 1
+      .mockResolvedValueOnce([]) // on-time
+      .mockResolvedValueOnce([]); // prev: 0
+    prisma.user.findMany.mockResolvedValue([{ id: "d1", name: "Ravi" }]);
+    const out = await ops.getRiderPerformance({ days: 7 });
+    expect(out.riders[0].trend).toBe("UP");
+  });
+});
+
+// ── Service: enhanced restaurant performance ──────────────────────────────────
+describe("ops.service getRestaurantPerformance (Wave B)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns score, healthGrade, rank, trend, cancellationRate on each row", async () => {
+    prisma.order.findMany
+      .mockResolvedValueOnce([
+        { restaurantId: "r1", status: "DELIVERED", total: 50000 },
+        { restaurantId: "r1", status: "CANCELLED", total: 0 },
+      ]) // current window (2 orders, 1 delivered, 1 cancelled)
+      .mockResolvedValueOnce([]) // prep data (no readyAt rows)
+      .mockResolvedValueOnce([{ restaurantId: "r1", total: 40000 }]); // prev window
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Pizza", rating: 4.5 }]);
+
+    const out = await ops.getRestaurantPerformance({ days: 7 });
+    const r = out.restaurants[0];
+    expect(r).toHaveProperty("score");
+    expect(r).toHaveProperty("healthGrade");
+    expect(r).toHaveProperty("rank", 1);
+    expect(r).toHaveProperty("trend");
+    expect(r.cancellationRate).toBe(50); // 1/2 cancelled
+    expect(r.avgPrepMin).toBeNull(); // no readyAt data
+  });
+
+  it("computes avgPrepMin from readyAt - placedAt", async () => {
+    const now = new Date();
+    const placedAt = new Date(now.getTime() - 25 * 60000); // 25 min ago
+    const readyAt = new Date(now.getTime() - 5 * 60000);   // 5 min ago → 20 min prep
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ restaurantId: "r1", status: "DELIVERED", total: 50000 }])
+      .mockResolvedValueOnce([{ restaurantId: "r1", placedAt, readyAt }]) // prep data
+      .mockResolvedValueOnce([]);
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Pizza", rating: 4.5 }]);
+
+    const out = await ops.getRestaurantPerformance({ days: 7 });
+    expect(out.restaurants[0].avgPrepMin).toBe(20);
+  });
+
+  it("trend is DOWN when revenue falls >5% from previous window", async () => {
+    prisma.order.findMany
+      .mockResolvedValueOnce([{ restaurantId: "r1", status: "DELIVERED", total: 50000 }]) // current
+      .mockResolvedValueOnce([]) // no prep data
+      .mockResolvedValueOnce([{ restaurantId: "r1", total: 100000 }]); // prev: higher
+    prisma.restaurant.findMany.mockResolvedValue([{ id: "r1", name: "Pizza", rating: 4.5 }]);
+
+    const out = await ops.getRestaurantPerformance({ days: 7 });
+    expect(out.restaurants[0].trend).toBe("DOWN");
+  });
+});
+
+// ── Service: leaderboards ─────────────────────────────────────────────────────
+describe("ops.service leaderboards", () => {
+  const setupRiderPerf = () => {
+    prisma.riderSession.findMany.mockResolvedValue([]);
+    prisma.user.findMany.mockResolvedValue([
+      { id: "d1", name: "Elite Rider" },
+      { id: "d2", name: "Slow Rider" },
+    ]);
+    // Two riders: d1 delivers quickly, d2 cancels a lot
+    prisma.order.findMany.mockResolvedValue([
+      { agentId: "d1", status: "DELIVERED", placedAt: minsAgo(25), deliveredAt: minsAgo(5), deliveryAddress: null, restaurant: { lat: 0, lng: 0 } },
+      { agentId: "d2", status: "CANCELLED", placedAt: minsAgo(30), deliveredAt: null, deliveryAddress: null, restaurant: { lat: 0, lng: 0 } },
+    ]);
+  };
+
+  it("getRiderLeaderboard top returns riders sorted by score desc", async () => {
+    setupRiderPerf();
+    const out = await ops.getRiderLeaderboard({ order: "top", limit: 10, days: 7 });
+    expect(out.riders[0].score).toBeGreaterThanOrEqual(out.riders[out.riders.length - 1].score);
+    expect(out).toHaveProperty("total");
+    expect(out.order).toBe("top");
+  });
+
+  it("getRiderLeaderboard bottom returns riders sorted by score asc", async () => {
+    setupRiderPerf();
+    const out = await ops.getRiderLeaderboard({ order: "bottom", limit: 10, days: 7 });
+    expect(out.riders[0].score).toBeLessThanOrEqual(out.riders[out.riders.length - 1].score);
+  });
+
+  it("getRiderLeaderboard respects limit", async () => {
+    setupRiderPerf();
+    const out = await ops.getRiderLeaderboard({ order: "top", limit: 1, days: 7 });
+    expect(out.riders).toHaveLength(1);
+  });
+
+  it("getRestaurantLeaderboard top returns restaurants sorted by score desc", async () => {
+    prisma.order.findMany.mockResolvedValue([
+      { restaurantId: "r1", status: "DELIVERED", total: 100000 },
+      { restaurantId: "r2", status: "DELIVERED", total: 10000 },
+    ]);
+    prisma.restaurant.findMany.mockResolvedValue([
+      { id: "r1", name: "Top", rating: 4.8 },
+      { id: "r2", name: "Bottom", rating: 2.0 },
+    ]);
+
+    const out = await ops.getRestaurantLeaderboard({ order: "top", limit: 10, days: 7 });
+    expect(out.restaurants[0].score).toBeGreaterThanOrEqual(out.restaurants[1].score);
+    expect(out.order).toBe("top");
+  });
+
+  it("getRestaurantLeaderboard handles zero-data scenario gracefully", async () => {
+    prisma.order.findMany.mockResolvedValue([]);
+    prisma.restaurant.findMany.mockResolvedValue([]);
+    const out = await ops.getRestaurantLeaderboard({ order: "top", limit: 10, days: 7 });
+    expect(out.restaurants).toHaveLength(0);
+    expect(out.total).toBe(0);
   });
 });

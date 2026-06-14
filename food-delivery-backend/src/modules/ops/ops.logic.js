@@ -244,7 +244,80 @@ export function computeAutoIncidents(data, now = new Date(), t = AUTO_INCIDENT_T
   return out;
 }
 
-// ── Escalation engine (Phase 2) ──────────────────────────────────────────────
+// ── Rider Performance Score ───────────────────────────────────────────────────
+// Weights: 40% on-time rate, 30% speed, 20% cancellation, 10% active hours.
+// Every component is normalised to 0-100 before weighting.
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/**
+ * @param {{ onTimeRate: number|null, avgDeliveryMin: number|null, cancellationRate: number, activeHoursInWindow: number, days?: number }} stats
+ * @returns {{ score: number, grade: string }}
+ */
+export function computeRiderScore({ onTimeRate, avgDeliveryMin, cancellationRate, activeHoursInWindow = 0, days = 7 }) {
+  // 0-100 component scores
+  const onTimeScore = onTimeRate != null ? clamp(onTimeRate, 0, 100) : 50; // neutral when no ETA data
+  // Benchmark: 20 min → 100, 70 min → 0  (linear over 50-min range)
+  const speedScore = avgDeliveryMin != null ? clamp(100 - (avgDeliveryMin - 20) * 2, 0, 100) : 50;
+  const cancelScore = clamp(100 - (cancellationRate ?? 0), 0, 100);
+  // 8 active h/day × window days = 100
+  const targetHours = days * 8;
+  const hoursScore = targetHours > 0 ? clamp((activeHoursInWindow / targetHours) * 100, 0, 100) : 0;
+
+  const raw = onTimeScore * 0.40 + speedScore * 0.30 + cancelScore * 0.20 + hoursScore * 0.10;
+  const score = Math.round(clamp(raw, 0, 100));
+
+  let grade;
+  if (score >= 90) grade = "Elite";
+  else if (score >= 75) grade = "Good";
+  else if (score >= 60) grade = "Average";
+  else grade = "Needs Improvement";
+
+  return { score, grade };
+}
+
+// ── Restaurant Health Score ────────────────────────────────────────────────────
+// Weights: 35% revenue, 25% rating, 20% prep speed, 20% cancellation rate.
+
+/**
+ * @param {{ revenuePaise: number, rating: number, avgPrepMin: number|null, cancellationRate: number }} stats
+ * @param {number} topRevenuePaise  Highest revenue in the cohort for relative scaling
+ * @returns {{ score: number, grade: string }}
+ */
+export function computeRestaurantScore({ revenuePaise, rating, avgPrepMin, cancellationRate }, topRevenuePaise = 1) {
+  const revenueScore = topRevenuePaise > 0 ? clamp((revenuePaise / topRevenuePaise) * 100, 0, 100) : 0;
+  const ratingScore = clamp(((rating ?? 0) / 5.0) * 100, 0, 100);
+  // Benchmark: 10 min → 100, 40 min → 0  (linear over 30-min range)
+  const prepScore = avgPrepMin != null ? clamp(100 - ((avgPrepMin - 10) * 100) / 30, 0, 100) : 50;
+  const cancelScore = clamp(100 - (cancellationRate ?? 0), 0, 100);
+
+  const raw = revenueScore * 0.35 + ratingScore * 0.25 + prepScore * 0.20 + cancelScore * 0.20;
+  const score = Math.round(clamp(raw, 0, 100));
+
+  let grade;
+  if (score >= 80) grade = "Excellent";
+  else if (score >= 65) grade = "Good";
+  else if (score >= 45) grade = "Average";
+  else grade = "Poor";
+
+  return { score, grade };
+}
+
+// ── Trend Engine ──────────────────────────────────────────────────────────────
+
+/**
+ * Compares current vs previous window and returns a direction label.
+ * A ±5% band counts as STABLE.
+ */
+export function computeTrend(current, previous, threshold = 0.05) {
+  if (!previous || previous === 0) return current > 0 ? "UP" : "STABLE";
+  const change = (current - previous) / Math.abs(previous);
+  if (change > threshold) return "UP";
+  if (change < -threshold) return "DOWN";
+  return "STABLE";
+}
+
+// ── Escalation engine (Wave A Phase 2) ───────────────────────────────────────
 const SEVERITY_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 // Higher of two severities (incidents only ever escalate up, never down).

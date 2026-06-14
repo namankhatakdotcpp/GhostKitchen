@@ -83,6 +83,7 @@ model User {
   addresses       Address[]
   favorites       Favorite[]
   riderLocation   RiderLocation? @relation("UserRiderLocation")
+  riderSessions   RiderSession[] @relation("UserRiderSessions")
   reportedIncidents Incident[]   @relation("IncidentCreator")
   resolvedIncidents Incident[]   @relation("IncidentResolver")
   createdAt       DateTime       @default(now())
@@ -216,6 +217,9 @@ model Order {
   deliveryAddress Json?
   cfOrderId           String?     @unique
   placedAt            DateTime    @default(now())
+  acceptedAt          DateTime?   // restaurant accepted (CONFIRMED transition)
+  readyAt             DateTime?   // food ready for pickup (PREPARING → OUT_FOR_DELIVERY)
+  pickedUpAt          DateTime?   // rider collected from restaurant
   deliveredAt         DateTime?
   estimatedDelivery   DateTime?
   createdAt           DateTime    @default(now())
@@ -407,6 +411,20 @@ model Incident {
   @@index([status])
   @@index([severity])
   @@index([createdAt])
+}
+
+// Rider duty sessions — one row per check-in/check-out pair.
+// Powers the "active hours" component of the rider performance score.
+model RiderSession {
+  id          String    @id @default(cuid())
+  riderId     String
+  rider       User      @relation("UserRiderSessions", fields: [riderId], references: [id], onDelete: Cascade)
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  durationMin Float?    // set when session is closed; null while still active
+  createdAt   DateTime  @default(now())
+
+  @@index([riderId, startedAt])
 }
 
 // Append-only activity log for an incident (timeline shown in the admin UI).

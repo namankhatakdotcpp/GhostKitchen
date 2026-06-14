@@ -67,3 +67,23 @@ export const getIncidentEvents = async (req, res, next) => {
     res.json(await opsService.listIncidentEvents(req.params.id));
   } catch (err) { next(err); }
 };
+
+export const getRiderLeaderboard = async (req, res, next) => {
+  try {
+    res.json(await opsService.getRiderLeaderboard({
+      order: req.query.order,
+      limit: req.query.limit,
+      days: req.query.days,
+    }));
+  } catch (err) { next(err); }
+};
+
+export const getRestaurantLeaderboard = async (req, res, next) => {
+  try {
+    res.json(await opsService.getRestaurantLeaderboard({
+      order: req.query.order,
+      limit: req.query.limit,
+      days: req.query.days,
+    }));
+  } catch (err) { next(err); }
+};

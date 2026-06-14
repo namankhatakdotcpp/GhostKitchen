@@ -16,6 +16,8 @@ import {
   acknowledgeIncident,
   resolveIncident,
   getIncidentEvents,
+  getRiderLeaderboard,
+  getRestaurantLeaderboard,
 } from "./ops.controller.js";
 
 const router = express.Router();
@@ -34,5 +36,8 @@ router.get("/incidents/:id/events", getIncidentEvents);
 router.patch("/incidents/:id", updateIncident);
 router.post("/incidents/:id/acknowledge", acknowledgeIncident);
 router.post("/incidents/:id/resolve", resolveIncident);
+
+router.get("/leaderboards/riders", getRiderLeaderboard);
+router.get("/leaderboards/restaurants", getRestaurantLeaderboard);
 
 export default router;

@@ -3,7 +3,7 @@ import { authenticate } from "../../middlewares/auth.middleware.js";
 import { roleMiddleware } from "../../middlewares/role.middleware.js";
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
-import { updateRiderLocation } from "./delivery.service.js";
+import { updateRiderLocation, checkInRider, checkOutRider } from "./delivery.service.js";
 
 const router = express.Router();
 
@@ -45,6 +45,12 @@ router.patch("/status", async (req, res, next) => {
       data,
       select: { id: true, name: true, isAvailable: true, isOnDuty: true, currentLat: true, currentLng: true },
     });
+
+    // Session tracking: open a session on duty-on, close it on duty-off.
+    // Non-fatal — a session tracking failure must not block duty-toggle.
+    if (isOnDuty === true)  checkInRider(req.user.userId).catch(() => {});
+    if (isOnDuty === false) checkOutRider(req.user.userId).catch(() => {});
+
     res.json({ user });
   } catch (e) { next(e); }
 });
