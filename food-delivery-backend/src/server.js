@@ -83,7 +83,9 @@ const startServer = async () => {
           } finally {
             await releaseRedisLock("lock:maintenance-cron");
           }
-        } catch { /* non-fatal */ }
+        } catch (err) {
+          captureException(err instanceof Error ? err : new Error(String(err)), { job: "maintenance-cron" });
+        }
       });
     });
 

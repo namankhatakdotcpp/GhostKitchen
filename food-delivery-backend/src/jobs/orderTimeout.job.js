@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import { prisma } from "../config/prisma.js";
 import { logger } from "../utils/logger.js";
+import { captureException } from "../config/sentry.js";
 import { acquireRedisLock, releaseRedisLock } from "../utils/redisLock.js";
 
 const LOCK_KEY = "lock:housekeeping";
@@ -50,6 +51,7 @@ export const startOrderTimeoutJob = () => {
       housekeepingJobStatus.lastError = null;
     } catch (error) {
       logger.error("Housekeeping job error", { error: error.message });
+      captureException(error, { job: "housekeeping" });
       housekeepingJobStatus.lastError = error.message;
       housekeepingJobStatus.lastRunAt = new Date().toISOString();
     } finally {

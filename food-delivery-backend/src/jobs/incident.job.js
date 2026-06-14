@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { logger } from "../utils/logger.js";
+import { captureException } from "../config/sentry.js";
 import { runAutoIncidents, runEscalations } from "../modules/ops/ops.service.js";
 import { acquireRedisLock, releaseRedisLock } from "../utils/redisLock.js";
 
@@ -24,6 +25,7 @@ export const startIncidentJob = () => {
       incidentJobStatus.lastError = null;
     } catch (error) {
       logger.error("Incident engine error", { error: error.message });
+      captureException(error, { job: "incident-engine" });
       incidentJobStatus.lastError = error.message;
       incidentJobStatus.lastRunAt = new Date().toISOString();
     } finally {
