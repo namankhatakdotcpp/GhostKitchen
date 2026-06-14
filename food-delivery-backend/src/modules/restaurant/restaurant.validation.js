@@ -3,6 +3,8 @@ export const validateRestaurant = (data) => {
 
   if (!data.name || typeof data.name !== "string" || data.name.trim() === "") {
     errors.name = "Name is required and must be a string";
+  } else if (data.name.length > 100) {
+    errors.name = "Name cannot exceed 100 characters";
   }
 
   if (!Array.isArray(data.cuisines) || data.cuisines.length === 0) {
@@ -11,6 +13,8 @@ export const validateRestaurant = (data) => {
 
   if (!data.city || typeof data.city !== "string" || data.city.trim() === "") {
     errors.city = "City is required and must be a string";
+  } else if (data.city.length > 100) {
+    errors.city = "City cannot exceed 100 characters";
   }
 
   if (data.deliveryFee === undefined || typeof data.deliveryFee !== "number" || data.deliveryFee < 0) {
@@ -25,6 +29,10 @@ export const validateRestaurant = (data) => {
     errors.minOrder = "Min order is required and must be a non-negative number";
   }
 
+  if (data.description !== undefined && typeof data.description === "string" && data.description.length > 1000) {
+    errors.description = "Description cannot exceed 1000 characters";
+  }
+
   return Object.keys(errors).length > 0 ? errors : null;
 };
 
@@ -33,6 +41,8 @@ export const validateMenuItem = (data) => {
 
   if (!data.name || typeof data.name !== "string" || data.name.trim() === "") {
     errors.name = "Name is required and must be a string";
+  } else if (data.name.length > 100) {
+    errors.name = "Name cannot exceed 100 characters";
   }
 
   if (data.price === undefined || typeof data.price !== "number" || data.price <= 0) {
@@ -41,6 +51,8 @@ export const validateMenuItem = (data) => {
 
   if (!data.category || typeof data.category !== "string" || data.category.trim() === "") {
     errors.category = "Category is required and must be a string";
+  } else if (data.category.length > 100) {
+    errors.category = "Category cannot exceed 100 characters";
   }
 
   if (data.isVeg !== undefined && typeof data.isVeg !== "boolean") {
@@ -49,6 +61,8 @@ export const validateMenuItem = (data) => {
 
   if (data.description !== undefined && typeof data.description !== "string") {
     errors.description = "Description must be a string";
+  } else if (data.description && data.description.length > 500) {
+    errors.description = "Description cannot exceed 500 characters";
   }
 
   if (data.imageUrl !== undefined && typeof data.imageUrl !== "string") {
@@ -68,6 +82,8 @@ export const validateUpdateRestaurant = (data) => {
   if (data.name !== undefined) {
     if (typeof data.name !== "string" || data.name.trim() === "") {
       errors.name = "Name must be a non-empty string";
+    } else if (data.name.length > 100) {
+      errors.name = "Name cannot exceed 100 characters";
     }
   }
 
@@ -80,6 +96,8 @@ export const validateUpdateRestaurant = (data) => {
   if (data.city !== undefined) {
     if (typeof data.city !== "string" || data.city.trim() === "") {
       errors.city = "City must be a non-empty string";
+    } else if (data.city.length > 100) {
+      errors.city = "City cannot exceed 100 characters";
     }
   }
 
@@ -101,8 +119,12 @@ export const validateUpdateRestaurant = (data) => {
     }
   }
 
-  if (data.description !== undefined && typeof data.description !== "string") {
-    errors.description = "Description must be a string";
+  if (data.description !== undefined) {
+    if (typeof data.description !== "string") {
+      errors.description = "Description must be a string";
+    } else if (data.description.length > 1000) {
+      errors.description = "Description cannot exceed 1000 characters";
+    }
   }
 
   if (data.imageUrl !== undefined && typeof data.imageUrl !== "string") {

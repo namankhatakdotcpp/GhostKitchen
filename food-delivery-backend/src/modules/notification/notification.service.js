@@ -5,7 +5,13 @@ import { logger } from "../../utils/logger.js";
 export async function createNotification({ userId, title, body, type, entityId }) {
   try {
     const notification = await prisma.notification.create({
-      data: { userId, title, body, type, entityId: entityId ?? null },
+      data: {
+        userId,
+        title: typeof title === "string" ? title.slice(0, 200) : title,
+        body: typeof body === "string" ? body.slice(0, 1000) : body,
+        type,
+        entityId: entityId ?? null,
+      },
     });
     try {
       const io = getIO();

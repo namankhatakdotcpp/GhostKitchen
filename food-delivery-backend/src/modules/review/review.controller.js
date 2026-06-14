@@ -9,6 +9,9 @@ export const createReview = async (req, res, next) => {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
     }
+    if (comment !== undefined && (typeof comment !== "string" || comment.length > 1000)) {
+      return res.status(400).json({ error: "Comment cannot exceed 1000 characters" });
+    }
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
@@ -171,6 +174,9 @@ export const updateReview = async (req, res, next) => {
 
     if (rating !== undefined && (!Number.isInteger(rating) || rating < 1 || rating > 5)) {
       return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
+    }
+    if (comment !== undefined && comment !== null && (typeof comment !== "string" || comment.length > 1000)) {
+      return res.status(400).json({ error: "Comment cannot exceed 1000 characters" });
     }
 
     const updatedReview = await prisma.review.update({

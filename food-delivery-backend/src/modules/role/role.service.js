@@ -83,6 +83,12 @@ export async function registerRestaurant(userId, restaurantData) {
   if (!restaurantData?.name || typeof restaurantData.name !== "string" || !restaurantData.name.trim()) {
     throw new AppError("Restaurant name is required", 400);
   }
+  if (restaurantData.name.trim().length > 100) {
+    throw new AppError("Restaurant name cannot exceed 100 characters", 400);
+  }
+  if (restaurantData.description && String(restaurantData.description).length > 1000) {
+    throw new AppError("Restaurant description cannot exceed 1000 characters", 400);
+  }
 
   const requestedRadius = restaurantData.deliveryRadius || 5;
   if (requestedRadius > cfg.maxDeliveryRadius) {

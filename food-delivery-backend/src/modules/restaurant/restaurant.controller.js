@@ -59,7 +59,10 @@ export const getMyRestaurant = async (req, res) => {
 
 export const listRestaurants = async (req, res) => {
   try {
-    const { search, city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine } = req.query;
+    const { city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine } = req.query;
+    // Cap search length to prevent large LIKE queries from stressing the DB.
+    const rawSearch = req.query.search;
+    const search = typeof rawSearch === "string" ? rawSearch.slice(0, 100) : undefined;
     const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit), isOpen, cuisine);
 
     return res.json({ success: true, data: result });

@@ -110,8 +110,8 @@ app.use("/api/payments/webhook", express.raw({ type: "application/json" }), (req
 });
 
 // ── 6. Body parsers + cookies ─────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50kb" }));
+app.use(express.urlencoded({ extended: true, limit: "50kb" }));
 app.use(cookieParser());
 
 // ── 7. XSS sanitisation on every request body ────────────────────────────────
@@ -265,11 +265,9 @@ app.post("/bootstrap-admin", async (req, res) => {
       where: { email: { equals: email.trim(), mode: "insensitive" } },
     });
     if (!user) {
-      const all = await prisma.user.findMany({ select: { email: true, name: true } });
       return res.status(404).json({
         success: false,
         message: `User not found: ${email}. Register at the frontend first.`,
-        registeredUsers: all.map((u) => u.email),
       });
     }
     const roles = user.roles.includes("ADMIN") ? user.roles : [...user.roles, "ADMIN"];

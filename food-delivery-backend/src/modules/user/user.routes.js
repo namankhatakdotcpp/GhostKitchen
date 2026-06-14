@@ -25,6 +25,12 @@ router.post("/addresses", async (req, res, next) => {
   try {
     const { label = "Home", line1, line2, city, state, pincode, lat, lng, isDefault = false } = req.body;
     if (!line1?.trim() || !city?.trim()) throw new AppError("line1 and city are required", 400);
+    if (label && String(label).length > 50) throw new AppError("label cannot exceed 50 characters", 400);
+    if (String(line1).length > 255) throw new AppError("line1 cannot exceed 255 characters", 400);
+    if (line2 && String(line2).length > 255) throw new AppError("line2 cannot exceed 255 characters", 400);
+    if (String(city).length > 100) throw new AppError("city cannot exceed 100 characters", 400);
+    if (state && String(state).length > 100) throw new AppError("state cannot exceed 100 characters", 400);
+    if (pincode && String(pincode).length > 10) throw new AppError("pincode cannot exceed 10 characters", 400);
 
     await prisma.$transaction(async (tx) => {
       if (isDefault) {
@@ -57,6 +63,12 @@ router.patch("/addresses/:id", async (req, res, next) => {
     if (!existing) throw new AppError("Address not found", 404);
 
     const { label, line1, line2, city, state, pincode, lat, lng, isDefault } = req.body;
+    if (label !== undefined && String(label).length > 50) throw new AppError("label cannot exceed 50 characters", 400);
+    if (line1 !== undefined && String(line1).length > 255) throw new AppError("line1 cannot exceed 255 characters", 400);
+    if (line2 !== undefined && line2 && String(line2).length > 255) throw new AppError("line2 cannot exceed 255 characters", 400);
+    if (city !== undefined && String(city).length > 100) throw new AppError("city cannot exceed 100 characters", 400);
+    if (state !== undefined && state && String(state).length > 100) throw new AppError("state cannot exceed 100 characters", 400);
+    if (pincode !== undefined && pincode && String(pincode).length > 10) throw new AppError("pincode cannot exceed 10 characters", 400);
     const data = {};
     if (label !== undefined) data.label = label.trim();
     if (line1 !== undefined) data.line1 = line1.trim();

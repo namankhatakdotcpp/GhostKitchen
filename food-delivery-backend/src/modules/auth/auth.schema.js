@@ -59,7 +59,8 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   body: z.object({
     email: emailSchema,
-    password: z.string().min(1, "Password is required"),
+    // max 128 prevents bcrypt DoS (attacker sending a 1MB+ password string)
+    password: z.string().min(1, "Password is required").max(128, "Password too long"),
   }),
 });
 

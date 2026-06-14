@@ -344,6 +344,8 @@ async function notifyAdmins({ title, message, severity, entityId, email = null }
 
 export const createIncident = async ({ title, description, severity = "MEDIUM", category, entityType, entityId, createdById = null }) => {
   if (!title || !title.trim()) throw new AppError("Incident title is required", 400);
+  if (title.trim().length > 200) throw new AppError("Incident title cannot exceed 200 characters", 400);
+  if (description && String(description).length > 2000) throw new AppError("Incident description cannot exceed 2000 characters", 400);
   const validSeverity = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
   if (!validSeverity.includes(severity)) throw new AppError("Invalid severity", 400);
 

@@ -158,11 +158,9 @@ export const webhook = async (req, res, next) => {
       error: err.message,
       stack: err.stack,
     });
-    // Even on error, return 200 to prevent Cashfree DOS retries
-    return res.status(200).json({
-      received: true,
-      error: err.message,
-    });
+    // Even on error, return 200 to prevent Cashfree DOS retries.
+    // Do not expose err.message — it may contain internal implementation details.
+    return res.status(200).json({ received: true });
   }
 };
 
