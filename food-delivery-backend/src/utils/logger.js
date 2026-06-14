@@ -19,6 +19,45 @@ const logsDir = path.join(__dirname, "../../logs");
  * - info: General information
  * - debug: Detailed debug info
  */
+const isProduction = process.env.NODE_ENV === "production";
+
+// In production (Render) stdout/stderr is captured by the platform log aggregator,
+// so coloured console output is all that's needed. File transports write to the
+// ephemeral Render disk, which is wiped on every deploy and fills up under load.
+// In development, file transports let you tail logs locally without watching the terminal.
+const transports = [
+  new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.printf(
+        ({ timestamp, level, message, ...meta }) => {
+          let metaStr = "";
+          if (Object.keys(meta).length > 0) {
+            metaStr = JSON.stringify(meta);
+          }
+          return `${timestamp} [${level}]: ${message} ${metaStr}`;
+        }
+      )
+    ),
+  }),
+];
+
+if (!isProduction) {
+  transports.push(
+    new winston.transports.File({
+      filename: path.join(logsDir, "error.log"),
+      level: "error",
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: path.join(logsDir, "combined.log"),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    })
+  );
+}
+
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
   format: winston.format.combine(
@@ -27,38 +66,7 @@ export const logger = winston.createLogger({
     winston.format.json()
   ),
   defaultMeta: { service: "ghostkitchen-backend" },
-  transports: [
-    // Console output for development
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(
-          ({ timestamp, level, message, ...meta }) => {
-            let metaStr = "";
-            if (Object.keys(meta).length > 0) {
-              metaStr = JSON.stringify(meta);
-            }
-            return `${timestamp} [${level}]: ${message} ${metaStr}`;
-          }
-        )
-      ),
-    }),
-
-    // Error logs
-    new winston.transports.File({
-      filename: path.join(logsDir, "error.log"),
-      level: "error",
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-
-    // Combined logs
-    new winston.transports.File({
-      filename: path.join(logsDir, "combined.log"),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-  ],
+  transports,
 });
 
 /**

@@ -28,20 +28,26 @@ export const initSocket = async (server) => {
     pingTimeout: 20000,
   });
 
-  const redisInstance = getRedis();
-
-  if (redisInstance) {
+  // The @socket.io/redis-adapter requires two independent ioredis connections
+  // (pub + sub). The main Redis client may be an Upstash REST client (which has
+  // no .duplicate() or pub/sub support). We always create fresh ioredis connections
+  // here using REDIS_URL so the adapter works regardless of which Redis driver the
+  // rest of the app uses.
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
     try {
-      const pubClient = redisInstance;
-      const subClient = redisInstance.duplicate();
-      await subClient.connect();
+      const { default: Redis } = await import("ioredis");
+      const isUpstash = redisUrl.includes("upstash");
+      const tlsOptions = isUpstash ? { tls: { rejectUnauthorized: false } } : {};
+      const pubClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: false });
+      const subClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: false });
       io.adapter(createAdapter(pubClient, subClient));
-      logger.info("✓ Socket.IO Redis adapter configured");
+      logger.info("✓ Socket.IO Redis adapter configured (ioredis)");
     } catch (err) {
       logger.error("❌ Failed to configure Socket.IO Redis adapter. Falling back to memory.", { error: err.message });
     }
   } else {
-    logger.warn("⚠ Redis not available. Socket.IO falling back to in-memory adapter.");
+    logger.warn("⚠ REDIS_URL not set. Socket.IO using in-memory adapter — single-instance only.");
   }
 
   io.use((socket, next) => {
