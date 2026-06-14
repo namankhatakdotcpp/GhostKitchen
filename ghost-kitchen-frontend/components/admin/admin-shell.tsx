@@ -8,6 +8,7 @@ import {
   Bike,
   ChevronRight,
   Database,
+  DollarSign,
   LayoutDashboard,
   LineChart,
   LogOut,
@@ -48,6 +49,7 @@ const navGroups = [
     label: "Finance",
     items: [
       { href: "/admin/payments",       label: "Payments",        icon: Wallet },
+      { href: "/admin/payouts",        label: "Payouts",         icon: DollarSign },
       { href: "/admin/coupons",        label: "Coupons",         icon: Tag },
     ],
   },
