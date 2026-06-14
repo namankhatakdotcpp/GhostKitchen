@@ -4,7 +4,9 @@ import { logger } from "../utils/logger.js";
 import { acquireRedisLock, releaseRedisLock } from "../utils/redisLock.js";
 
 const LOCK_KEY = "lock:housekeeping";
-const LOCK_TTL_SEC = 540; // 9 min — just under the 10-minute interval
+const LOCK_TTL_SEC = 540;
+
+export const housekeepingJobStatus = { lastRunAt: null, lastError: null };
 
 /**
  * Housekeeping job — runs every 10 minutes.
@@ -44,8 +46,12 @@ export const startOrderTimeoutJob = () => {
           purgedRefreshTokens: tokens.count,
         });
       }
+      housekeepingJobStatus.lastRunAt = new Date().toISOString();
+      housekeepingJobStatus.lastError = null;
     } catch (error) {
       logger.error("Housekeeping job error", { error: error.message });
+      housekeepingJobStatus.lastError = error.message;
+      housekeepingJobStatus.lastRunAt = new Date().toISOString();
     } finally {
       await releaseRedisLock(LOCK_KEY);
     }

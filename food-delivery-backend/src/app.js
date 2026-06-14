@@ -33,6 +33,8 @@ import { redisHealthCheck } from "./config/redis.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
 import { getIO } from "./socket/socketServer.js";
 import { verifyAccessToken } from "./utils/jwt.js";
+import { incidentJobStatus } from "./jobs/incident.job.js";
+import { housekeepingJobStatus } from "./jobs/orderTimeout.job.js";
 
 const app = express();
 
@@ -127,13 +129,6 @@ app.use(cookieParser());
 // ── 7. XSS sanitisation on every request body ────────────────────────────────
 app.use(sanitizeBody);
 
-// ── 8. Request logging ────────────────────────────────────────────────────────
-app.use((req, res, next) => {
-  const start = Date.now();
-  res.on("finish", () => logger.debug(`${req.method} ${req.url} ${res.statusCode} — ${Date.now() - start}ms`));
-  next();
-});
-
 // ── 9. Short-circuit cache headers for API routes ────────────────────────────
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
@@ -173,8 +168,9 @@ app.get("/health", async (_req, res) => {
     ]);
     const redis = redisStatus.status === "fulfilled" ? redisStatus.value : { status: "unhealthy", message: redisStatus.reason?.message };
     const db = dbStatus.status === "fulfilled" ? dbStatus.value : { status: "unhealthy", message: dbStatus.reason?.message };
-    const overall = db.status === "healthy" ? "OK" : "DEGRADED";
-    res.status(overall === "OK" ? 200 : 503).json({
+    // DB down = hard failure (503). Redis down = degraded but still serving (200).
+    const overall = db.status !== "healthy" ? "DOWN" : redis.status !== "healthy" ? "DEGRADED" : "OK";
+    res.status(overall === "DOWN" ? 503 : 200).json({
       status: overall,
       timestamp: new Date().toISOString(),
       environment: env.NODE_ENV,
@@ -206,7 +202,7 @@ app.get("/health/extended", (req, res, next) => {
 }, async (_req, res) => {
   try {
     const t0 = Date.now();
-    const [redisStatus, dbStatus, activeOrders, onlineAgents] = await Promise.allSettled([
+    const [redisStatus, dbStatus, activeOrders, onlineAgents, cfgResult] = await Promise.allSettled([
       redisHealthCheck(),
       (async () => {
         const t = Date.now();
@@ -215,22 +211,45 @@ app.get("/health/extended", (req, res, next) => {
       })(),
       prisma.order.count({ where: { status: { notIn: ["DELIVERED", "CANCELLED"] } } }),
       prisma.user.count({ where: { roles: { has: "DELIVERY" }, isAvailable: true } }),
+      getSiteConfigCached(),
     ]);
 
     const redis = redisStatus.status === "fulfilled" ? redisStatus.value : { status: "unhealthy", message: redisStatus.reason?.message };
     const db = dbStatus.status === "fulfilled" ? dbStatus.value : { status: "unhealthy", message: dbStatus.reason?.message };
+    const cfg = cfgResult.status === "fulfilled" ? cfgResult.value : null;
 
     let socketConnections = 0;
-    try { socketConnections = getIO().engine.clientsCount; } catch {}
+    let adapterType = "in-memory";
+    try {
+      const io = getIO();
+      socketConnections = io.engine.clientsCount;
+      const adapterName = io.adapter?.constructor?.name ?? "";
+      adapterType = adapterName.toLowerCase().includes("redis") ? "redis" : "in-memory";
+    } catch {}
 
-    res.json({
-      status: db.status === "healthy" ? "OK" : "DEGRADED",
+    const overall = db.status !== "healthy" ? "DOWN" : redis.status !== "healthy" ? "DEGRADED" : "OK";
+
+    res.status(overall === "DOWN" ? 503 : 200).json({
+      status: overall,
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.round(process.uptime()),
       environment: env.NODE_ENV,
+      release: process.env.SENTRY_RELEASE || process.env.RENDER_GIT_COMMIT || "unknown",
       db,
       redis,
-      socket: { connections: socketConnections },
+      socket: { connections: socketConnections, adapterType },
+      jobs: {
+        incidentEngine: incidentJobStatus,
+        housekeeping: housekeepingJobStatus,
+      },
+      maintenance: cfg
+        ? {
+            mode: cfg.maintenanceMode,
+            reason: cfg.maintenanceReason ?? null,
+            scheduledAt: cfg.maintenanceScheduledAt ?? null,
+            endsAt: cfg.maintenanceEndsAt ?? null,
+          }
+        : null,
       platform: {
         activeOrders: activeOrders.status === "fulfilled" ? activeOrders.value : 0,
         onlineAgents: onlineAgents.status === "fulfilled" ? onlineAgents.value : 0,

@@ -26,6 +26,7 @@ function mockRes() {
   res.status = vi.fn().mockReturnValue(res);
   res.json = vi.fn().mockReturnValue(res);
   res.on = vi.fn();
+  res.set = vi.fn().mockReturnValue(res);
   return res;
 }
 

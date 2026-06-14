@@ -16,7 +16,11 @@ export const globalErrorHandler = (err, req, res, next) => {
 
   // Only send non-operational errors to Sentry (operational = expected, user-facing)
   if (!err.isOperational) {
-    captureException(err, { path: req.path, userId: req.user?.userId })
+    captureException(err, {
+      path: req.path,
+      userId: req.user?.userId ?? req.user?.id,
+      requestId: req.id,
+    })
   }
 
   if (err.isOperational) {
