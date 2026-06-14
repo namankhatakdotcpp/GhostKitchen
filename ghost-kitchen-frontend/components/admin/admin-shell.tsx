@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Database,
   LayoutDashboard,
+  LineChart,
   LogOut,
   Map,
   Siren,
@@ -30,6 +31,7 @@ const navGroups = [
     items: [
       { href: "/admin/dashboard",      label: "Dashboard",       icon: LayoutDashboard },
       { href: "/admin/analytics",      label: "Analytics",       icon: BarChart3 },
+      { href: "/admin/exec",           label: "Executive",       icon: LineChart },
     ],
   },
   {
