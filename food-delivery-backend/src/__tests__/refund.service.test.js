@@ -203,7 +203,7 @@ describe("syncRefundStatus", () => {
 
   it("updates status when Cashfree reports a different status", async () => {
     const { default: cashfree } = await import("../config/cashfree.js");
-    cashfree.PGFetchRefund = vi.fn().mockResolvedValue({ data: { refund_status: "SUCCESS" } });
+    cashfree.PGOrderFetchRefund = vi.fn().mockResolvedValue({ data: { refund_status: "SUCCESS" } });
     prisma.refund.update.mockResolvedValue({ ...existingRefund, status: "SUCCESS" });
 
     const result = await syncRefundStatus("REF-1");
@@ -213,7 +213,7 @@ describe("syncRefundStatus", () => {
 
   it("does not update when status is unchanged", async () => {
     const { default: cashfree } = await import("../config/cashfree.js");
-    cashfree.PGFetchRefund = vi.fn().mockResolvedValue({ data: { refund_status: "PENDING" } });
+    cashfree.PGOrderFetchRefund = vi.fn().mockResolvedValue({ data: { refund_status: "PENDING" } });
 
     const result = await syncRefundStatus("REF-1");
     expect(result.status).toBe("PENDING");
@@ -222,7 +222,7 @@ describe("syncRefundStatus", () => {
 
   it("throws 502 when Cashfree fetch fails", async () => {
     const { default: cashfree } = await import("../config/cashfree.js");
-    cashfree.PGFetchRefund = vi.fn().mockRejectedValue(new Error("CF network error"));
+    cashfree.PGOrderFetchRefund = vi.fn().mockRejectedValue(new Error("CF network error"));
     await expect(syncRefundStatus("REF-1")).rejects.toMatchObject({ statusCode: 502 });
   });
 });

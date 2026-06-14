@@ -101,7 +101,7 @@ export const syncRefundStatus = async (cfRefundId) => {
   if (!refund) throw new AppError("Refund not found", 404);
 
   try {
-    const response = await cashfree.PGFetchRefund("2023-08-01", refund.cfOrderId, cfRefundId);
+    const response = await cashfree.PGOrderFetchRefund("2023-08-01", refund.cfOrderId, cfRefundId);
     const status = response?.data?.refund_status;
     if (status && status !== refund.status) {
       await prisma.refund.update({ where: { cfRefundId }, data: { status } });
