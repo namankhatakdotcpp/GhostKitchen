@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ghost-kitchen-backend
+    env: node
+    rootDir: food-delivery-backend
+    # npm ci installs pinned deps (prisma@5.22.0) and the postinstall hook
+    # runs `prisma generate` automatically — no bare `npx prisma` here.
+    buildCommand: npm ci
+    # npm start = node scripts/migrate-deploy.js && node src/server.js
+    # migrate-deploy.js uses the LOCAL prisma binary in node_modules/.bin,
+    # so it always runs Prisma 5.22.0, never a globally-fetched Prisma 7.
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # All secrets (DATABASE_URL, JWT_SECRET, CASHFREE_*, REDIS_URL, etc.)
+      # must be set in the Render dashboard — never commit them here.
