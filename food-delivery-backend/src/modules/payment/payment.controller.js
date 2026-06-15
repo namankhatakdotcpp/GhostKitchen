@@ -255,20 +255,14 @@ export const createPaymentOrder = async (req, res, next) => {
       // SDK v5 returns AxiosResponse — data is nested under .data
       paymentSessionId = response.data?.payment_session_id ?? response.payment_session_id;
     } catch (cfErr) {
-      const cfStatus = cfErr.response?.status;
-      const cfBody = cfErr.response?.data ?? cfErr.data ?? null;
       logger.error("Cashfree create order failed", {
         error: cfErr.message,
-        status: cfStatus,
-        cfResponse: cfBody,
+        status: cfErr.response?.status,
+        cfResponse: cfErr.response?.data ?? cfErr.data ?? null,
         cfOrderId,
         orderAmount: request.order_amount,
       });
-      // Include Cashfree's actual error body so the client can surface the root cause
-      return res.status(502).json({
-        message: "Payment gateway error. Please try again.",
-        _debug: { cfStatus, cfBody, cfOrderId, orderAmount: request.order_amount },
-      });
+      return res.status(502).json({ message: "Payment gateway error. Please try again." });
     }
 
     await prisma.payment.create({
