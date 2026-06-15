@@ -16,18 +16,27 @@ type CustomerChromeProps = {
   children: ReactNode;
 };
 
+function isMaintenanceActive(config: ReturnType<typeof useConfigStore.getState>["config"]): boolean {
+  if (!config.maintenanceMode) return false;
+  if (config.maintenanceEndsAt && new Date() > new Date(config.maintenanceEndsAt)) return false;
+  return true;
+}
+
 export function CustomerChrome({ children }: CustomerChromeProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, getCurrentUser, user } = useAuthStore();
+  const { isAuthenticated, getCurrentUser, user, hasHydrated } = useAuthStore();
   const { config, loaded } = useConfigStore();
   const refreshed = useRef(false);
 
   useEffect(() => {
-    if (loaded && config.maintenanceMode && !user?.roles?.includes("ADMIN")) {
+    // Wait for Zustand to rehydrate from localStorage before checking auth —
+    // otherwise user is null and admins get incorrectly sent to /maintenance.
+    if (!hasHydrated || !loaded) return;
+    if (isMaintenanceActive(config) && !user?.roles?.includes("ADMIN")) {
       router.replace("/maintenance");
     }
-  }, [loaded, config.maintenanceMode, user, router]);
+  }, [hasHydrated, loaded, config, user, router]);
 
   // Refresh user data from server once per mount so roles are always current.
   useEffect(() => {

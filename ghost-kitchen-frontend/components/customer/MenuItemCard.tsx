@@ -2,9 +2,10 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { useCartStore } from "@/store/cartStore";
+import { useAuthStore } from "@/store/authStore";
 import type { MenuItem } from "@/types";
 
 export interface MenuItemCardProps {
@@ -45,7 +46,17 @@ export function MenuItemCard({
   customizable,
 }: MenuItemCardProps) {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const { items, addToCart, updateQuantity } = useCartStore();
+  const { isAuthenticated } = useAuthStore();
+
+  const handleAddToCart = (menuItemId: string) => {
+    if (!isAuthenticated) {
+      router.push(`/login?returnUrl=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    addToCart(menuItemId);
+  };
 
   const currentItem = items.find((item) => item.menuItem.id === id);
   const quantity = currentItem?.quantity ?? 0;
@@ -119,7 +130,7 @@ export function MenuItemCard({
               <span className="text-sm font-bold text-brand">{quantity}</span>
               <button
                 className="text-lg font-bold text-brand"
-                onClick={() => addToCart(id)}
+                onClick={() => handleAddToCart(id)}
                 type="button"
               >
                 +
@@ -132,7 +143,7 @@ export function MenuItemCard({
               exit={{ opacity: 0, scale: 0.92, y: 6 }}
               initial={{ opacity: 0, scale: 0.92, y: 6 }}
               key="add"
-              onClick={() => addToCart(id)}
+              onClick={() => handleAddToCart(id)}
               transition={{ duration: 0.18, ease: "easeOut" }}
               type="button"
             >

@@ -642,10 +642,13 @@ export const changeUserRole = async (id, { role }) => {
 export const grantRole = async (id, { role }) => {
   const validRoles = ["CUSTOMER", "RESTAURANT", "DELIVERY", "ADMIN"];
   if (!validRoles.includes(role)) throw new AppError("Invalid role", 400);
-  const user = await prisma.user.findUnique({ where: { id }, select: { roles: true } });
+  const user = await prisma.user.findUnique({ where: { id }, select: { roles: true, activeRole: true } });
   if (!user) throw new AppError("User not found", 404);
   const roles = Array.from(new Set([...user.roles, role]));
-  return prisma.user.update({ where: { id }, data: { roles }, select: USER_SELECT });
+  // If the user's activeRole is still the default (CUSTOMER), promote it to the
+  // newly granted role so the next login JWT reflects the correct active role.
+  const activeRole = user.activeRole === "CUSTOMER" && role !== "CUSTOMER" ? role : user.activeRole;
+  return prisma.user.update({ where: { id }, data: { roles, activeRole }, select: USER_SELECT });
 };
 
 export const revokeRole = async (id, { role }) => {

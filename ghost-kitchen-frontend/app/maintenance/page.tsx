@@ -34,9 +34,17 @@ export default function MaintenancePage() {
 
   useEffect(() => {
     if (!loaded) return;
-    if (!config.maintenanceMode && !config.maintenanceScheduledAt) router.replace("/");
-    if (user?.roles?.includes("ADMIN")) router.replace("/admin/dashboard");
-  }, [config, loaded, user, router]);
+    if (user?.roles?.includes("ADMIN")) { router.replace("/admin/dashboard"); return; }
+    // Maintenance window elapsed — backend will clear the flag on next poll, but
+    // the frontend should not keep users blocked past the scheduled end time.
+    const maintenanceOver =
+      config.maintenanceMode &&
+      !!config.maintenanceEndsAt &&
+      new Date() > new Date(config.maintenanceEndsAt);
+    if (maintenanceOver || (!config.maintenanceMode && !config.maintenanceScheduledAt)) {
+      router.replace("/");
+    }
+  }, [config, loaded, user, router, now]);
 
   // Tick every second for countdown
   useEffect(() => {

@@ -6,6 +6,7 @@
  */
 
 import * as cartService from "./cart.service.js";
+import { logger } from "../../utils/logger.js";
 
 /**
  * Add item to cart
@@ -35,6 +36,11 @@ export const add = async (req, res, next) => {
       data: result,
     });
   } catch (error) {
+    logger.error("Cart add failed", {
+      userId: req.user?.userId,
+      menuItemId: req.body?.menuItemId,
+      error: error?.message ?? error,
+    });
     next(error);
   }
 };
