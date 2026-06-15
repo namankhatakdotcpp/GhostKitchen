@@ -254,7 +254,14 @@ export const createPaymentOrder = async (req, res, next) => {
       const response = await cashfree.PGCreateOrder(request);
       paymentSessionId = response.payment_session_id;
     } catch (cfErr) {
-      logger.error("Cashfree create order failed", { error: cfErr.message });
+      // Log full Cashfree error response for debugging 502s in production
+      logger.error("Cashfree create order failed", {
+        error: cfErr.message,
+        status: cfErr.response?.status,
+        cfResponse: cfErr.response?.data ?? cfErr.data ?? null,
+        cfOrderId,
+        orderAmount: request.order_amount,
+      });
       return res.status(502).json({ message: "Payment gateway error. Please try again." });
     }
 

@@ -7,6 +7,41 @@ const prisma = new PrismaClient();
 async function seed() {
   console.log("🌱 Checking whether seeding is needed…");
 
+  // ── Coupons — always upserted regardless of restaurant count ───────────────
+  // These are idempotent: safe to re-run on a DB that already has data.
+  // discountValue and minOrder are in PAISE (₹1 = 100 paise).
+  await prisma.coupon.upsert({
+    where: { code: "IITMANDI300" },
+    update: {},
+    create: {
+      code: "IITMANDI300",
+      description: "IIT Mandi special — ₹300 off",
+      discountType: "FLAT",
+      discountValue: 30000,   // ₹300 in paise
+      minOrder: 20000,        // ₹200 minimum in paise
+      maxUses: 500,
+      expiresAt: new Date("2027-12-31T23:59:59.000Z"),
+      isActive: true,
+    },
+  });
+
+  await prisma.coupon.upsert({
+    where: { code: "GHOST20" },
+    update: {},
+    create: {
+      code: "GHOST20",
+      description: "20% off on all orders",
+      discountType: "PERCENTAGE",
+      discountValue: 20,      // 20%
+      minOrder: 15000,        // ₹150 minimum in paise
+      maxUses: 1000,
+      expiresAt: new Date("2027-12-31T23:59:59.000Z"),
+      isActive: true,
+    },
+  });
+
+  console.log("🎟️  Coupons upserted: IITMANDI300, GHOST20");
+
   // ── Idempotency guard ──────────────────────────────────────────────────────
   // Count existing restaurants. If data already exists, bail out immediately
   // so Render deploys never overwrite live data.

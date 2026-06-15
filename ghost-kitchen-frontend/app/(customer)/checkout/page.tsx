@@ -7,12 +7,14 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import api from '@/lib/api'
 import { toRupees } from '@/lib/utils'
 import AvailableCoupons from '@/components/customer/AvailableCoupons'
-import { MapPin, Plus } from 'lucide-react'
+import { MapPin, Plus, CreditCard, Banknote, CheckCircle2 } from 'lucide-react'
+
+type PaymentMethod = 'ONLINE' | 'COD'
 
 interface AppliedCoupon {
   code: string
-  discountAmount: number   // in paise (from API response)
-  finalAmount: number      // in paise
+  discountAmount: number   // paise
+  finalAmount: number      // paise
 }
 
 interface SavedAddress {
@@ -31,27 +33,34 @@ function CheckoutPageContent() {
   const { items, getRestaurantId, getSubtotal, clearCart } = useCartStore()
   const restaurantId = getRestaurantId()
 
-  // Address state
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null)
   const [useNewAddress, setUseNewAddress] = useState(false)
   const [newAddressText, setNewAddressText] = useState('')
+  const [newAddressCity, setNewAddressCity] = useState('')
 
   const [couponCode, setCouponCode] = useState('')
   const [couponInput, setCouponInput] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null)
   const [couponLoading, setCouponLoading] = useState(false)
   const [couponError, setCouponError] = useState('')
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ONLINE')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [deliveryFee, setDeliveryFee] = useState<number | null>(null)
   const [orderInProgress, setOrderInProgress] = useState(false)
+  const [codEnabled, setCodEnabled] = useState(true)
 
   const subtotalPaise = getSubtotal()
 
   useEffect(() => {
     api.get('/config')
-      .then(r => setDeliveryFee(Number(r.data?.defaultDeliveryFee) || 3000))
+      .then(r => {
+        setDeliveryFee(Number(r.data?.defaultDeliveryFee) || 3000)
+        // Respect admin COD toggle
+        if (r.data?.cashOnDelivery === false) setCodEnabled(false)
+      })
       .catch(() => setDeliveryFee(3000))
 
     api.get('/user/addresses')
@@ -66,11 +75,10 @@ function CheckoutPageContent() {
       .catch(() => setUseNewAddress(true))
   }, [])
 
-  // Derived: the address object to send to the API
   function getDeliveryAddress(): { line1: string; city: string } | null {
     if (useNewAddress) {
       if (!newAddressText.trim()) return null
-      return { line1: newAddressText.trim(), city: 'Delhi' }
+      return { line1: newAddressText.trim(), city: newAddressCity.trim() || 'Delhi' }
     }
     const addr = savedAddresses.find(a => a.id === selectedAddressId)
     if (!addr) return null
@@ -78,10 +86,7 @@ function CheckoutPageContent() {
   }
 
   async function handleApplyCoupon() {
-    if (!couponInput.trim()) {
-      setCouponError('Please enter a coupon code')
-      return
-    }
+    if (!couponInput.trim()) { setCouponError('Please enter a coupon code'); return }
     setCouponLoading(true)
     setCouponError('')
     try {
@@ -94,7 +99,7 @@ function CheckoutPageContent() {
       setAppliedCoupon({ code: couponInput.toUpperCase(), discountAmount, finalAmount })
       setCouponCode(couponInput.toUpperCase())
     } catch (err: any) {
-      setCouponError(err.response?.data?.error ?? 'Invalid coupon code')
+      setCouponError(err.response?.data?.error ?? err.response?.data?.message ?? 'Invalid coupon code')
     } finally {
       setCouponLoading(false)
     }
@@ -107,18 +112,62 @@ function CheckoutPageContent() {
     setCouponError('')
   }
 
-  const subtotalRupees = toRupees(subtotalPaise)
-  const deliveryFeeRupees = deliveryFee !== null ? toRupees(deliveryFee) : null
-  const discountRupees = toRupees(appliedCoupon?.discountAmount ?? 0)
-  const totalRupees = deliveryFeeRupees !== null
-    ? Math.max(subtotalRupees + deliveryFeeRupees - discountRupees, 0)
+  const discountPaise = appliedCoupon?.discountAmount ?? 0
+  const totalPaise = deliveryFee !== null
+    ? Math.max(subtotalPaise + deliveryFee - discountPaise, 0)
     : null
 
-  async function handlePlaceOrder() {
-    if (orderInProgress) {
-      setError('Order is already being processed. Please wait...')
-      return
+  const subtotalRupees = toRupees(subtotalPaise)
+  const deliveryFeeRupees = deliveryFee !== null ? toRupees(deliveryFee) : null
+  const discountRupees = toRupees(discountPaise)
+  const totalRupees = totalPaise !== null ? toRupees(totalPaise) : null
+
+  async function handlePlaceOrderCOD(deliveryAddress: { line1: string; city: string }) {
+    const { data } = await api.post('/orders', {
+      restaurantId,
+      items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
+      deliveryAddress,
+      couponCode: couponCode || undefined,
+    })
+    clearCart()
+    router.push(`/order/${data.order.id}/track`)
+  }
+
+  async function handlePlaceOrderOnline(deliveryAddress: { line1: string; city: string }) {
+    const { data } = await api.post('/payments/create-order', {
+      restaurantId,
+      items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
+      deliveryAddress,
+      couponCode: couponCode || undefined,
+    })
+
+    if (data.deliveryFee) setDeliveryFee(data.deliveryFee)
+
+    const cashfree = await load({
+      mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
+    })
+
+    const result = await cashfree.checkout({
+      paymentSessionId: data.paymentSessionId,
+      redirectTarget: '_modal',
+    })
+
+    if (result.error) {
+      throw new Error(result.error.message ?? 'Payment failed. Please try again.')
     }
+
+    if (result.redirect) return
+
+    if (result.paymentDetails) {
+      const verifyRes = await api.post('/payments/verify', { cfOrderId: data.cfOrderId })
+      clearCart()
+      router.push(`/order/${verifyRes.data.orderId}/track`)
+    }
+  }
+
+  async function handlePlaceOrder() {
+    if (orderInProgress) { setError('Order is already being processed. Please wait.'); return }
+
     const deliveryAddress = getDeliveryAddress()
     if (!deliveryAddress) {
       setError(useNewAddress ? 'Please enter a delivery address' : 'Please select a delivery address')
@@ -131,46 +180,36 @@ function CheckoutPageContent() {
     setError('')
 
     try {
-      const { data } = await api.post('/payments/create-order', {
-        restaurantId,
-        items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
-        deliveryAddress,
-        couponCode: couponCode || undefined,
-      })
-
-      if (data.deliveryFee) setDeliveryFee(data.deliveryFee)
-
-      const cashfree = await load({
-        mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
-      })
-
-      const result = await cashfree.checkout({
-        paymentSessionId: data.paymentSessionId,
-        redirectTarget: '_modal',
-      })
-
-      if (result.error) {
-        setError(result.error.message ?? 'Payment failed')
-        setOrderInProgress(false)
-        setIsLoading(false)
-        return
-      }
-
-      if (result.redirect) return
-
-      if (result.paymentDetails) {
-        const verifyRes = await api.post('/payments/verify', { cfOrderId: data.cfOrderId })
-        clearCart()
-        router.push(`/order/${verifyRes.data.orderId}/track`)
+      if (paymentMethod === 'COD') {
+        await handlePlaceOrderCOD(deliveryAddress)
+      } else {
+        await handlePlaceOrderOnline(deliveryAddress)
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message ?? 'Something went wrong. Please try again.'
-      setError(err.response?.status === 409 ? 'Payment already in progress. Please refresh.' : msg)
+      const status = err.response?.status
+      const apiMsg = err.response?.data?.message ?? err.response?.data?.error
+      if (status === 409) {
+        setError('Payment already in progress. Please refresh the page.')
+      } else if (status === 400 && apiMsg) {
+        setError(apiMsg)
+      } else if (status === 502) {
+        setError('Payment gateway is unavailable. Please try Cash on Delivery or retry in a moment.')
+      } else if (err.message) {
+        setError(err.message)
+      } else {
+        setError('Something went wrong. Please try again.')
+      }
     } finally {
       setOrderInProgress(false)
       setIsLoading(false)
     }
   }
+
+  const buttonLabel = isLoading
+    ? 'Processing...'
+    : paymentMethod === 'COD'
+      ? `Place Order — ₹${totalRupees !== null ? totalRupees.toFixed(2) : '...'}`
+      : `Pay ₹${totalRupees !== null ? totalRupees.toFixed(2) : '...'}`
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8">
@@ -195,12 +234,12 @@ function CheckoutPageContent() {
             <span>₹{deliveryFeeRupees !== null ? deliveryFeeRupees : '...'}</span>
           </div>
           {discountRupees > 0 && (
-            <div className="flex justify-between text-green-600">
+            <div className="flex justify-between text-green-600 font-medium">
               <span>Discount ({appliedCoupon?.code})</span>
               <span>-₹{discountRupees.toFixed(2)}</span>
             </div>
           )}
-          <div className="flex justify-between pt-2 font-bold text-gray-900 border-t border-gray-100">
+          <div className="flex justify-between pt-2 font-bold text-gray-900 border-t border-gray-100 text-base">
             <span>Total</span>
             <span>₹{totalRupees !== null ? totalRupees.toFixed(2) : '...'}</span>
           </div>
@@ -266,13 +305,21 @@ function CheckoutPageContent() {
         )}
 
         {(useNewAddress || savedAddresses.length === 0) && (
-          <textarea
-            value={newAddressText}
-            onChange={e => setNewAddressText(e.target.value)}
-            placeholder="Enter your full delivery address..."
-            rows={3}
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
-          />
+          <div className="space-y-2">
+            <textarea
+              value={newAddressText}
+              onChange={e => setNewAddressText(e.target.value)}
+              placeholder="House / flat / building, area, street..."
+              rows={2}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <input
+              value={newAddressCity}
+              onChange={e => setNewAddressCity(e.target.value)}
+              placeholder="City (e.g. Delhi, Bahadurgarh...)"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
         )}
       </div>
 
@@ -283,8 +330,11 @@ function CheckoutPageContent() {
         {appliedCoupon ? (
           <div className="flex items-start justify-between bg-green-50 border border-green-200 rounded-lg p-3">
             <div>
-              <p className="text-sm font-semibold text-green-800">✓ {appliedCoupon.code} applied</p>
-              <p className="text-xs text-green-700 mt-0.5">Discount: -₹{(appliedCoupon.discountAmount / 100).toFixed(2)}</p>
+              <p className="text-sm font-semibold text-green-800 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4" />
+                {appliedCoupon.code} applied
+              </p>
+              <p className="text-xs text-green-700 mt-0.5">Saving ₹{(appliedCoupon.discountAmount / 100).toFixed(2)}</p>
             </div>
             <button onClick={handleRemoveCoupon} className="text-xs font-semibold text-green-700 hover:underline">Remove</button>
           </div>
@@ -293,9 +343,10 @@ function CheckoutPageContent() {
             <input
               value={couponInput}
               onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
-              placeholder="e.g. GHOST20"
+              placeholder="e.g. GHOST20, IITMANDI300"
               className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
               disabled={couponLoading}
+              onKeyDown={e => { if (e.key === 'Enter') handleApplyCoupon() }}
             />
             <button
               onClick={handleApplyCoupon}
@@ -312,6 +363,70 @@ function CheckoutPageContent() {
         {restaurantId && <AvailableCoupons restaurantId={restaurantId} onSelect={code => { setCouponInput(code); setCouponError('') }} />}
       </div>
 
+      {/* Payment method */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <h2 className="font-semibold text-gray-800 mb-3">Payment method</h2>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setPaymentMethod('ONLINE')}
+            className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition ${
+              paymentMethod === 'ONLINE'
+                ? 'border-orange-500 bg-orange-50'
+                : 'border-gray-200 hover:border-gray-300 bg-white'
+            }`}
+          >
+            <CreditCard className={`h-6 w-6 ${paymentMethod === 'ONLINE' ? 'text-orange-600' : 'text-gray-500'}`} />
+            <div className="text-center">
+              <p className={`text-sm font-semibold ${paymentMethod === 'ONLINE' ? 'text-orange-700' : 'text-gray-700'}`}>
+                Pay Online
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">UPI · Cards · Wallets</p>
+            </div>
+            {paymentMethod === 'ONLINE' && (
+              <CheckCircle2 className="h-4 w-4 text-orange-500" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => codEnabled && setPaymentMethod('COD')}
+            disabled={!codEnabled}
+            className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition ${
+              !codEnabled
+                ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                : paymentMethod === 'COD'
+                  ? 'border-orange-500 bg-orange-50'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+            }`}
+          >
+            <Banknote className={`h-6 w-6 ${paymentMethod === 'COD' ? 'text-orange-600' : 'text-gray-500'}`} />
+            <div className="text-center">
+              <p className={`text-sm font-semibold ${paymentMethod === 'COD' ? 'text-orange-700' : 'text-gray-700'}`}>
+                Cash on Delivery
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {codEnabled ? 'Pay at your door' : 'Not available'}
+              </p>
+            </div>
+            {paymentMethod === 'COD' && (
+              <CheckCircle2 className="h-4 w-4 text-orange-500" />
+            )}
+          </button>
+        </div>
+
+        {paymentMethod === 'ONLINE' && (
+          <p className="text-xs text-gray-400 mt-3 text-center">
+            Secured by Cashfree Payments · 256-bit SSL
+          </p>
+        )}
+        {paymentMethod === 'COD' && (
+          <p className="text-xs text-gray-400 mt-3 text-center">
+            Please keep exact change ready at delivery
+          </p>
+        )}
+      </div>
+
       {error && (
         <p className="text-sm text-red-600 mb-4 bg-red-50 rounded-lg px-3 py-2">{error}</p>
       )}
@@ -321,16 +436,12 @@ function CheckoutPageContent() {
         disabled={isLoading || items.length === 0 || deliveryFee === null || orderInProgress}
         className="w-full h-14 bg-brand hover:bg-brand-dark disabled:bg-gray-300 text-white font-bold text-base rounded-xl transition-colors"
       >
-        {isLoading ? 'Processing...' : `Pay ₹${totalRupees !== null ? totalRupees.toFixed(2) : '...'}`}
+        {buttonLabel}
       </button>
-
-      <p className="text-center text-xs text-gray-400 mt-3">
-        Secured by Cashfree Payments
-      </p>
     </div>
   )
 }
 
 export default function CheckoutPage() {
-  return <ProtectedRoute requiredRole={["CUSTOMER"]}><CheckoutPageContent /></ProtectedRoute>;
+  return <ProtectedRoute requiredRole={["CUSTOMER"]}><CheckoutPageContent /></ProtectedRoute>
 }
