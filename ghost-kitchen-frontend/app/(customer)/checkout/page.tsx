@@ -99,7 +99,8 @@ function CheckoutPageContent() {
       setAppliedCoupon({ code: couponInput.toUpperCase(), discountAmount, finalAmount })
       setCouponCode(couponInput.toUpperCase())
     } catch (err: any) {
-      setCouponError(err.response?.data?.error ?? err.response?.data?.message ?? 'Invalid coupon code')
+      // api.ts interceptor transforms axios errors into { error, code } — read from there
+      setCouponError(err.error ?? err.response?.data?.error ?? err.response?.data?.message ?? 'Invalid coupon code')
     } finally {
       setCouponLoading(false)
     }
@@ -186,16 +187,17 @@ function CheckoutPageContent() {
         await handlePlaceOrderOnline(deliveryAddress)
       }
     } catch (err: any) {
-      const status = err.response?.status
-      const apiMsg = err.response?.data?.message ?? err.response?.data?.error
+      // api.ts interceptor transforms axios errors into { error, code } — err.response is undefined
+      const status = err.code ?? err.response?.status
+      const apiMsg = err.error ?? err.response?.data?.message ?? err.response?.data?.error
       if (status === 409) {
         setError('Payment already in progress. Please refresh the page.')
       } else if (status === 400 && apiMsg) {
         setError(apiMsg)
       } else if (status === 502) {
         setError('Payment gateway is unavailable. Please try Cash on Delivery or retry in a moment.')
-      } else if (err.message) {
-        setError(err.message)
+      } else if (apiMsg) {
+        setError(apiMsg)
       } else {
         setError('Something went wrong. Please try again.')
       }

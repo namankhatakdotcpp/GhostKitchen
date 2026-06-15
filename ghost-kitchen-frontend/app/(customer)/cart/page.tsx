@@ -250,7 +250,7 @@ export default function CartPage() {
               <div className="space-y-3 pb-4 border-b border-gray-200">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span className="font-medium">₹{subtotal.toFixed(2)}</span>
+                  <span className="font-medium">₹{(subtotal / 100).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Delivery Fee</span>
@@ -260,7 +260,7 @@ export default function CartPage() {
 
               <div className="flex justify-between text-lg font-bold mt-4 mb-6 text-gray-800">
                 <span>Total</span>
-                <span>₹{subtotal.toFixed(2)}</span>
+                <span>₹{(subtotal / 100).toFixed(2)}</span>
               </div>
 
               {/* Checkout Button */}
