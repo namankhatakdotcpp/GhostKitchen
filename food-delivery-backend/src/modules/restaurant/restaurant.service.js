@@ -4,6 +4,17 @@ import { getSiteConfigCached } from "../config/config.service.js";
 import { cacheGet, cacheSet, cacheDelete, CACHE_KEYS, CACHE_TTL } from "../../utils/cache.js";
 import { logger } from "../../utils/logger.js";
 
+// Haversine formula — returns distance in km between two lat/lng pairs.
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
 export const getRestaurants = async (
   search,
   city,
@@ -12,9 +23,16 @@ export const getRestaurants = async (
   page = 1,
   limit = 12,
   isOpen,
-  cuisine
+  cuisine,
+  lat,
+  lng,
+  radius = 15  // km — default service radius
 ) => {
   try {
+    const latN = lat ? parseFloat(lat) : null;
+    const lngN = lng ? parseFloat(lng) : null;
+    const radiusN = parseFloat(radius) || 15;
+
     const where = {
       isApproved: true,
       suspended: false,
@@ -31,20 +49,77 @@ export const getRestaurants = async (
       // menu item is vegetarian. (`isVeg: true` in this WHERE threw a Prisma
       // validation error and 500'd the whole browse page.)
       ...(isVeg === "true" && {
-        menuItems: { some: {} , none: { isVeg: false, isAvailable: true } },
+        menuItems: { some: {}, none: { isVeg: false, isAvailable: true } },
       }),
       ...(cuisine && { cuisines: { has: cuisine } }),
     };
 
-    const [restaurants, total] = await Promise.all([
+    // Bounding-box pre-filter when user coordinates are provided.
+    // Restaurants that have no lat/lng stored are always included (we can't
+    // determine their distance, so we err on the side of showing them).
+    // The tighter Haversine check runs in JS below after the DB fetch.
+    if (latN !== null && lngN !== null) {
+      const latDelta = radiusN / 111;
+      const lngDelta = radiusN / (111 * Math.cos(latN * Math.PI / 180));
+      where.AND = [
+        {
+          OR: [
+            { lat: null },
+            { lng: null },
+            {
+              lat: { gte: latN - latDelta, lte: latN + latDelta },
+              lng: { gte: lngN - lngDelta, lte: lngN + lngDelta },
+            },
+          ],
+        },
+      ];
+    }
+
+    // Fetch more than the page size when doing in-JS distance filtering,
+    // because the bounding box over-selects (corners are ~41% larger).
+    const fetchLimit = (latN !== null && lngN !== null) ? limit * 2 : limit;
+    const fetchSkip = (latN !== null && lngN !== null) ? 0 : (page - 1) * limit;
+
+    let [restaurants, total] = await Promise.all([
       prisma.restaurant.findMany({
         where,
-        take: limit,
-        skip: (page - 1) * limit,
+        take: fetchLimit,
+        skip: fetchSkip,
         orderBy: { rating: "desc" },
       }),
       prisma.restaurant.count({ where }),
     ]);
+
+    // Haversine pass: filter restaurants with coordinates to those within
+    // the restaurant's own deliveryRadius (or the global radius default).
+    // Restaurants without coordinates pass through unchanged.
+    if (latN !== null && lngN !== null) {
+      const withDistance = restaurants.map((r) => ({
+        ...r,
+        distanceKm:
+          r.lat != null && r.lng != null
+            ? Math.round(haversineKm(latN, lngN, r.lat, r.lng) * 10) / 10
+            : null,
+      }));
+
+      const filtered = withDistance.filter((r) => {
+        if (r.distanceKm === null) return true; // no coords — show anyway
+        return r.distanceKm <= (r.deliveryRadius ?? radiusN);
+      });
+
+      // Sort: restaurants with known distance first (nearest first),
+      // then unknown-distance restaurants sorted by rating.
+      filtered.sort((a, b) => {
+        if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+        if (a.distanceKm !== null) return -1;
+        if (b.distanceKm !== null) return 1;
+        return b.rating - a.rating;
+      });
+
+      total = filtered.length;
+      const start = (page - 1) * limit;
+      restaurants = filtered.slice(start, start + limit);
+    }
 
     return {
       restaurants: restaurants || [],

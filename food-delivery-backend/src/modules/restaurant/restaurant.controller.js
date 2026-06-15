@@ -59,11 +59,14 @@ export const getMyRestaurant = async (req, res) => {
 
 export const listRestaurants = async (req, res) => {
   try {
-    const { city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine } = req.query;
+    const { city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine, lat, lng, radius } = req.query;
     // Cap search length to prevent large LIKE queries from stressing the DB.
     const rawSearch = req.query.search;
     const search = typeof rawSearch === "string" ? rawSearch.slice(0, 100) : undefined;
-    const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit), isOpen, cuisine);
+    // Validate lat/lng — must be finite numbers if provided.
+    const latN = lat !== undefined && isFinite(parseFloat(lat)) ? lat : undefined;
+    const lngN = lng !== undefined && isFinite(parseFloat(lng)) ? lng : undefined;
+    const result = await getRestaurants(search, city, isVeg, minRating, parseInt(page), parseInt(limit), isOpen, cuisine, latN, lngN, radius);
 
     return res.json({ success: true, data: result });
   } catch (error) {

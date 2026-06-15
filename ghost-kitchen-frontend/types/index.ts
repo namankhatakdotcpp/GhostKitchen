@@ -123,7 +123,9 @@ export type FilterOption =
 export interface LocationOption {
   id: string;
   label: string;
-  city: "Delhi" | "Mumbai";
+  city: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface RestaurantFeedCard extends Restaurant {

@@ -11,8 +11,8 @@ import {
   categoryOptions,
   featuredBanners,
   filterOptions,
-  popularLocations,
 } from "@/lib/mockData";
+import { getCurrentLocationOption, GeoLocationError } from "@/lib/geolocation";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/store/userStore";
@@ -63,6 +63,8 @@ export function CustomerHomePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [bannerInput, setBannerInput] = useState("");
   const [activeFilters, setActiveFilters] = useState<FilterOption[]>([]);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const {
@@ -73,7 +75,7 @@ export function CustomerHomePage() {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["restaurants", category, activeFilters, searchTerm, location?.label],
+    queryKey: ["restaurants", category, activeFilters, searchTerm, location?.lat, location?.lng, location?.label],
     queryFn: ({ pageParam = 1 }) =>
       api.get('/restaurants', {
         params: {
@@ -84,6 +86,8 @@ export function CustomerHomePage() {
           isOpen: activeFilters.includes("Open Now") ? "true" : undefined,
           minRating: activeFilters.includes("Rating 4.0+") ? "4" : undefined,
           isVeg: activeFilters.includes("Pure Veg") ? "true" : undefined,
+          lat: location?.lat ?? undefined,
+          lng: location?.lng ?? undefined,
         }
       }).then(r => r.data?.data ?? r.data),
     getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
@@ -165,17 +169,29 @@ export function CustomerHomePage() {
 
   function handleLocationSubmit() {
     const input = bannerInput.trim();
-
-    if (!input) {
-      openLocationModal();
-      return;
-    }
-
+    if (!input) { openLocationModal(); return; }
     setLocation({
       id: `manual-${input.toLowerCase().replace(/\s+/g, "-")}`,
       label: input,
-      city: input.toLowerCase().includes("mumbai") ? "Mumbai" : "Delhi",
+      city: input,
     });
+  }
+
+  async function handleUseCurrentLocation() {
+    setGpsLoading(true);
+    setGpsError(null);
+    try {
+      const { location: loc } = await getCurrentLocationOption();
+      setLocation(loc);
+    } catch (err) {
+      if (err instanceof GeoLocationError) {
+        setGpsError(err.message);
+      } else {
+        setGpsError("Could not detect your location. Please enter it manually.");
+      }
+    } finally {
+      setGpsLoading(false);
+    }
   }
 
   return (
@@ -211,13 +227,17 @@ export function CustomerHomePage() {
                 </Button>
               </div>
               <button
-                className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 transition hover:underline"
-                onClick={() => setLocation(popularLocations[0])}
+                className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-white underline-offset-4 transition hover:underline disabled:opacity-60"
+                disabled={gpsLoading}
+                onClick={handleUseCurrentLocation}
                 type="button"
               >
                 <PinIcon />
-                Use current location
+                {gpsLoading ? "Detecting location…" : "Use current location"}
               </button>
+              {gpsError && (
+                <p className="mt-2 text-xs text-red-200" role="alert">{gpsError}</p>
+              )}
             </div>
           </div>
         </section>
