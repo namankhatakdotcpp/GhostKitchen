@@ -65,8 +65,10 @@ export const initSocket = async (server) => {
       // lazyConnect: true so the connect() Promise rejects inside the try block
       // rather than emitting an error event asynchronously (which would bypass
       // the catch and surface as an uncaught process error).
-      const pubClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true });
-      const subClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true });
+      // retryStrategy: () => null tells ioredis to give up after the initial
+      // connect() failure instead of retrying indefinitely and flooding logs.
+      const pubClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true, retryStrategy: () => null });
+      const subClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true, retryStrategy: () => null });
       // Error handlers must be attached before connect() — ioredis emits 'error'
       // on DNS failure and Node.js crashes if no listener is registered.
       pubClient.on("error", (err) => logger.error("Socket.IO Redis pub error", { error: err.message }));
