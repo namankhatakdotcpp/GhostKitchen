@@ -18,13 +18,7 @@ export const roleMiddleware = (allowedRoles = []) => {
       return next(new AppError("Not authenticated", 401));
     }
 
-    // Check activeRole first; fall back to the roles array so that users whose
-    // activeRole hasn't been updated (e.g. after being granted ADMIN via admin panel)
-    // are not incorrectly blocked.
-    const hasRole =
-      roles.includes(req.user.role) ||
-      (Array.isArray(req.user.roles) && roles.some((r) => req.user.roles.includes(r)));
-    if (!hasRole) {
+    if (!roles.includes(req.user.role)) {
       return next(
         new AppError(
           `Access denied. Required roles: ${roles.join(", ")}`,

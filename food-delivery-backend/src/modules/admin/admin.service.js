@@ -644,11 +644,16 @@ export const grantRole = async (id, { role }) => {
   if (!validRoles.includes(role)) throw new AppError("Invalid role", 400);
   const user = await prisma.user.findUnique({ where: { id }, select: { roles: true, activeRole: true } });
   if (!user) throw new AppError("User not found", 404);
+  const isNewRole = !user.roles.includes(role);
   const roles = Array.from(new Set([...user.roles, role]));
-  // If the user's activeRole is still the default (CUSTOMER), promote it to the
-  // newly granted role so the next login JWT reflects the correct active role.
-  const activeRole = user.activeRole === "CUSTOMER" && role !== "CUSTOMER" ? role : user.activeRole;
-  return prisma.user.update({ where: { id }, data: { roles, activeRole }, select: USER_SELECT });
+  const data = { roles };
+  // Only promote activeRole on a *new* grant and only when the user is currently
+  // operating as CUSTOMER — so granting ADMIN/DELIVERY sets them as the active
+  // role on next login rather than leaving them stuck on CUSTOMER.
+  if (isNewRole && role !== "CUSTOMER" && user.activeRole === "CUSTOMER") {
+    data.activeRole = role;
+  }
+  return prisma.user.update({ where: { id }, data, select: USER_SELECT });
 };
 
 export const revokeRole = async (id, { role }) => {

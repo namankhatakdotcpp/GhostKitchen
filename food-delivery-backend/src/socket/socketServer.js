@@ -62,12 +62,21 @@ export const initSocket = async (server) => {
       const { default: Redis } = await import("ioredis");
       const isUpstash = redisUrl.includes("upstash");
       const tlsOptions = isUpstash ? { tls: { rejectUnauthorized: false } } : {};
-      const pubClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: false });
-      const subClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: false });
+      // lazyConnect: true so the connect() Promise rejects inside the try block
+      // rather than emitting an error event asynchronously (which would bypass
+      // the catch and surface as an uncaught process error).
+      const pubClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true });
+      const subClient = new Redis(redisUrl, { ...tlsOptions, maxRetriesPerRequest: null, lazyConnect: true });
+      // Error handlers must be attached before connect() — ioredis emits 'error'
+      // on DNS failure and Node.js crashes if no listener is registered.
+      pubClient.on("error", (err) => logger.error("Socket.IO Redis pub error", { error: err.message }));
+      subClient.on("error", (err) => logger.error("Socket.IO Redis sub error", { error: err.message }));
+      await pubClient.connect();
+      await subClient.connect();
       io.adapter(createAdapter(pubClient, subClient));
       logger.info("✓ Socket.IO Redis adapter configured (ioredis)");
     } catch (err) {
-      logger.error("❌ Failed to configure Socket.IO Redis adapter. Falling back to memory.", { error: err.message });
+      logger.error("❌ Failed to configure Socket.IO Redis adapter. Falling back to in-memory adapter.", { error: err.message });
     }
   } else {
     logger.warn("⚠ REDIS_URL not set. Socket.IO using in-memory adapter — single-instance only.");

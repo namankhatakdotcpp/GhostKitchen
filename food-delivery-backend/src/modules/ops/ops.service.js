@@ -18,7 +18,10 @@ import {
 } from "./ops.logic.js";
 
 const ACTIVE_DELIVERY_STATUSES = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
-const OPEN_STATUSES = ["PLACED", "PENDING", "CONFIRMED", "PREPARING"];
+// PENDING is a PaymentStatus value; no code path ever sets Order.status = "PENDING".
+// Including it caused a PostgreSQL enum error on DBs created before PENDING was
+// added to the OrderStatus type. Orders flow: PLACED → CONFIRMED → PREPARING → …
+const OPEN_STATUSES = ["PLACED", "CONFIRMED", "PREPARING"];
 
 // Haversine metres — mirrors the assignment algorithm; injected into the rider
 // performance calc so distance is testable without DB.
