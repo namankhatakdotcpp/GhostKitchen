@@ -59,10 +59,13 @@ export const getMyRestaurant = async (req, res) => {
 
 export const listRestaurants = async (req, res) => {
   try {
-    const { city, isVeg, minRating, page = 1, limit = 12, isOpen, cuisine, lat, lng, radius } = req.query;
+    const { isVeg, minRating, page = 1, limit = 12, isOpen, cuisine, lat, lng, radius } = req.query;
     // Cap search length to prevent large LIKE queries from stressing the DB.
     const rawSearch = req.query.search;
     const search = typeof rawSearch === "string" ? rawSearch.slice(0, 100) : undefined;
+    // Sanitize city — cap length, strip tags
+    const rawCity = req.query.city;
+    const city = typeof rawCity === "string" ? rawCity.slice(0, 100).trim() : undefined;
     // Validate lat/lng — must be finite numbers if provided.
     const latN = lat !== undefined && isFinite(parseFloat(lat)) ? lat : undefined;
     const lngN = lng !== undefined && isFinite(parseFloat(lng)) ? lng : undefined;

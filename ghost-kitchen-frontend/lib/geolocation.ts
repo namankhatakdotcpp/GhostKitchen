@@ -46,6 +46,32 @@ export class GeoLocationError extends Error {
   }
 }
 
+// Forward-geocode a city name to lat/lng + state using Nominatim.
+// Used in restaurant onboarding so owners don't have to manually type coordinates.
+export async function geocodeCity(
+  cityName: string
+): Promise<{ lat: number; lng: number; state: string } | null> {
+  try {
+    const url =
+      `${NOMINATIM_BASE}/search?format=json&addressdetails=1&q=` +
+      `${encodeURIComponent(cityName + ", India")}&limit=1&accept-language=en`;
+    const res = await fetch(url, {
+      headers: { "Accept-Language": "en", "User-Agent": "GhostKitchen/1.0" },
+    });
+    if (!res.ok) return null;
+    const results = await res.json();
+    if (!Array.isArray(results) || !results.length) return null;
+    const r = results[0];
+    return {
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+      state: r.address?.state ?? "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getCurrentLocationOption(): Promise<GeoLocationResult> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {

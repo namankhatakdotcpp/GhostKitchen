@@ -32,6 +32,7 @@ export const getRestaurants = async (
     const latN = lat ? parseFloat(lat) : null;
     const lngN = lng ? parseFloat(lng) : null;
     const radiusN = parseFloat(radius) || 15;
+    const userCity = city ? city.toLowerCase().trim() : null;
 
     const where = {
       isApproved: true,
@@ -90,9 +91,8 @@ export const getRestaurants = async (
       prisma.restaurant.count({ where }),
     ]);
 
-    // Haversine pass: filter restaurants with coordinates to those within
-    // the restaurant's own deliveryRadius (or the global radius default).
-    // Restaurants without coordinates pass through unchanged.
+    // Location filtering pass — runs in JS after the DB bounding-box pre-filter.
+    // Priority: Haversine (most accurate) > city match (text) > no filter.
     if (latN !== null && lngN !== null) {
       const withDistance = restaurants.map((r) => ({
         ...r,
@@ -103,12 +103,18 @@ export const getRestaurants = async (
       }));
 
       const filtered = withDistance.filter((r) => {
-        if (r.distanceKm === null) return true; // no coords — show anyway
-        return r.distanceKm <= (r.deliveryRadius ?? radiusN);
+        if (r.distanceKm !== null) {
+          // Has GPS coords: Haversine check against restaurant's own delivery radius
+          return r.distanceKm <= (r.deliveryRadius ?? radiusN);
+        }
+        // No GPS coords: fall back to city string match so a Bahadurgarh user
+        // doesn't see Delhi restaurants that happen to have no coordinates.
+        const rc = (r.address?.city || "").toLowerCase().trim();
+        if (!rc || !userCity) return true; // Truly unknown — show anyway
+        return rc === userCity;
       });
 
-      // Sort: restaurants with known distance first (nearest first),
-      // then unknown-distance restaurants sorted by rating.
+      // Sort: nearest-first for restaurants with coordinates; then by rating.
       filtered.sort((a, b) => {
         if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
         if (a.distanceKm !== null) return -1;
@@ -119,6 +125,27 @@ export const getRestaurants = async (
       total = filtered.length;
       const start = (page - 1) * limit;
       restaurants = filtered.slice(start, start + limit);
+
+      logger.info("Restaurant list filtered by location", {
+        userLat: latN, userLng: lngN, userCity, radiusKm: radiusN,
+        dbRows: withDistance.length, afterFilter: total,
+      });
+    } else if (userCity) {
+      // No GPS — use city string only. Never show restaurants from a different city.
+      // Restaurants with no address.city are shown anyway (can't determine location).
+      const allForCity = restaurants.filter((r) => {
+        const rc = (r.address?.city || "").toLowerCase().trim();
+        if (!rc) return true; // No city stored — benefit of the doubt
+        return rc === userCity;
+      });
+
+      logger.info("Restaurant list filtered by city", {
+        userCity, dbRows: restaurants.length, afterFilter: allForCity.length,
+      });
+
+      total = allForCity.length;
+      const start = (page - 1) * limit;
+      restaurants = allForCity.slice(start, start + limit);
     }
 
     return {

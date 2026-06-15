@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { CitySearch } from "@/components/ui/city-search";
 import api from "@/lib/api";
+import { getCurrentLocationOption, GeoLocationError } from "@/lib/geolocation";
 import { toPaise } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
@@ -16,7 +17,7 @@ const CUISINES = [
 const CATEGORIES = ["Starters", "Main Course", "Breads", "Rice", "Beverages", "Desserts", "Sides"];
 
 type Step1 = { name: string; description: string; cuisines: string[]; imageUrl: string };
-type Step2 = { city: string; addressLine: string; deliveryRadius: number; deliveryFee: number; minOrder: number; deliveryTime: number; opensAt: string; closesAt: string };
+type Step2 = { city: string; addressLine: string; deliveryRadius: number; deliveryFee: number; minOrder: number; deliveryTime: number; opensAt: string; closesAt: string; lat?: number; lng?: number; state?: string };
 type Step3 = { itemName: string; itemDescription: string; itemPrice: number; itemCategory: string; itemIsVeg: boolean; itemImageUrl: string; itemIsBestseller: boolean };
 
 interface ExistingRestaurant {
@@ -56,6 +57,8 @@ export default function RestaurantOnboarding() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsMsg, setGpsMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [s1, setS1] = useState<Step1>({ name: "", description: "", cuisines: [], imageUrl: "" });
   const [s2, setS2] = useState<Step2>({ city: "", addressLine: "", deliveryRadius: 5, deliveryFee: 30, minOrder: 99, deliveryTime: 30, opensAt: "10:00", closesAt: "22:00" });
@@ -96,6 +99,26 @@ export default function RestaurantOnboarding() {
   function handleBranchSelect(r: ExistingRestaurant) {
     setSelectedBranch(r);
     setS1({ name: r.name, description: r.description, cuisines: r.cuisines, imageUrl: r.imageUrl });
+  }
+
+  async function detectRestaurantLocation() {
+    setGpsLoading(true);
+    setGpsMsg(null);
+    try {
+      const { location } = await getCurrentLocationOption();
+      setS2((prev) => ({
+        ...prev,
+        city: location.city !== "Current Location" ? location.city : prev.city,
+        lat: location.lat,
+        lng: location.lng,
+      }));
+      setGpsMsg({ text: `Detected: ${location.label}`, ok: true });
+    } catch (err) {
+      const msg = err instanceof GeoLocationError ? err.message : "Could not detect location.";
+      setGpsMsg({ text: msg, ok: false });
+    } finally {
+      setGpsLoading(false);
+    }
   }
 
   function validateStep(n: number) {
@@ -145,6 +168,8 @@ export default function RestaurantOnboarding() {
         deliveryTime: s2.deliveryTime,
         minOrder: toPaise(s2.minOrder),
         deliveryRadius: s2.deliveryRadius,
+        ...(s2.lat !== undefined && { lat: s2.lat }),
+        ...(s2.lng !== undefined && { lng: s2.lng }),
       };
 
       if (mode === "branch") {
@@ -378,13 +403,33 @@ export default function RestaurantOnboarding() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">City / Area *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-semibold text-[#1C1C1C]">City / Area *</label>
+                  <button
+                    type="button"
+                    disabled={gpsLoading}
+                    onClick={detectRestaurantLocation}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#FF5200] hover:underline disabled:opacity-60"
+                  >
+                    {gpsLoading ? "Detecting…" : "📍 Auto-detect location"}
+                  </button>
+                </div>
                 <CitySearch
                   value={s2.city}
-                  onChange={(city) => setS2({ ...s2, city })}
+                  onChange={(city) => setS2({ ...s2, city, lat: undefined, lng: undefined })}
                   error={errors.city}
                   placeholder="Search your city or neighbourhood…"
                 />
+                {gpsMsg && (
+                  <p className={`mt-1 text-xs ${gpsMsg.ok ? "text-green-600" : "text-red-600"}`}>
+                    {gpsMsg.text}
+                  </p>
+                )}
+                {s2.lat && s2.lng && (
+                  <p className="mt-1 text-xs text-green-600">
+                    ✓ GPS coordinates captured ({s2.lat.toFixed(4)}, {s2.lng.toFixed(4)})
+                  </p>
+                )}
               </div>
 
               <div>

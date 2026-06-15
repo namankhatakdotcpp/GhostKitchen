@@ -57,7 +57,7 @@ function PinIcon() {
 }
 
 export function CustomerHomePage() {
-  const { location, setLocation, openLocationModal } = useUserStore();
+  const { location, setLocation, openLocationModal, clearLocation } = useUserStore();
   const { user } = useAuthStore();
   const [category, setCategory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -66,6 +66,17 @@ export function CustomerHomePage() {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const clearedStale = useRef(false);
+
+  // One-time cleanup: if the stored location is the old hardcoded Hauz Khas default
+  // (has no GPS coordinates), treat it as unset so the user picks a real location.
+  useEffect(() => {
+    if (clearedStale.current) return;
+    clearedStale.current = true;
+    if (location && !location.lat && !location.lng && location.id === "hauz-khas") {
+      clearLocation();
+    }
+  }, [location, clearLocation]);
 
   const {
     data,
@@ -75,7 +86,7 @@ export function CustomerHomePage() {
     isFetchingNextPage,
     isLoading,
   } = useInfiniteQuery({
-    queryKey: ["restaurants", category, activeFilters, searchTerm, location?.lat, location?.lng, location?.label],
+    queryKey: ["restaurants", category, activeFilters, searchTerm, location?.lat, location?.lng, location?.city],
     queryFn: ({ pageParam = 1 }) =>
       api.get('/restaurants', {
         params: {
@@ -88,6 +99,7 @@ export function CustomerHomePage() {
           isVeg: activeFilters.includes("Pure Veg") ? "true" : undefined,
           lat: location?.lat ?? undefined,
           lng: location?.lng ?? undefined,
+          city: location?.city ?? undefined,
         }
       }).then(r => r.data?.data ?? r.data),
     getNextPageParam: (lastPage) => lastPage.page < lastPage.pages ? lastPage.page + 1 : undefined,
