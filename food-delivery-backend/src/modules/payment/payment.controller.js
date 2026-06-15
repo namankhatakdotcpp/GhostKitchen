@@ -252,7 +252,8 @@ export const createPaymentOrder = async (req, res, next) => {
     let paymentSessionId;
     try {
       const response = await cashfree.PGCreateOrder(request);
-      paymentSessionId = response.payment_session_id;
+      // SDK v5 returns AxiosResponse — data is nested under .data
+      paymentSessionId = response.data?.payment_session_id ?? response.payment_session_id;
     } catch (cfErr) {
       // Log full Cashfree error response for debugging 502s in production
       logger.error("Cashfree create order failed", {
@@ -319,7 +320,8 @@ export const verifyPaymentAndCreateOrder = async (req, res, next) => {
     // Verify with Cashfree
     let cfOrderStatus;
     try {
-      const response = await cashfree.PGFetchOrder("2025-01-01", cfOrderId);
+      // PGFetchOrder(order_id) — no API version arg; response is AxiosResponse
+      const response = await cashfree.PGFetchOrder(cfOrderId);
       cfOrderStatus = response.data?.order_status ?? response.order_status;
     } catch (cfErr) {
       logger.error("Cashfree fetch order failed", { cfOrderId, error: cfErr.message });

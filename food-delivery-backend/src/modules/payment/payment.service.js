@@ -182,19 +182,21 @@ export const createPaymentSession = async (orderId, user) => {
 
   try {
     const response = await cashfree.PGCreateOrder(request);
+    // SDK v5 returns AxiosResponse — actual payload is under .data
+    const payload = response.data ?? response;
 
     logger.info("Payment session created", {
       orderId,
       userId: user.id,
       amount: order.total,
-      paymentSessionId: response.payment_session_id,
+      paymentSessionId: payload.payment_session_id,
     });
 
     return {
-      order_id: response.order_id,
-      payment_session_id: response.payment_session_id,
-      amount: response.order_amount,
-      currency: response.order_currency,
+      order_id: payload.order_id,
+      payment_session_id: payload.payment_session_id,
+      amount: payload.order_amount,
+      currency: payload.order_currency,
     };
   } catch (error) {
     logger.error("Cashfree API error creating payment session", {
