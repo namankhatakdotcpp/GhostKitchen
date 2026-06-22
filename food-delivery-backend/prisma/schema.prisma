@@ -65,6 +65,11 @@ model User {
   vehicleType     String?
   vehicleNumber   String?
   isOnDuty        Boolean   @default(false)
+  // Rider's operating city (collected at onboarding) and max distance they'll
+  // travel from a restaurant, in km — used by assignDeliveryAgent to avoid
+  // matching a rider in one city to an order in another.
+  city            String?
+  maxRadiusKm     Int       @default(20)
 
   isBlocked       Boolean   @default(false)
   isSuspended     Boolean   @default(false)
@@ -162,6 +167,10 @@ model Restaurant {
   reviewCount    Int        @default(0)
   imageUrl       String
   address        Json
+  // Scalar mirror of address.city — kept in sync by createRestaurant/
+  // updateRestaurant. Needed because Prisma's `distinct` can't operate on a
+  // JSON field, and city-based rider matching needs an indexable column.
+  city           String?
   lat            Float?
   lng            Float?
   isOpen         Boolean    @default(true)
@@ -179,6 +188,7 @@ model Restaurant {
   @@index([slug])
   @@index([isOpen])
   @@index([rating])
+  @@index([city])
 }
 
 model MenuItem {

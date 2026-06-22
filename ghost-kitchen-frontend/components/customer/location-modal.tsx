@@ -1,12 +1,20 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 
+import { api } from "@/lib/api";
 import { popularLocations } from "@/lib/mockData";
 import { getCurrentLocationOption, GeoLocationError } from "@/lib/geolocation";
 import { useUserStore } from "@/store/userStore";
 import type { LocationOption } from "@/types";
+
+async function fetchCityOptions(): Promise<LocationOption[]> {
+  const { data } = await api.get<{ success: boolean; data: string[] }>("/restaurants/cities");
+  const cities = data?.data ?? [];
+  return cities.map((city) => ({ id: city.toLowerCase(), label: city, city }));
+}
 
 function PinIcon() {
   return (
@@ -41,7 +49,20 @@ export function LocationModal() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const matchingLocations = popularLocations.filter((location) =>
+  // Real cities with open restaurants, sourced from the backend. Falls back
+  // to the static mock list if the request fails so the picker never goes
+  // empty (e.g. transient network error, backend redeploying).
+  const citiesQuery = useQuery({
+    queryKey: ["restaurant-cities"],
+    queryFn: fetchCityOptions,
+    enabled: isLocationModalOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const availableLocations =
+    citiesQuery.data && citiesQuery.data.length > 0 ? citiesQuery.data : popularLocations;
+
+  const matchingLocations = availableLocations.filter((location) =>
     location.label.toLowerCase().includes(query.toLowerCase()),
   );
 

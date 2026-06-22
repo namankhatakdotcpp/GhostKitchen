@@ -138,7 +138,8 @@ export const placeOrder = async (req, res) => {
       error.message?.includes("Coupon") ||
       error.message?.includes("Not found") ||
       error.message?.includes("not accepting orders") ||
-      error.message?.includes("Restaurant not found")
+      error.message?.includes("Restaurant not found") ||
+      error.message?.includes("same city")
     ) {
       return res.status(400).json({ success: false, message: error.message });
     }
@@ -231,6 +232,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
     if (io) {
       emitOrderStatusUpdated({
         orderId,
+        restaurantId: currentOrder.restaurantId,
         status: newStatus,
         estimatedDelivery: estimatedDelivery instanceof Date
           ? estimatedDelivery.toISOString()

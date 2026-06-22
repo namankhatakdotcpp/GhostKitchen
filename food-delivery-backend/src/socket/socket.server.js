@@ -10,11 +10,16 @@ function withSocketServer(callback) {
   }
 }
 
-export function emitOrderStatusUpdated({ orderId, status, estimatedDelivery = null, timestamp }) {
+export function emitOrderStatusUpdated({ orderId, restaurantId = null, status, estimatedDelivery = null, timestamp }) {
   withSocketServer((io) => {
     const payload = { orderId, status, estimatedDelivery, timestamp };
     io.to(`order-${orderId}`).emit("order:status-updated", payload);
-    io.to(`shop-${orderId}`).emit("order:status-updated", payload);
+    // Was `shop-${orderId}` — orderId where restaurantId belongs, so this
+    // never reached a room any shop dashboard actually joins (shop dashboards
+    // join `shop-${restaurantId}`). Harmless today (shop-orders-page.tsx
+    // doesn't listen for this event, relying on order:new/agent:assigned plus
+    // a 30s poll), but still wrong and worth fixing for future listeners.
+    if (restaurantId) io.to(`shop-${restaurantId}`).emit("order:status-updated", payload);
     io.to("admin").emit("order:status-updated", payload);
   });
 }

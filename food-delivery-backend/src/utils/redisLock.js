@@ -1,4 +1,4 @@
-import { getRedis } from "../config/redis.js";
+import { getRedis, getRedisClientType } from "../config/redis.js";
 import { logger } from "./logger.js";
 
 /**
@@ -20,8 +20,14 @@ export const acquireRedisLock = async (key, ttlSec) => {
   if (!r) return true; // no Redis → no coordination; all instances run (single-process mode)
   try {
     let result;
-    // Detect client type: ioredis exposes setex; Upstash REST client does not.
-    if (typeof r.setex === "function") {
+    // Client type must come from config/redis.js's explicit tag, not
+    // feature-detection: both ioredis AND @upstash/redis implement .setex(),
+    // so `typeof r.setex === "function"` can't tell them apart. Using the
+    // ioredis positional call against the Upstash client previously threw
+    // "Cannot use 'in' operator to search for 'nx' in EX" on every lock
+    // attempt — its SetCommand destructures (key, value, opts) and the
+    // positional "EX" string ended up as opts, which it then tried `"nx" in`.
+    if (getRedisClientType() === "ioredis") {
       result = await r.set(key, "1", "EX", ttlSec, "NX");
     } else {
       result = await r.set(key, "1", { nx: true, ex: ttlSec });

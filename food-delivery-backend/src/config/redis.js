@@ -3,6 +3,12 @@ import { logger } from "../utils/logger.js";
 
 let redis = null;
 let isRedisReady = false;
+// Explicit client-type tag — duck-typing on shared method names (e.g.
+// `.setex`) is unreliable because BOTH ioredis and the @upstash/redis REST
+// client implement `.setex()`, so `typeof r.setex === "function"` can't
+// actually distinguish them (this caused redisLock.js to pick the wrong
+// call signature for whichever client was actually connected).
+let redisClientType = null; // "ioredis" | "upstash" | null
 
 // Try to initialize Upstash Redis first
 async function initUpstashRedis() {
@@ -13,6 +19,7 @@ async function initUpstashRedis() {
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
       });
+      redisClientType = "upstash";
       logger.info("✓ Connected to Upstash Redis (REST API)");
       return true;
     }
@@ -51,6 +58,7 @@ async function initIORedis() {
     redis.on("close", () => logger.warn("⚠ Redis connection closed"));
     redis.on("reconnecting", () => logger.debug("🔄 Redis attempting to reconnect"));
 
+    redisClientType = "ioredis";
     logger.info("✓ Connected to ioredis");
     return true;
   } catch (err) {
@@ -87,6 +95,10 @@ export const connectRedis = async () => {
 export const getRedis = () => {
   return isRedisReady && redis ? redis : null;
 };
+
+// "ioredis" | "upstash" | null — see redisClientType comment above for why
+// this is needed instead of feature-detection.
+export const getRedisClientType = () => (isRedisReady ? redisClientType : null);
 
 export const redisHealthCheck = async () => {
   if (!getRedis()) return { status: "unhealthy", message: "Redis not connected or fallback mode active" };

@@ -15,6 +15,19 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+// Distinct cities with at least one open restaurant — backs the city
+// picker in location-modal.tsx. Purely additive: does not change how
+// getRestaurants itself filters (still GPS-radius + lenient city fallback).
+export const getCities = async () => {
+  const rows = await prisma.restaurant.findMany({
+    where: { isOpen: true, city: { not: null } },
+    select: { city: true },
+    distinct: ["city"],
+    orderBy: { city: "asc" },
+  });
+  return rows.map((r) => r.city).filter(Boolean);
+};
+
 export const getRestaurants = async (
   search,
   city,
@@ -287,6 +300,8 @@ export const createRestaurant = async (data, ownerId) => {
         deliveryTime: data.deliveryTime,
         minOrder: data.minOrder,
       },
+      // Scalar mirror of address.city — see schema.prisma comment.
+      city: data.city || null,
       deliveryRadius: data.deliveryRadius || 5,
       isApproved: cfg ? !cfg.requireApproval : true,
       isOpen: cfg ? !cfg.requireApproval : true,
@@ -335,6 +350,8 @@ export const updateRestaurant = async (id, data) => {
     if (data.minOrder !== undefined) address.minOrder = data.minOrder;
 
     updateData.address = address;
+    // Scalar mirror of address.city — see schema.prisma comment.
+    if (data.city !== undefined) updateData.city = data.city || null;
   }
 
   const updated = await prisma.restaurant.update({

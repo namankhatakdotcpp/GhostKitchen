@@ -228,6 +228,7 @@ export const createPaymentOrder = async (req, res, next) => {
       restaurantId,
       items,
       couponCode,
+      deliveryAddress,
     });
 
     const cfOrderId = `GK-${uuid().slice(0, 8).toUpperCase()}`;
@@ -287,7 +288,11 @@ export const createPaymentOrder = async (req, res, next) => {
       deliveryFee,
     });
   } catch (error) {
-    if (error.message?.includes("Invalid items") || error.message?.includes("coupon")) {
+    if (
+      error.message?.includes("Invalid items") ||
+      error.message?.includes("coupon") ||
+      error.message?.includes("same city")
+    ) {
       return res.status(400).json({ message: error.message });
     }
     logger.error("Create payment order error", { error: error.message });

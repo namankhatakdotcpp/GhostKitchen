@@ -50,8 +50,14 @@ const mockRedis = {
 };
 
 let redisEnabled = true;
+// Explicit client-type tag, mirroring config/redis.js — redisLock.js uses
+// this (not duck-typing on .setex) to pick the call signature, since both
+// ioredis and @upstash/redis implement .setex() and can't be told apart
+// that way (see redisLock.js comment for the bug this caused).
+let redisClientType = "ioredis";
 vi.mock("../config/redis.js", () => ({
   getRedis: vi.fn(() => (redisEnabled ? mockRedis : null)),
+  getRedisClientType: vi.fn(() => (redisEnabled ? redisClientType : null)),
   connectRedis: vi.fn().mockResolvedValue(undefined),
   redisHealthCheck: vi.fn().mockResolvedValue({ status: "healthy" }),
 }));
@@ -100,6 +106,7 @@ function resetStore() {
 describe("acquireRedisLock", () => {
   beforeEach(() => {
     redisEnabled = true;
+    redisClientType = "ioredis";
     resetStore();
   });
 
@@ -136,6 +143,20 @@ describe("acquireRedisLock", () => {
     expect(ttl).toBe(90);
     expect(nx).toBe("NX");
   });
+
+  // Regression test for the actual production bug: @upstash/redis also
+  // implements .setex(), so detecting "is this ioredis?" by checking for
+  // .setex() presence can't distinguish the two clients. Using the ioredis
+  // positional call against Upstash's SetCommand threw "Cannot use 'in'
+  // operator to search for 'nx' in EX" on every lock attempt in production.
+  it("uses the options-object call signature for the Upstash client, even though the mock also exposes .setex", async () => {
+    redisClientType = "upstash";
+    await acquireRedisLock("lock:test-job", 90);
+    const [key, val, opts] = mockRedis.set.mock.calls[0];
+    expect(key).toBe("lock:test-job");
+    expect(val).toBe("1");
+    expect(opts).toEqual({ nx: true, ex: 90 });
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -145,6 +166,7 @@ describe("acquireRedisLock", () => {
 describe("releaseRedisLock", () => {
   beforeEach(() => {
     redisEnabled = true;
+    redisClientType = "ioredis";
     resetStore();
   });
 
@@ -173,6 +195,7 @@ describe("releaseRedisLock", () => {
 describe("Lock contention — two-instance job lifecycle", () => {
   beforeEach(() => {
     redisEnabled = true;
+    redisClientType = "ioredis";
     resetStore();
   });
 

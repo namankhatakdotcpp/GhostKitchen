@@ -27,29 +27,43 @@ function makeStore(prefix) {
 }
 
 // Shared skip function: when the Redis store throws (Redis down, network error),
-// let the request through rather than returning a 500.
-// This keeps the rate limiter non-fatal — a Redis outage should never block users.
-const skipOnStoreError = (store) => {
+// fall back to a real per-instance in-memory counter instead of swallowing the
+// error with a fake result. A previous version returned { totalHits: 0 } as
+// that sentinel, but express-rate-limit validates totalHits must be a positive
+// integer — 0 failed that validation and threw on every single request whenever
+// Redis was unreachable, turning "Redis outage" into "entire API down". This
+// in-memory Map gives real (per-instance, not cross-instance) rate limiting
+// during an outage instead, which is the actual fail-open behavior intended.
+const skipOnStoreError = (store, windowMs) => {
   const origIncrement = store.increment.bind(store);
+  const fallbackHits = new Map(); // key -> { count, resetTime }
+
   store.increment = async (...args) => {
     try {
       return await origIncrement(...args);
     } catch {
-      // Return a sentinel that tells express-rate-limit the request is fine
-      return { totalHits: 0, resetTime: undefined };
+      const [key] = args;
+      const now = Date.now();
+      let entry = fallbackHits.get(key);
+      if (!entry || entry.resetTime <= now) {
+        entry = { count: 0, resetTime: now + windowMs };
+        fallbackHits.set(key, entry);
+      }
+      entry.count += 1;
+      return { totalHits: entry.count, resetTime: new Date(entry.resetTime) };
     }
   };
   return store;
 };
 
-const authStore = skipOnStoreError(makeStore("auth"));
-const roleSwitchStore = skipOnStoreError(makeStore("role-switch"));
-const paymentStore = skipOnStoreError(makeStore("payment"));
-const generalStore = skipOnStoreError(makeStore("general"));
-const browseStore = skipOnStoreError(makeStore("browse"));
-const orderCreateStore = skipOnStoreError(makeStore("order-create"));
-const couponStore = skipOnStoreError(makeStore("coupon"));
-const roleRegStore = skipOnStoreError(makeStore("role-reg"));
+const authStore = skipOnStoreError(makeStore("auth"), 15 * 60 * 1000);
+const roleSwitchStore = skipOnStoreError(makeStore("role-switch"), 60 * 1000);
+const paymentStore = skipOnStoreError(makeStore("payment"), 60 * 1000);
+const generalStore = skipOnStoreError(makeStore("general"), 60 * 1000);
+const browseStore = skipOnStoreError(makeStore("browse"), 60 * 1000);
+const orderCreateStore = skipOnStoreError(makeStore("order-create"), 60 * 1000);
+const couponStore = skipOnStoreError(makeStore("coupon"), 15 * 60 * 1000);
+const roleRegStore = skipOnStoreError(makeStore("role-reg"), 60 * 60 * 1000);
 
 // ── Auth endpoints — tightest limit ──────────────────────────────────────────
 export const authLimiter = rateLimit({

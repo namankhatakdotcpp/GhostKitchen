@@ -1,6 +1,7 @@
 import { logger } from "../../utils/logger.js";
 import {
   getRestaurants,
+  getCities,
   getRestaurantById,
   getRestaurantMenu,
   createRestaurant,
@@ -54,6 +55,16 @@ export const getMyRestaurant = async (req, res) => {
   } catch (error) {
     logger.error("Error fetching own restaurant", { error: error.message });
     return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const listCities = async (req, res) => {
+  try {
+    const cities = await getCities();
+    return res.json({ success: true, data: cities });
+  } catch (error) {
+    logger.error("Failed to fetch restaurant cities", { error: error.message });
+    return res.status(500).json({ success: false, message: "Failed to fetch cities" });
   }
 };
 

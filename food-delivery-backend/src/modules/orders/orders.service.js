@@ -79,6 +79,19 @@ export const getOrderById = async (orderId) => {
   return serializeOrder(order);
 };
 
+// Soft safety-net, not a full discovery-layer rewrite: only rejects when
+// BOTH the restaurant's city and the delivery address's city are known and
+// clearly different. Restaurant.city is a new field backfilled from the
+// address JSON blob, so most rows may still have it unset — never reject
+// on missing data, only on a confident mismatch.
+function assertDeliveryCityMatches(restaurant, deliveryAddress) {
+  const restaurantCity = (restaurant?.city || restaurant?.address?.city || "").toLowerCase().trim();
+  const addressCity = (deliveryAddress?.city || "").toLowerCase().trim();
+  if (restaurantCity && addressCity && restaurantCity !== addressCity) {
+    throw new Error("Delivery address must be in the same city as the restaurant");
+  }
+}
+
 export const createOrder = async (payload, customerId) => {
   // ============================================
   // SECURITY: Server-side calculation only
@@ -88,11 +101,12 @@ export const createOrder = async (payload, customerId) => {
   // 0. Verify restaurant exists and is accepting orders
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: payload.restaurantId },
-    select: { isOpen: true, suspended: true, isApproved: true },
+    select: { isOpen: true, suspended: true, isApproved: true, city: true, address: true },
   });
   if (!restaurant) throw new Error("Restaurant not found");
   if (restaurant.suspended || !restaurant.isApproved) throw new Error("Restaurant not found");
   if (!restaurant.isOpen) throw new Error("Restaurant is not accepting orders right now");
+  assertDeliveryCityMatches(restaurant, payload.deliveryAddress);
 
   // 1. Extract menuItemIds from request
   const menuItemIds = payload.items.map((item) => item.menuItemId);
@@ -224,6 +238,18 @@ export const updateAgentAvailability = async (agentId, isAvailable, coords) => {
   });
 };
 
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371; // km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export const assignDeliveryAgent = async (orderId, io) => {
   logger.info("Assigning agent for order — started", { orderId });
 
@@ -256,38 +282,63 @@ export const assignDeliveryAgent = async (orderId, io) => {
   logger.info("Assigning agent for order", { orderId, availableCount: availableAgents.length });
 
   if (availableAgents.length === 0) {
-    // No agents available — emit alert to admin room
     io.to("admin").emit("order:no-agent", {
       orderId,
       restaurantName: order.restaurant.name,
+      reason: "no_agents_at_all",
     });
     return null;
   }
 
-  // 3. Simple distance-based selection (Haversine formula)
-  // Pick the closest available agent to the restaurant
-  function haversine(lat1, lng1, lat2, lng2) {
-    const R = 6371; // km
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLng = ((lng2 - lng1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLng / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  // 3. City filter — never match cross-city. Falls back to the full
+  // citywide-unaware pool when city data is unavailable (most riders/
+  // restaurants haven't set one yet, since this is a new field) so this
+  // never regresses to "nobody gets assigned" the way Bug 2 just did.
+  const restaurantCity = (order.restaurant.city || order.restaurant.address?.city || "")
+    .toLowerCase().trim();
+
+  let candidatePool = availableAgents;
+  if (restaurantCity) {
+    const cityMatched = availableAgents.filter(
+      (agent) => (agent.city || "").toLowerCase().trim() === restaurantCity
+    );
+    if (cityMatched.length > 0) {
+      candidatePool = cityMatched;
+      logger.info("Assigning agent for order — city match", { orderId, city: restaurantCity, count: cityMatched.length });
+    } else {
+      logger.warn("Assigning agent for order — no city match, falling back to full pool", {
+        orderId, city: restaurantCity, fullPoolCount: availableAgents.length,
+      });
+    }
   }
 
+  // 4. Radius filter — each rider has their own max radius (default 20km).
+  // Unlike the city filter, this is NOT a soft fallback: maxRadiusKm has
+  // always defaulted to a generous value for every rider, so an empty
+  // result here means a genuine "nobody is close enough", not missing data.
   const restaurantLat = order.restaurant.lat ?? 28.6139;
   const restaurantLng = order.restaurant.lng ?? 77.2090;
 
-  const agentWithDistance = availableAgents.map((agent) => ({
-    ...agent,
-    distance: haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng),
-  }));
+  const inRangeAgents = candidatePool
+    .map((agent) => ({
+      ...agent,
+      distance: haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng),
+    }))
+    .filter((agent) => agent.distance <= (agent.maxRadiusKm ?? 20))
+    .sort((a, b) => a.distance - b.distance);
 
-  agentWithDistance.sort((a, b) => a.distance - b.distance);
-  const selectedAgent = agentWithDistance[0];
+  if (inRangeAgents.length === 0) {
+    logger.warn("Assigning agent for order — no agents within radius", { orderId, city: restaurantCity || null });
+    io.to("admin").emit("order:no-agent", {
+      orderId,
+      restaurantName: order.restaurant.name,
+      reason: "no_agents_in_radius",
+      city: restaurantCity || null,
+    });
+    return null;
+  }
+
+  const selectedAgent = inRangeAgents[0];
 
   // 4. Update order with agent, compute ETA, set agent as unavailable
   const estimatedDelivery = computeETA(order.restaurant, selectedAgent, "OUT_FOR_DELIVERY", order.deliveryAddress);
@@ -343,7 +394,15 @@ export const assignDeliveryAgent = async (orderId, io) => {
   return selectedAgent;
 };
 
-export const calculateOrderTotal = async ({ restaurantId, items, couponCode }) => {
+export const calculateOrderTotal = async ({ restaurantId, items, couponCode, deliveryAddress }) => {
+  if (deliveryAddress) {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { city: true, address: true },
+    });
+    if (restaurant) assertDeliveryCityMatches(restaurant, deliveryAddress);
+  }
+
   // 1. Extract menuItemIds from request
   const menuItemIds = items.map((item) => item.menuItemId);
 

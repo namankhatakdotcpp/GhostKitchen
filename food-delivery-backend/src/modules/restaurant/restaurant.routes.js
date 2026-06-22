@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticate, authorize, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
 import {
+  listCities,
   listRestaurants,
   getRestaurant,
   getMenu,
@@ -26,6 +27,8 @@ router.get("/mine", authenticate, authorize(["RESTAURANT", "ADMIN"]), getMyResta
 // Recommendations — auth optional (degrades to trending when not logged in)
 router.get("/recommendations", optionalAuthenticate, getRecommendations);
 router.get("/trending", getTrending);
+// Must come before /:id to avoid being captured by it.
+router.get("/cities", listCities);
 
 // Public routes (no authentication required)
 router.get("/", listRestaurants);
