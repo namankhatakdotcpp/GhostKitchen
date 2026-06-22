@@ -50,8 +50,12 @@ export function DeliveryHomePage() {
             socket.emit("agent:location", { agentId: resolvedAgentId, lat, lng });
             setOnline(true);
           } catch (err) {
+            // Do NOT optimistically mark online — if this call failed (CORS,
+            // network, auth), isAvailable was never set in the DB, so the
+            // assignment query would silently never find this rider while
+            // the UI claims they're online.
             console.error("Status update failed", err);
-            setOnline(true); // optimistic
+            setLocationError("Couldn't go online — check your connection and try again.");
           }
         },
         () => setLocationError("Location permission denied. Please enable location access to go online."),

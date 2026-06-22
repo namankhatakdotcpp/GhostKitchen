@@ -1,45 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useCartStore } from "@/store/cartStore";
-import { useOrderStore } from "@/store/orderStore";
 import { useAuthStore } from "@/store/authStore";
 import { ShoppingCart } from "lucide-react";
 
 /**
  * Cart Page Component
- * 
+ *
  * Features:
  * - Display cart items with prices
  * - Edit quantities
  * - Remove items
  * - Calculate totals
- * - CHECKOUT button → creates order
+ * - CHECKOUT button → goes to /checkout (address, coupon, payment method)
  * - Clear cart
- * 
- * Flow After Checkout:
- * 1. User clicks "Checkout"
- * 2. Order created from cart items
- * 3. Cart cleared automatically
- * 4. Redirect to payment page
  */
 
 export default function CartPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  
+
   // Cart operations
   const { items, isLoading: cartLoading, error: cartError } = useCartStore();
   const { updateQuantity, removeFromCart, clearCart } = useCartStore();
-  
-  // Order operations
-  const { createOrder, isLoading: orderLoading, error: orderError } = useOrderStore();
-  
-  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
 
   // Redirect if not logged in
   useEffect(() => {
@@ -50,47 +38,25 @@ export default function CartPage() {
 
   // Calculate totals
   const subtotal = items.reduce((sum, item) => {
-    const price = typeof item.menuItem.price === "string" 
-      ? parseFloat(item.menuItem.price) 
+    const price = typeof item.menuItem.price === "string"
+      ? parseFloat(item.menuItem.price)
       : item.menuItem.price;
     return sum + price * item.quantity;
   }, 0);
 
   /**
-   * CHECKOUT HANDLER
-   * 
-   * 1. Create order from cart
-   * 2. Clear local cart state
-   * 3. Redirect to payment
+   * CHECKOUT HANDLER — order creation requires a delivery address and
+   * payment method, both collected on /checkout. There is no
+   * POST /orders/create endpoint; the real flow is /checkout's
+   * handlePlaceOrder (COD via POST /orders, or online via
+   * /payments/create-order → Cashfree → /payments/verify).
    */
-  const handleCheckout = async () => {
+  const handleCheckout = () => {
     if (!items.length) {
       toast.error("Cart is empty!");
       return;
     }
-
-    setIsCreatingOrder(true);
-    const loadingToast = toast.loading("Creating your order...");
-    
-    try {
-      const order = await createOrder();
-      
-      if (order) {
-        // Clear local cart after successful order creation
-        // (backend already cleared it, but clear store too)
-        await clearCart();
-        
-        toast.success("Order created successfully!", { id: loadingToast });
-        
-        // Redirect to order tracking/payment page
-        router.push(`/customer/orders/${order.id}`);
-      }
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || "Failed to create order";
-      toast.error(errorMsg, { id: loadingToast });
-    } finally {
-      setIsCreatingOrder(false);
-    }
+    router.push("/checkout");
   };
 
   // Empty cart state
@@ -123,9 +89,9 @@ export default function CartPage() {
         <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
 
         {/* Error Messages */}
-        {(cartError || orderError) && (
+        {cartError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            ⚠️ {cartError || orderError}
+            ⚠️ {cartError}
           </div>
         )}
 
@@ -266,21 +232,14 @@ export default function CartPage() {
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={
-                  isCreatingOrder || orderLoading || items.length === 0 || cartLoading
-                }
+                disabled={items.length === 0 || cartLoading}
                 className={`w-full py-3 rounded-lg font-bold text-white transition-colors ${
-                  isCreatingOrder ||orderLoading || items.length === 0 || cartLoading
+                  items.length === 0 || cartLoading
                     ? "bg-gray-400 cursor-not-allowed"
                     : "bg-orange-500 hover:bg-orange-600"
                 }`}
               >
-                {isCreatingOrder || orderLoading ? (
-                  <>
-                    <span className="inline-block mr-2">⏳</span>
-                    Creating Order...
-                  </>
-                ) : items.length === 0 ? (
+                {items.length === 0 ? (
                   "Cart Empty"
                 ) : (
                   <>
@@ -292,7 +251,7 @@ export default function CartPage() {
 
               {/* Continue Shopping */}
               <Link
-                href="/customer/search"
+                href="/search"
                 className="mt-3 block w-full text-center py-2 text-orange-600 hover:text-orange-700 font-medium border border-orange-300 rounded-lg transition-colors"
               >
                 Continue Shopping

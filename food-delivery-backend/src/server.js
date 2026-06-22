@@ -15,6 +15,7 @@ import { connectRedis } from "./config/redis.js";
 import { initSocket } from "./socket/socketServer.js";
 import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
 import { startIncidentJob } from "./jobs/incident.job.js";
+import { startAgentReassignmentJob } from "./jobs/agentReassignment.job.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
 import { acquireRedisLock, releaseRedisLock } from "./utils/redisLock.js";
 import cron from "node-cron";
@@ -65,6 +66,7 @@ const startServer = async () => {
       try {
         startOrderTimeoutJob();
         startIncidentJob();
+        startAgentReassignmentJob();
       } catch (jobError) {
         logger.error("❌ Job initialisation failed", { error: jobError.message });
       }

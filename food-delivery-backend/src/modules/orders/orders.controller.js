@@ -213,11 +213,17 @@ export const updateOrderStatusHTTP = async (req, res) => {
       estimatedDelivery: estimatedDelivery ?? undefined,
     });
 
-    // If status changed to CONFIRMED, assign delivery agent
-    if (newStatus === "CONFIRMED" && io) {
+    // Assign a delivery agent on CONFIRMED, and retry on every later
+    // transition (PREPARING, OUT_FOR_DELIVERY) if still unassigned — e.g. no
+    // rider was online at CONFIRMED time but one came online since. Without
+    // this retry, an order that missed its first assignment attempt is
+    // stuck with agentId=null forever; a periodic job also retries (see
+    // jobs/orderTimeout.job.js) for orders nobody touches again after this.
+    const assignableStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+    if (assignableStatuses.includes(newStatus) && !updatedOrder.agentId && io) {
       const assignedAgent = await assignDeliveryAgent(orderId, io);
       if (!assignedAgent) {
-        logger.warn("No agents available for order", { orderId });
+        logger.warn("No agents available for order", { orderId, status: newStatus });
       }
     }
 

@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import { getSiteConfigCached } from "../config/config.service.js";
 import { computeETA } from "../../utils/eta.js";
+import { logger } from "../../utils/logger.js";
 
 // All monetary values are in PAISE (₹50 = 5000).
 const FALLBACK_DELIVERY_FEE = 3000; // ₹30 — used only if SiteConfig is unreadable
@@ -224,6 +225,8 @@ export const updateAgentAvailability = async (agentId, isAvailable, coords) => {
 };
 
 export const assignDeliveryAgent = async (orderId, io) => {
+  logger.info("Assigning agent for order — started", { orderId });
+
   // 1. Fetch the order with restaurant location
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -231,6 +234,7 @@ export const assignDeliveryAgent = async (orderId, io) => {
   });
 
   if (!order) {
+    logger.warn("Assigning agent for order — order not found", { orderId });
     return null;
   }
 
@@ -248,6 +252,8 @@ export const assignDeliveryAgent = async (orderId, io) => {
       currentLng: { not: null },
     },
   });
+
+  logger.info("Assigning agent for order", { orderId, availableCount: availableAgents.length });
 
   if (availableAgents.length === 0) {
     // No agents available — emit alert to admin room
@@ -298,7 +304,10 @@ export const assignDeliveryAgent = async (orderId, io) => {
     }),
   ]);
 
+  logger.info("Agent assigned", { orderId, agentId: selectedAgent.id });
+
   // 5. Emit to agent: full order details for their assignment modal
+  logger.info("Emitting order:assigned to room", { room: `agent-${selectedAgent.id}` });
   io.to(`agent-${selectedAgent.id}`).emit("order:assigned", {
     orderId,
     orderNumber: orderId.slice(-6).toUpperCase(),

@@ -3,6 +3,7 @@ import { authenticate } from "../../middlewares/auth.middleware.js";
 import { roleMiddleware } from "../../middlewares/role.middleware.js";
 import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
+import { logger } from "../../utils/logger.js";
 import { updateRiderLocation, checkInRider, checkOutRider } from "./delivery.service.js";
 
 const router = express.Router();
@@ -50,6 +51,16 @@ router.patch("/status", async (req, res, next) => {
     // Non-fatal — a session tracking failure must not block duty-toggle.
     if (isOnDuty === true)  checkInRider(req.user.userId).catch(() => {});
     if (isOnDuty === false) checkOutRider(req.user.userId).catch(() => {});
+
+    if (data.isAvailable === true) {
+      logger.info("Agent went online", {
+        userId: user.id,
+        lat: user.currentLat,
+        lng: user.currentLng,
+      });
+    } else if (data.isAvailable === false) {
+      logger.info("Agent went offline", { userId: user.id });
+    }
 
     res.json({ user });
   } catch (e) { next(e); }

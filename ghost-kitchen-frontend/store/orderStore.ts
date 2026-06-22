@@ -56,7 +56,6 @@ interface OrderState {
   // Actions
   fetchOrders: () => Promise<void>;
   fetchOrderById: (orderId: string) => Promise<void>;
-  createOrder: () => Promise<Order>;
   updateOrderStatus: (orderId: string, status: string) => Promise<void>;
   cancelOrder: (orderId: string) => Promise<void>;
   updateOrder: (order: Order) => void; // Real-time updates from Socket.IO
@@ -117,48 +116,6 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       });
     } catch (error: any) {
       const message = error.response?.data?.message || "Failed to fetch order";
-      set({
-        error: message,
-        isLoading: false,
-      });
-      throw error;
-    }
-  },
-
-  /**
-   * CREATE ORDER
-   * Create order from cart
-   * 
-   * Flow:
-   * 1. POST /orders/create
-   * 2. Backend creates order from cart items
-   * 3. Backend clears cart
-   * 4. Return created order
-   * 5. Add to orders list in store
-   * 
-   * Usage:
-   * ```
-   * const { createOrder } = useOrderStore();
-   * const newOrder = await createOrder();
-   * // Order now in orders[] and ready for payment
-   * ```
-   */
-  createOrder: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await axiosInstance.post("/orders/create");
-      const newOrder = response.data.data;
-
-      // Add new order to the beginning of orders list
-      set((state) => ({
-        orders: [newOrder, ...state.orders],
-        selectedOrder: newOrder,
-        isLoading: false,
-      }));
-
-      return newOrder;
-    } catch (error: any) {
-      const message = error.response?.data?.message || "Failed to create order";
       set({
         error: message,
         isLoading: false,
