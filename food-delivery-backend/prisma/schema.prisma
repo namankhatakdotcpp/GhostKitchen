@@ -217,7 +217,13 @@ model Order {
   id              String      @id @default(cuid())
   customerId      String
   restaurantId    String
-  agentId         String?
+  agentId         String?     // rider who has ACCEPTED — confirmed assignment
+  // Rider who has been OFFERED this order but hasn't responded yet. Set by
+  // assignDeliveryAgent, cleared by the accept/reject endpoints (or by the
+  // stale-offer sweep in the reassignment job). agentId is only ever set
+  // once the offered rider actually accepts.
+  pendingAgentId  String?
+  agentOfferedAt  DateTime?
   status          OrderStatus @default(PLACED)
   items           Json
   subtotal        Float       @default(0)
@@ -243,6 +249,7 @@ model Order {
   @@index([customerId])
   @@index([restaurantId])
   @@index([agentId])
+  @@index([pendingAgentId])
   @@index([status])
   @@index([customerId, status])
   @@index([restaurantId, status])

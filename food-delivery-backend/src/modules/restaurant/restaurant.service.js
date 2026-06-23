@@ -4,6 +4,42 @@ import { getSiteConfigCached } from "../config/config.service.js";
 import { cacheGet, cacheSet, cacheDelete, CACHE_KEYS, CACHE_TTL } from "../../utils/cache.js";
 import { logger } from "../../utils/logger.js";
 
+// Geocodes a free-text address via OpenStreetMap's Nominatim (no API key).
+// Never throws — returns null on any failure so callers can store lat/lng as
+// null and let the restaurant simply be excluded from GPS-filtered search
+// (see getRestaurants above) rather than silently get a wrong location.
+let lastGeocodeAt = 0;
+export async function geocodeAddress(addressText) {
+  if (!addressText || !addressText.trim()) return null;
+
+  // Nominatim's usage policy requires >=1 request/second — serialize calls
+  // process-wide rather than per-restaurant so concurrent creates can't burst it.
+  const waitMs = Math.max(0, 1000 - (Date.now() - lastGeocodeAt));
+  if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+  lastGeocodeAt = Date.now();
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressText)}&format=json&limit=1`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "GhostKitchen/1.0 (restaurant geocoding)" },
+    });
+    if (!response.ok) {
+      logger.warn("Geocoding failed — non-OK response", { addressText, status: response.status });
+      return null;
+    }
+    const results = await response.json();
+    const first = Array.isArray(results) ? results[0] : null;
+    if (!first?.lat || !first?.lon) {
+      logger.warn("Geocoding failed — no results", { addressText });
+      return null;
+    }
+    return { lat: parseFloat(first.lat), lng: parseFloat(first.lon) };
+  } catch (error) {
+    logger.warn("Geocoding failed — request error", { addressText, error: error.message });
+    return null;
+  }
+}
+
 // Haversine formula — returns distance in km between two lat/lng pairs.
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -69,22 +105,20 @@ export const getRestaurants = async (
     };
 
     // Bounding-box pre-filter when user coordinates are provided.
-    // Restaurants that have no lat/lng stored are always included (we can't
-    // determine their distance, so we err on the side of showing them).
-    // The tighter Haversine check runs in JS below after the DB fetch.
+    // A restaurant with no real lat/lng has no determinable distance from
+    // the user — it used to be included anyway "to be safe," which is how a
+    // restaurant in Bahadurgarh showed up as "nearby" for a customer 900km
+    // away in Vadodara. Excluded entirely from GPS-filtered results now;
+    // the tighter Haversine check below also strictly requires coordinates.
     if (latN !== null && lngN !== null) {
       const latDelta = radiusN / 111;
       const lngDelta = radiusN / (111 * Math.cos(latN * Math.PI / 180));
       where.AND = [
+        { lat: { not: null } },
+        { lng: { not: null } },
         {
-          OR: [
-            { lat: null },
-            { lng: null },
-            {
-              lat: { gte: latN - latDelta, lte: latN + latDelta },
-              lng: { gte: lngN - lngDelta, lte: lngN + lngDelta },
-            },
-          ],
+          lat: { gte: latN - latDelta, lte: latN + latDelta },
+          lng: { gte: lngN - lngDelta, lte: lngN + lngDelta },
         },
       ];
     }
@@ -105,35 +139,16 @@ export const getRestaurants = async (
     ]);
 
     // Location filtering pass — runs in JS after the DB bounding-box pre-filter.
-    // Priority: Haversine (most accurate) > city match (text) > no filter.
+    // The WHERE clause above already excludes no-coordinate restaurants from
+    // `restaurants`, so every row here has real lat/lng — no fallback branch.
     if (latN !== null && lngN !== null) {
       const withDistance = restaurants.map((r) => ({
         ...r,
-        distanceKm:
-          r.lat != null && r.lng != null
-            ? Math.round(haversineKm(latN, lngN, r.lat, r.lng) * 10) / 10
-            : null,
+        distanceKm: Math.round(haversineKm(latN, lngN, r.lat, r.lng) * 10) / 10,
       }));
 
-      const filtered = withDistance.filter((r) => {
-        if (r.distanceKm !== null) {
-          // Has GPS coords: Haversine check against restaurant's own delivery radius
-          return r.distanceKm <= (r.deliveryRadius ?? radiusN);
-        }
-        // No GPS coords: fall back to city string match so a Bahadurgarh user
-        // doesn't see Delhi restaurants that happen to have no coordinates.
-        const rc = (r.address?.city || "").toLowerCase().trim();
-        if (!rc || !userCity) return true; // Truly unknown — show anyway
-        return rc === userCity;
-      });
-
-      // Sort: nearest-first for restaurants with coordinates; then by rating.
-      filtered.sort((a, b) => {
-        if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
-        if (a.distanceKm !== null) return -1;
-        if (b.distanceKm !== null) return 1;
-        return b.rating - a.rating;
-      });
+      const filtered = withDistance.filter((r) => r.distanceKm <= (r.deliveryRadius ?? radiusN));
+      filtered.sort((a, b) => a.distanceKm - b.distanceKm);
 
       total = filtered.length;
       const start = (page - 1) * limit;
@@ -143,6 +158,18 @@ export const getRestaurants = async (
         userLat: latN, userLng: lngN, userCity, radiusKm: radiusN,
         dbRows: withDistance.length, afterFilter: total,
       });
+
+      // Visibility into restaurants that are currently unreachable by GPS
+      // search at all because they've never been geocoded — this is exactly
+      // the gap that previously caused the Bahadurgarh-from-Vadodara bug.
+      const uncoded = await prisma.restaurant.findMany({
+        where: { ...where, AND: undefined, OR: [{ lat: null }, { lng: null }] },
+        select: { id: true },
+        take: 50,
+      });
+      for (const r of uncoded) {
+        logger.warn("Restaurant excluded from nearby results — no coordinates", { restaurantId: r.id });
+      }
     } else if (userCity) {
       // No GPS — use city string only. Never show restaurants from a different city.
       // Restaurants with no address.city are shown anyway (can't determine location).
@@ -286,6 +313,24 @@ export const createRestaurant = async (data, ownerId) => {
     .replace(/-+/g, "-")
     .slice(0, 50) + "-" + Date.now().toString(36);
 
+  // Onboarding only collects a city name, not a street address, so that's
+  // the best signal available to geocode from. Never falls back to a
+  // default location on failure — lat/lng simply stay null, which now
+  // correctly excludes the restaurant from GPS-filtered search (see
+  // getRestaurants) instead of letting it show up at a fake location.
+  let lat = null, lng = null;
+  if (data.lat != null && data.lng != null) {
+    lat = data.lat;
+    lng = data.lng;
+  } else if (data.city) {
+    const geocoded = await geocodeAddress(`${data.city}, India`);
+    if (geocoded) {
+      ({ lat, lng } = geocoded);
+    } else {
+      logger.warn("Restaurant created without coordinates — geocoding failed", { city: data.city });
+    }
+  }
+
   return prisma.restaurant.create({
     data: {
       name: data.name,
@@ -302,6 +347,8 @@ export const createRestaurant = async (data, ownerId) => {
       },
       // Scalar mirror of address.city — see schema.prisma comment.
       city: data.city || null,
+      lat,
+      lng,
       deliveryRadius: data.deliveryRadius || 5,
       isApproved: cfg ? !cfg.requireApproval : true,
       isOpen: cfg ? !cfg.requireApproval : true,
@@ -352,6 +399,26 @@ export const updateRestaurant = async (id, data) => {
     updateData.address = address;
     // Scalar mirror of address.city — see schema.prisma comment.
     if (data.city !== undefined) updateData.city = data.city || null;
+
+    // City changed — re-geocode so lat/lng stay accurate. Never falls back
+    // to a default on failure; clears coordinates instead so a stale
+    // location from the old city can't linger and mismatch the new one.
+    if (data.city !== undefined) {
+      if (data.city) {
+        const geocoded = await geocodeAddress(`${data.city}, India`);
+        if (geocoded) {
+          updateData.lat = geocoded.lat;
+          updateData.lng = geocoded.lng;
+        } else {
+          logger.warn("Restaurant city updated without new coordinates — geocoding failed", { restaurantId: id, city: data.city });
+          updateData.lat = null;
+          updateData.lng = null;
+        }
+      } else {
+        updateData.lat = null;
+        updateData.lng = null;
+      }
+    }
   }
 
   const updated = await prisma.restaurant.update({

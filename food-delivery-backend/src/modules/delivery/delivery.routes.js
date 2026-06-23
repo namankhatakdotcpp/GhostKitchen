@@ -5,6 +5,7 @@ import { prisma } from "../../config/prisma.js";
 import AppError from "../../utils/AppError.js";
 import { logger } from "../../utils/logger.js";
 import { updateRiderLocation, checkInRider, checkOutRider } from "./delivery.service.js";
+import { acceptOrderOffer, rejectOrderOffer } from "../orders/orders.service.js";
 
 const router = express.Router();
 
@@ -66,47 +67,36 @@ router.patch("/status", async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/delivery/accept-order/:orderId
-// Atomically claims the order for this agent if it is unassigned.
-router.post("/accept-order/:orderId", async (req, res, next) => {
+// POST /api/delivery/orders/:orderId/accept
+// Real acceptance of an order OFFER (see assignDeliveryAgent in
+// orders.service.js). Only the rider this order was actually offered to can
+// accept — enforced by the WHERE pendingAgentId = userId guard inside
+// acceptOrderOffer, which makes the claim atomic under a race.
+router.post("/orders/:orderId/accept", async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const agentId = req.user.userId;
-
-    // Claim: only succeeds when the order is unassigned or already ours.
-    const claimed = await prisma.order.updateMany({
-      where: {
-        id: orderId,
-        status: { in: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"] },
-        OR: [{ agentId: null }, { agentId }],
-      },
-      data: { agentId },
-    });
-
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        restaurant: { select: { id: true, name: true, address: true, lat: true, lng: true, imageUrl: true } },
-        customer: { select: { id: true, name: true, phone: true } },
-      },
-    });
-
-    if (!order) throw new AppError("Order not found", 404);
-    if (order.agentId !== agentId) {
-      throw new AppError(claimed.count === 0 ? "Order assigned to another agent" : "Could not claim order", 403);
+    const io = req.app.locals.io;
+    const result = await acceptOrderOffer(orderId, req.user.userId, io);
+    if (!result.ok) {
+      throw new AppError(result.reason, 409);
     }
+    res.json({ order: result.order });
+  } catch (e) { next(e); }
+});
 
-    // Mask customer phone — show only last 4 digits
-    const maskedPhone = order.customer?.phone
-      ? order.customer.phone.slice(0, -4).replace(/\d/g, "*") + order.customer.phone.slice(-4)
-      : null;
-
-    res.json({
-      order: {
-        ...order,
-        customer: { ...order.customer, phone: maskedPhone },
-      },
-    });
+// POST /api/delivery/orders/:orderId/reject
+// Declines an offer. Frees the rider and immediately tries the next
+// available rider; the 2-minute reassignment job is the fallback if nobody
+// else is available right now.
+router.post("/orders/:orderId/reject", async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const io = req.app.locals.io;
+    const result = await rejectOrderOffer(orderId, req.user.userId, io);
+    if (!result.ok) {
+      throw new AppError(result.reason, 409);
+    }
+    res.json({ success: true, reassigned: result.reassigned });
   } catch (e) { next(e); }
 });
 

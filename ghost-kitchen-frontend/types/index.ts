@@ -301,6 +301,7 @@ export interface ShopBoardItem {
   status: "new" | "preparing" | "ready" | "completed";
   prepTimeMinutes?: number;
   assignedAgentName?: string;
+  hasPendingOffer?: boolean;
   autoRejectAt?: string;
 }
 

@@ -360,13 +360,15 @@ export const assignDeliveryAgent = async (orderId, io) => {
 
   const selectedAgent = inRangeAgents[0];
 
-  // 4. Update order with agent, compute ETA, set agent as unavailable
-  const estimatedDelivery = computeETA(order.restaurant, selectedAgent, "OUT_FOR_DELIVERY", order.deliveryAddress);
-
+  // 4. Offer the order to the selected rider — do NOT write agentId yet.
+  // pendingAgentId/agentOfferedAt record "offer sent, awaiting response";
+  // agentId is only ever written by the accept endpoint once the rider
+  // really accepts. Mark the rider unavailable while their offer is live so
+  // they can't be double-offered a second order in the same window.
   const [updatedOrder] = await prisma.$transaction([
     prisma.order.update({
       where: { id: orderId },
-      data: { agentId: selectedAgent.id, estimatedDelivery },
+      data: { pendingAgentId: selectedAgent.id, agentOfferedAt: new Date() },
       include: { restaurant: true, agent: true },
     }),
     prisma.user.update({
@@ -375,13 +377,16 @@ export const assignDeliveryAgent = async (orderId, io) => {
     }),
   ]);
 
-  logger.info("Agent assigned", { orderId, agentId: selectedAgent.id });
+  logger.info("Agent offered order", { orderId, agentId: selectedAgent.id });
 
-  // 5. Emit to agent: full order details for their assignment modal
-  logger.info("Emitting order:assigned to room", { room: `agent-${selectedAgent.id}` });
-  io.to(`agent-${selectedAgent.id}`).emit("order:assigned", {
+  // 5. Emit to agent: full order details for their offer modal. Customer and
+  // shop are NOT notified yet — order:assigned only fires after real
+  // acceptance, via the /accept endpoint below.
+  logger.info("Emitting order:offer to room", { room: `agent-${selectedAgent.id}` });
+  io.to(`agent-${selectedAgent.id}`).emit("order:offer", {
     orderId,
     orderNumber: orderId.slice(-6).toUpperCase(),
+    expiresInSeconds: 30,
     pickup: {
       name: order.restaurant.name,
       address: order.restaurant.address,
@@ -395,23 +400,69 @@ export const assignDeliveryAgent = async (orderId, io) => {
     estimatedEarnings: Math.round(40 + selectedAgent.distance * 5), // ₹40 base + ₹5/km
   });
 
-  // 6. Emit to customer and shop: agent is assigned
+  return selectedAgent;
+};
+
+// POST /api/delivery/orders/:orderId/accept
+// Only the rider who was actually offered this order can accept it. The
+// WHERE clause's `pendingAgentId: agentId` guard makes the claim atomic —
+// if two requests somehow race (e.g. a retry double-fires), only the first
+// updateMany matches and flips pendingAgentId away, so the second is a no-op.
+export const acceptOrderOffer = async (orderId, agentId, io) => {
+  const claimed = await prisma.order.updateMany({
+    where: { id: orderId, pendingAgentId: agentId },
+    data: { agentId, pendingAgentId: null, agentOfferedAt: null },
+  });
+
+  if (claimed.count === 0) {
+    return { ok: false, reason: "Offer no longer available" };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { restaurant: true, agent: true },
+  });
+
+  const estimatedDelivery = computeETA(order.restaurant, order.agent, "OUT_FOR_DELIVERY", order.deliveryAddress);
+  await prisma.order.update({ where: { id: orderId }, data: { estimatedDelivery } });
+
+  logger.info("Agent accepted offer — order assigned", { orderId, agentId });
+
+  // order:assigned now only fires here, post-acceptance — this used to fire
+  // unilaterally the moment assignDeliveryAgent ran, before the rider had
+  // agreed to anything.
   io.to(`order-${orderId}`).emit("agent:assigned", {
-    agent: {
-      id: selectedAgent.id,
-      name: selectedAgent.name,
-      phone: selectedAgent.phone,
-      rating: 4.5,
-    },
+    agent: { id: order.agent.id, name: order.agent.name, phone: order.agent.phone, rating: 4.5 },
     estimatedDelivery: estimatedDelivery.toISOString(),
   });
   io.to(`shop-${order.restaurantId}`).emit("agent:assigned", {
     orderId,
-    agentName: selectedAgent.name,
+    agentName: order.agent.name,
   });
-  io.to("admin").emit("agent:assigned", { orderId, agentId: selectedAgent.id });
+  io.to("admin").emit("agent:assigned", { orderId, agentId });
 
-  return selectedAgent;
+  return { ok: true, order: { ...serializeOrder(order), estimatedDelivery: estimatedDelivery.toISOString() } };
+};
+
+// POST /api/delivery/orders/:orderId/reject
+// Frees the rider, clears the offer, and immediately tries the next
+// available rider. If nobody else is available, the 2-minute reassignment
+// job (jobs/agentReassignment.job.js) picks it up as a fallback.
+export const rejectOrderOffer = async (orderId, agentId, io) => {
+  const cleared = await prisma.order.updateMany({
+    where: { id: orderId, pendingAgentId: agentId },
+    data: { pendingAgentId: null, agentOfferedAt: null },
+  });
+
+  if (cleared.count === 0) {
+    return { ok: false, reason: "Offer no longer available" };
+  }
+
+  await prisma.user.update({ where: { id: agentId }, data: { isAvailable: true } });
+
+  logger.info("Agent rejected offer — re-offering", { orderId, agentId });
+  const nextAgent = await assignDeliveryAgent(orderId, io);
+  return { ok: true, reassigned: !!nextAgent };
 };
 
 export const calculateOrderTotal = async ({ restaurantId, items, couponCode, deliveryAddress }) => {

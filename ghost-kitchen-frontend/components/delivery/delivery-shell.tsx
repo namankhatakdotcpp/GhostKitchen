@@ -43,6 +43,7 @@ function IncomingAssignmentModal() {
   const router = useRouter();
   const { incomingAssignment, acceptIncoming, declineIncoming } = useDeliveryStore();
   const [secondsLeft, setSecondsLeft] = useState(30);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
     if (!incomingAssignment) {
@@ -146,18 +147,27 @@ function IncomingAssignmentModal() {
               Auto-declines in {formatCountdown(secondsLeft)}
             </div>
             <button
-              className="h-16 w-full rounded-[20px] bg-success text-lg font-bold text-white shadow-[0_16px_30px_rgba(27,166,114,0.28)]"
-              onClick={() => {
-                acceptIncoming();
-                router.push("/delivery/active");
+              className="h-16 w-full rounded-[20px] bg-success text-lg font-bold text-white shadow-[0_16px_30px_rgba(27,166,114,0.28)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isAccepting}
+              onClick={async () => {
+                setIsAccepting(true);
+                await acceptIncoming();
+                setIsAccepting(false);
+                // Only navigate if the accept actually succeeded — on failure
+                // (offer expired / already claimed) the store clears
+                // incomingAssignment and surfaces offerError instead.
+                if (useDeliveryStore.getState().activeAssignment) {
+                  router.push("/delivery/active");
+                }
               }}
               type="button"
             >
-              Accept
+              {isAccepting ? "Accepting…" : "Accept"}
             </button>
             <button
-              className="h-16 w-full rounded-[20px] border border-white/20 bg-transparent text-lg font-bold text-white"
-              onClick={declineIncoming}
+              className="h-16 w-full rounded-[20px] border border-white/20 bg-transparent text-lg font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isAccepting}
+              onClick={() => void declineIncoming()}
               type="button"
             >
               Decline
@@ -192,7 +202,12 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
       socket.emit("join-room", room);
     }
 
-    function handleOrderAssigned(payload: any) {
+    // order:offer = "you've been offered this order, respond within 30s" —
+    // shows the accept/decline modal. This used to listen for order:assigned,
+    // which the backend now only emits AFTER real acceptance (to the
+    // customer/shop rooms, not this rider's room) — listening for it here
+    // would never have fired in the new flow.
+    function handleOrderOffer(payload: any) {
       const order = payload.order ?? payload;
       if (order && order.orderId) {
         receiveAssignment(order as DeliveryAssignment);
@@ -200,13 +215,13 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
     }
 
     socket.on("connect", handleConnect);
-    socket.on("order:assigned", handleOrderAssigned);
+    socket.on("order:offer", handleOrderOffer);
     socket.connect();
 
     return () => {
       socket.emit("leave-room", room);
       socket.off("connect", handleConnect);
-      socket.off("order:assigned", handleOrderAssigned);
+      socket.off("order:offer", handleOrderOffer);
       socket.disconnect();
     };
   }, [resolvedAgentId, receiveAssignment]);

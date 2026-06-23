@@ -28,6 +28,10 @@ function orderToBoard(order: any): ShopBoardItem {
       ? new Date(new Date(order.placedAt ?? order.createdAt).getTime() + 3 * 60 * 1000).toISOString()
       : undefined,
     assignedAgentName: order.agent?.name ?? undefined,
+    // pendingAgentId means an offer is out but not yet accepted — distinct
+    // from a real assignment, so the shop doesn't show a confirmed rider
+    // name before the rider has actually agreed to take the order.
+    hasPendingOffer: !order.agent?.name && !!order.pendingAgentId,
   };
 }
 
@@ -211,7 +215,9 @@ function OrderCard({
           <div className="mt-5 rounded-[14px] bg-[#F7F9FF] px-4 py-3 text-sm text-text-secondary">
             {order.assignedAgentName
               ? `Assigned to ${order.assignedAgentName}`
-              : "Waiting for delivery agent assignment"}
+              : order.hasPendingOffer
+                ? "Offer sent to rider, awaiting response"
+                : "Waiting for delivery agent assignment"}
           </div>
         ) : null}
 

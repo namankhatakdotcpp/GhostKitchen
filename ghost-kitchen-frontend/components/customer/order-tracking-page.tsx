@@ -33,6 +33,16 @@ type AgentLocationEvent = {
   lng: number;
 };
 
+type AgentAssignedEvent = {
+  agent: {
+    id: string;
+    name: string;
+    phone: string;
+    rating: number;
+  };
+  estimatedDelivery?: string;
+};
+
 const STATUS_ORDER: OrderStatus[] = [
   "PLACED",
   "CONFIRMED",
@@ -328,6 +338,22 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
       );
     }
 
+    function patchAgentAssigned(payload: AgentAssignedEvent) {
+      queryClient.setQueryData<TrackedOrder | undefined>(["order", orderId], (current) =>
+        current
+          ? {
+              ...current,
+              deliveryAgent: {
+                vehicleNumber: "",
+                ...current.deliveryAgent,
+                ...payload.agent,
+              },
+              estimatedDelivery: payload.estimatedDelivery ?? current.estimatedDelivery,
+            }
+          : current,
+      );
+    }
+
     function handleConnect() {
       setIsSocketConnected(true);
       setShowReconnectToast(false);
@@ -348,6 +374,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
     socket.on("reconnect_attempt", handleReconnectAttempt);
     socket.on("order:status-updated", patchOrderStatus);
     socket.on("agent:location", patchAgentLocation);
+    socket.on("agent:assigned", patchAgentAssigned);
     socket.connect();
 
     return () => {
@@ -357,6 +384,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
       socket.off("reconnect_attempt", handleReconnectAttempt);
       socket.off("order:status-updated", patchOrderStatus);
       socket.off("agent:location", patchAgentLocation);
+      socket.off("agent:assigned", patchAgentAssigned);
       socket.disconnect();
       setIsSocketConnected(false);
     };
@@ -506,7 +534,12 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                         {order.deliveryAgent.name}
                       </h3>
                       <p className="mt-1 text-sm text-text-secondary">
-                        {order.deliveryAgent.rating.toFixed(1)} rating •{" "}
+                        {/* User has no `rating` column — this is always undefined from
+                            the real order-fetch path (only the assignment socket payload
+                            hardcodes 4.5), so calling .toFixed on it crashed the whole page. */}
+                        {typeof order.deliveryAgent.rating === "number"
+                          ? order.deliveryAgent.rating.toFixed(1)
+                          : "4.5"} rating •{" "}
                         {order.deliveryAgent.vehicleNumber}
                       </p>
                     </div>
@@ -526,8 +559,8 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     Google Maps goes here.
                   </p>
                   <div className="mt-4 rounded-[18px] border border-dashed border-border bg-white p-4 text-sm text-text-secondary">
-                    Lat {order.agentLocation?.lat.toFixed(4) ?? "--"} • Lng{" "}
-                    {order.agentLocation?.lng.toFixed(4) ?? "--"}
+                    Lat {typeof order.agentLocation?.lat === "number" ? order.agentLocation.lat.toFixed(4) : "--"} • Lng{" "}
+                    {typeof order.agentLocation?.lng === "number" ? order.agentLocation.lng.toFixed(4) : "--"}
                   </div>
                 </div>
               </section>
@@ -573,7 +606,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                             </p>
                           </div>
                           <span className="text-sm font-semibold text-text-primary">
-                            ₹{((item.price * item.quantity) / 100).toFixed(0)}
+                            ₹{(((item.price ?? 0) * (item.quantity ?? 0)) / 100).toFixed(0)}
                           </span>
                         </div>
                       ))}
