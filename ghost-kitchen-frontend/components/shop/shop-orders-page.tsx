@@ -369,7 +369,14 @@ export function ShopOrdersPage() {
   async function acceptOrder(orderId: string) {
     setPending(orderId, true);
     try {
+      // The "Preparing" column covers both CONFIRMED and PREPARING (see
+      // orderToBoard above) — there's no separate UI step for that second
+      // transition, so Accept has to make both real backend transitions in
+      // sequence. Without the second call the order's real status stays at
+      // CONFIRMED forever, and "Mark Ready" (CONFIRMED -> OUT_FOR_DELIVERY)
+      // is an invalid transition the backend correctly 400s on every click.
       await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" });
+      await api.patch(`/orders/${orderId}/status`, { status: "PREPARING" });
       updateBoard((item) =>
         item.id === orderId
           ? { ...item, status: "preparing", prepTimeMinutes: 15, autoRejectAt: undefined }
