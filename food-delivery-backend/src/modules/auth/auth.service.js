@@ -138,6 +138,12 @@ export const refreshAccessToken = async (rawRefreshToken) => {
   const { accessToken, refreshToken: newRefreshToken } = generateTokenPair(buildTokenPayload(safeUser));
   await storeRefreshToken(user.id, newRefreshToken);
 
+  logger.info("Token refreshed", {
+    userId: safeUser.id,
+    activeRole: safeUser.activeRole,
+    roles: safeUser.roles,
+  });
+
   // Opportunistic cleanup: purge this user's expired tokens so the table
   // doesn't grow unboundedly (no separate cron needed).
   prisma.refreshToken

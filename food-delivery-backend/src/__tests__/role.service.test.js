@@ -204,13 +204,38 @@ describe("registerRider", () => {
 
   it("registers rider and returns token on success", async () => {
     prisma.user.findUnique.mockResolvedValue(baseUser);
-    const updated = { ...baseUser, roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY" };
+    const updated = {
+      ...baseUser,
+      roles: ["CUSTOMER", "DELIVERY"],
+      secondRole: "DELIVERY",
+      activeRole: "DELIVERY",
+    };
     prisma.user.update.mockResolvedValue(updated);
 
     const result = await registerRider("u-1", { vehicleType: "BIKE", vehicleNumber: "DL01AB1234" });
 
     expect(result.token).toBe("test.access.token");
     expect(result.user.secondRole).toBe("DELIVERY");
+  });
+
+  it("activates DELIVERY as the active role, not just the roles list (regression: 403 on delivery routes immediately after registration/refresh)", async () => {
+    prisma.user.findUnique.mockResolvedValue(baseUser);
+    prisma.user.update.mockImplementation(async ({ data }) => ({
+      ...baseUser,
+      ...data,
+      roles: data.roles?.set ?? baseUser.roles,
+    }));
+
+    await registerRider("u-1", { vehicleType: "BIKE", vehicleNumber: "DL01AB1234" });
+
+    const updateCall = prisma.user.update.mock.calls.at(-1)[0];
+    expect(updateCall.data.activeRole).toBe("DELIVERY");
+
+    // buildTokenPayload (mocked above) is called with the row the DB will
+    // persist — assert its activeRole is DELIVERY, since that's exactly
+    // what /auth/refresh re-reads on every subsequent request.
+    const payloadArg = mockBuildPayload.mock.calls.at(-1)[0];
+    expect(payloadArg.activeRole).toBe("DELIVERY");
   });
 });
 

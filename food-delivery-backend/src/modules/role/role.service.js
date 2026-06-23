@@ -253,6 +253,12 @@ export async function registerRider(userId, riderData) {
     where: { id: userId },
     data: {
       secondRole: "DELIVERY",
+      // Activate the new role immediately — without this, activeRole stays
+      // CUSTOMER in the DB forever (registration never flips it), so every
+      // future access token (including ones minted by /auth/refresh, which
+      // always re-reads activeRole from the DB) keeps encoding CUSTOMER and
+      // every DELIVERY-only route 403s no matter how often the token refreshes.
+      activeRole: "DELIVERY",
       // Union, not replacement — a hard set would silently strip ADMIN/RESTAURANT
       roles: { set: Array.from(new Set([...(user.roles || []), "CUSTOMER", "DELIVERY"])) },
       vehicleType: riderData.vehicleType || "BIKE",
