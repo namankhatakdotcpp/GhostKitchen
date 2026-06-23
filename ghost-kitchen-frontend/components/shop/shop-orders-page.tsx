@@ -95,12 +95,14 @@ function OrderCard({
   onReject,
   onReady,
   onPrepTimeChange,
+  isPending,
 }: {
   order: ShopBoardItem;
   onAccept: (orderId: string) => void;
   onReject: (orderId: string) => void;
   onReady: (orderId: string) => void;
   onPrepTimeChange: (orderId: string, minutes: number) => void;
+  isPending: boolean;
 }) {
   const countdown = useCountdownLabel(order.autoRejectAt);
   const radius = 34;
@@ -162,14 +164,16 @@ function OrderCard({
         {order.status === "new" ? (
           <div className="mt-5 grid grid-cols-2 gap-2">
             <button
-              className="h-11 rounded-[14px] bg-success text-sm font-bold text-white"
+              className="h-11 rounded-[14px] bg-success text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isPending}
               onClick={() => onAccept(order.id)}
               type="button"
             >
               Accept
             </button>
             <button
-              className="h-11 rounded-[14px] bg-danger text-sm font-bold text-white"
+              className="h-11 rounded-[14px] bg-danger text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isPending}
               onClick={() => onReject(order.id)}
               type="button"
             >
@@ -197,7 +201,7 @@ function OrderCard({
                 </button>
               ))}
             </div>
-            <Button className="h-11 w-full rounded-[14px]" onClick={() => onReady(order.id)}>
+            <Button className="h-11 w-full rounded-[14px]" disabled={isPending} onClick={() => onReady(order.id)}>
               Mark Ready
             </Button>
           </div>
@@ -225,6 +229,11 @@ export function ShopOrdersPage() {
   const queryClient = useQueryClient();
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  // Tracks orderIds with an in-flight status-update request so the
+  // Accept/Reject/Mark Ready buttons can disable immediately on click —
+  // without this, rapid double-clicks fire the same transition twice and
+  // the second request 400s (status already changed by the first).
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   // Fetch my restaurant to get its ID for API + socket
   const restaurantQuery = useQuery({
@@ -348,7 +357,17 @@ export function ShopOrdersPage() {
   // the DB stayed PLACED forever. That's why assignDeliveryAgent() never
   // ran and the customer's tracking page never advanced: there was nothing
   // upstream of either to ever trigger.
+  function setPending(orderId: string, pending: boolean) {
+    setPendingIds((current) => {
+      const next = new Set(current);
+      if (pending) next.add(orderId);
+      else next.delete(orderId);
+      return next;
+    });
+  }
+
   async function acceptOrder(orderId: string) {
+    setPending(orderId, true);
     try {
       await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" });
       updateBoard((item) =>
@@ -358,20 +377,26 @@ export function ShopOrdersPage() {
       );
     } catch (err: any) {
       setBanner(err.error ?? "Failed to accept order. Please try again.");
+    } finally {
+      setPending(orderId, false);
     }
   }
 
   async function rejectOrder(orderId: string) {
+    setPending(orderId, true);
     try {
       await api.patch(`/orders/${orderId}/status`, { status: "CANCELLED" });
       updateBoard((item) => (item.id === orderId ? null : item));
       setBanner(`Order ${orderId} rejected.`);
     } catch (err: any) {
       setBanner(err.error ?? "Failed to reject order. Please try again.");
+    } finally {
+      setPending(orderId, false);
     }
   }
 
   async function markReady(orderId: string) {
+    setPending(orderId, true);
     try {
       await api.patch(`/orders/${orderId}/status`, { status: "OUT_FOR_DELIVERY" });
       updateBoard((item) =>
@@ -379,6 +404,8 @@ export function ShopOrdersPage() {
       );
     } catch (err: any) {
       setBanner(err.error ?? "Failed to mark order ready. Please try again.");
+    } finally {
+      setPending(orderId, false);
     }
   }
 
@@ -481,6 +508,7 @@ export function ShopOrdersPage() {
                     {grouped[column.key].length ? (
                       grouped[column.key].map((order) => (
                         <OrderCard
+                          isPending={pendingIds.has(order.id)}
                           key={order.id}
                           onAccept={acceptOrder}
                           onPrepTimeChange={updatePrepTime}

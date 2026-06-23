@@ -316,6 +316,16 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // Unlike the city filter, this is NOT a soft fallback: maxRadiusKm has
   // always defaulted to a generous value for every rider, so an empty
   // result here means a genuine "nobody is close enough", not missing data.
+  //
+  // EXCEPTION: if the restaurant has no real lat/lng on file (never
+  // geocoded), there is nothing to measure distance against. The old
+  // fallback silently substituted central-Delhi coordinates here, which
+  // produced a ~27km "distance" against riders who were actually at the
+  // restaurant's real location and wrongly rejected the only available
+  // agent. Skip the radius filter entirely in that case instead of
+  // measuring against a made-up point — same "don't invent data" pattern
+  // as the city filter above.
+  const restaurantHasCoords = order.restaurant.lat != null && order.restaurant.lng != null;
   const restaurantLat = order.restaurant.lat ?? 28.6139;
   const restaurantLng = order.restaurant.lng ?? 77.2090;
 
@@ -324,7 +334,17 @@ export const assignDeliveryAgent = async (orderId, io) => {
       ...agent,
       distance: haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng),
     }))
-    .filter((agent) => agent.distance <= (agent.maxRadiusKm ?? 20))
+    .filter((agent) => {
+      // maxRadiusKm is NOT NULL DEFAULT 20 in schema, but guard against any
+      // accidental 0/negative/NaN value getting through anyway rather than
+      // silently rejecting every agent for that rider.
+      const radius = Number.isFinite(agent.maxRadiusKm) && agent.maxRadiusKm > 0 ? agent.maxRadiusKm : 20;
+      logger.info("Assigning agent for order — computed distance", {
+        orderId, agentId: agent.id, distanceKm: Math.round(agent.distance * 10) / 10, radiusKm: radius,
+        restaurantHasCoords,
+      });
+      return !restaurantHasCoords || agent.distance <= radius;
+    })
     .sort((a, b) => a.distance - b.distance);
 
   if (inRangeAgents.length === 0) {
