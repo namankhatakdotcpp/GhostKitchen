@@ -342,23 +342,44 @@ export function ShopOrdersPage() {
     );
   }
 
-  function acceptOrder(orderId: string) {
-    updateBoard((item) =>
-      item.id === orderId
-        ? { ...item, status: "preparing", prepTimeMinutes: 15, autoRejectAt: undefined }
-        : item,
-    );
+  // These three previously only mutated the local React Query cache and
+  // never called the backend at all — clicking "Accept" looked like it
+  // worked (the card moved to "Preparing") but the order's real status in
+  // the DB stayed PLACED forever. That's why assignDeliveryAgent() never
+  // ran and the customer's tracking page never advanced: there was nothing
+  // upstream of either to ever trigger.
+  async function acceptOrder(orderId: string) {
+    try {
+      await api.patch(`/orders/${orderId}/status`, { status: "CONFIRMED" });
+      updateBoard((item) =>
+        item.id === orderId
+          ? { ...item, status: "preparing", prepTimeMinutes: 15, autoRejectAt: undefined }
+          : item,
+      );
+    } catch (err: any) {
+      setBanner(err.error ?? "Failed to accept order. Please try again.");
+    }
   }
 
-  function rejectOrder(orderId: string) {
-    updateBoard((item) => (item.id === orderId ? null : item));
-    setBanner(`Order ${orderId} rejected.`);
+  async function rejectOrder(orderId: string) {
+    try {
+      await api.patch(`/orders/${orderId}/status`, { status: "CANCELLED" });
+      updateBoard((item) => (item.id === orderId ? null : item));
+      setBanner(`Order ${orderId} rejected.`);
+    } catch (err: any) {
+      setBanner(err.error ?? "Failed to reject order. Please try again.");
+    }
   }
 
-  function markReady(orderId: string) {
-    updateBoard((item) =>
-      item.id === orderId ? { ...item, status: "ready" } : item,
-    );
+  async function markReady(orderId: string) {
+    try {
+      await api.patch(`/orders/${orderId}/status`, { status: "OUT_FOR_DELIVERY" });
+      updateBoard((item) =>
+        item.id === orderId ? { ...item, status: "ready" } : item,
+      );
+    } catch (err: any) {
+      setBanner(err.error ?? "Failed to mark order ready. Please try again.");
+    }
   }
 
   function updatePrepTime(orderId: string, minutes: number) {

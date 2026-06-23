@@ -82,7 +82,9 @@ const STATUS_TRANSITIONS = {
 };
 
 const ROLE_PERMISSIONS = {
-  RESTAURANT: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"],
+  // CANCELLED added — the shop dashboard's "Reject" button (PLACED → CANCELLED)
+  // had no valid role permission to actually do this until now.
+  RESTAURANT: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "CANCELLED"],
   DELIVERY: ["OUT_FOR_DELIVERY", "DELIVERED"],
   CUSTOMER: ["CANCELLED"],
   ADMIN: ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
