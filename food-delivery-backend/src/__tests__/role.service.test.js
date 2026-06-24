@@ -37,6 +37,10 @@ vi.mock("../modules/config/config.service.js", () => ({
   getSiteConfigCached: vi.fn(),
   invalidateConfigCache: vi.fn(),
 }));
+const mockGeocodeAddress = vi.fn(() => Promise.resolve(null));
+vi.mock("../modules/restaurant/restaurant.service.js", () => ({
+  geocodeAddress: mockGeocodeAddress,
+}));
 
 const { prisma } = await import("../config/prisma.js");
 const { getSiteConfigCached } = await import("../modules/config/config.service.js");
@@ -178,6 +182,33 @@ describe("registerRestaurant", () => {
 
     await registerRestaurant("u-1", restaurantData);
     expect(prisma.user.update).toHaveBeenCalledOnce();
+  });
+
+  it("regression: geocodes the address when no lat/lng is submitted, so the restaurant never lands with null coordinates (Bug B root cause)", async () => {
+    prisma.user.findUnique.mockResolvedValue(baseUser);
+    prisma.restaurant.findMany.mockResolvedValue([]);
+    mockGeocodeAddress.mockResolvedValueOnce({ lat: 28.7, lng: 77.1 });
+
+    let createData;
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        restaurant: {
+          create: vi.fn((args) => {
+            createData = args.data;
+            return Promise.resolve({ id: "r-new", ...args.data });
+          }),
+        },
+        user: { update: vi.fn().mockResolvedValue(baseUser) },
+        menuItem: { create: vi.fn() },
+      };
+      return fn(tx);
+    });
+
+    await registerRestaurant("u-1", { ...restaurantData, city: "Gurgaon" });
+
+    expect(mockGeocodeAddress).toHaveBeenCalledWith(expect.stringContaining("Gurgaon"));
+    expect(createData.lat).toBe(28.7);
+    expect(createData.lng).toBe(77.1);
   });
 });
 

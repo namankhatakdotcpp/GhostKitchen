@@ -189,7 +189,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
     );
 
     if (validationError) {
-      return res.status(400).json({ message: validationError });
+      return res.status(400).json({ message: validationError.message, ...validationError });
     }
 
     // Compute ETA for non-terminal status transitions

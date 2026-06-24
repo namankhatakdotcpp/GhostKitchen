@@ -38,6 +38,14 @@ function computeCouponDiscount(coupon, subtotal, restaurantId) {
   return Math.min(discount, subtotal);
 }
 
+// Formats an address-like JSON blob (Restaurant.address / Order.deliveryAddress
+// — line1/city/etc.) into a single display string for socket payloads that
+// need a string, not a nested object.
+function formatAddress(address) {
+  if (!address || typeof address !== "object") return "";
+  return [address.line1, address.city].filter(Boolean).join(", ");
+}
+
 function serializeOrder(order) {
   if (!order) return null;
   return {
@@ -294,40 +302,46 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // citywide-unaware pool when city data is unavailable (most riders/
   // restaurants haven't set one yet, since this is a new field) so this
   // never regresses to "nobody gets assigned" the way Bug 2 just did.
+  //
+  // EXCEPTION: a restaurant with no real lat/lng on file (never geocoded)
+  // must NOT fall back to the full, citywide-unaware pool — there is no
+  // real distance to check it against (see restaurantHasCoords below), so
+  // a "fallback" here means assigning a rider an unknown, possibly huge,
+  // distance away with zero ability to detect it. Restrict an ungeocoded
+  // restaurant to city-matched riders only; if there's no city match
+  // either, leave the order unassigned for this pass rather than guess.
   const restaurantCity = (order.restaurant.city || order.restaurant.address?.city || "")
     .toLowerCase().trim();
+  const restaurantHasCoords = order.restaurant.lat != null && order.restaurant.lng != null;
 
-  let candidatePool = availableAgents;
-  if (restaurantCity) {
-    const cityMatched = availableAgents.filter(
-      (agent) => (agent.city || "").toLowerCase().trim() === restaurantCity
-    );
-    if (cityMatched.length > 0) {
-      candidatePool = cityMatched;
-      logger.info("Assigning agent for order — city match", { orderId, city: restaurantCity, count: cityMatched.length });
-    } else {
-      logger.warn("Assigning agent for order — no city match, falling back to full pool", {
-        orderId, city: restaurantCity, fullPoolCount: availableAgents.length,
-      });
-    }
+  const cityMatched = restaurantCity
+    ? availableAgents.filter((agent) => (agent.city || "").toLowerCase().trim() === restaurantCity)
+    : [];
+
+  let candidatePool;
+  if (cityMatched.length > 0) {
+    candidatePool = cityMatched;
+    logger.info("Assigning agent for order — city match", { orderId, city: restaurantCity, count: cityMatched.length });
+  } else if (restaurantHasCoords) {
+    candidatePool = availableAgents;
+    logger.warn("Assigning agent for order — no city match, falling back to full pool", {
+      orderId, city: restaurantCity || null, fullPoolCount: availableAgents.length,
+    });
+  } else {
+    candidatePool = [];
+    logger.warn("Assigning agent for order — restaurant not geocoded and no city match, refusing blind full-pool fallback", {
+      orderId, city: restaurantCity || null,
+    });
   }
 
   // 4. Radius filter — each rider has their own max radius (default 20km).
-  // Unlike the city filter, this is NOT a soft fallback: maxRadiusKm has
-  // always defaulted to a generous value for every rider, so an empty
-  // result here means a genuine "nobody is close enough", not missing data.
-  //
-  // EXCEPTION: if the restaurant has no real lat/lng on file (never
-  // geocoded), there is nothing to measure distance against. The old
-  // fallback silently substituted central-Delhi coordinates here, which
-  // produced a ~27km "distance" against riders who were actually at the
-  // restaurant's real location and wrongly rejected the only available
-  // agent. Skip the radius filter entirely in that case instead of
-  // measuring against a made-up point — same "don't invent data" pattern
-  // as the city filter above.
-  const restaurantHasCoords = order.restaurant.lat != null && order.restaurant.lng != null;
-  const restaurantLat = order.restaurant.lat ?? 28.6139;
-  const restaurantLng = order.restaurant.lng ?? 77.2090;
+  // This is NOT a soft fallback: maxRadiusKm has always defaulted to a
+  // generous value for every rider, so an empty result here means a
+  // genuine "nobody is close enough", not missing data. Restaurants with no
+  // coordinates never reach this filter with a non-empty candidatePool (see
+  // above), so there is no made-up-distance case to special-case here.
+  const restaurantLat = order.restaurant.lat;
+  const restaurantLng = order.restaurant.lng;
 
   const inRangeAgents = candidatePool
     .map((agent) => ({
@@ -343,7 +357,7 @@ export const assignDeliveryAgent = async (orderId, io) => {
         orderId, agentId: agent.id, distanceKm: Math.round(agent.distance * 10) / 10, radiusKm: radius,
         restaurantHasCoords,
       });
-      return !restaurantHasCoords || agent.distance <= radius;
+      return agent.distance <= radius;
     })
     .sort((a, b) => a.distance - b.distance);
 
@@ -382,11 +396,24 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // 5. Emit to agent: full order details for their offer modal. Customer and
   // shop are NOT notified yet — order:assigned only fires after real
   // acceptance, via the /accept endpoint below.
+  //
+  // distanceKm/restaurantName/pickupAddress/dropoffAddress are included as
+  // flat, already-formatted fields (not just nested under pickup/dropoff)
+  // because the rider's offer modal (DeliveryAssignment type, delivery-shell.tsx)
+  // reads them directly off the top-level payload — e.g.
+  // incomingAssignment.distanceKm.toFixed(1). Omitting distanceKm here is
+  // exactly what crashed that modal with "Cannot read properties of
+  // undefined (reading 'toFixed')" on every single offer, since the field
+  // never existed on the payload at all.
   logger.info("Emitting order:offer to room", { room: `agent-${selectedAgent.id}` });
   io.to(`agent-${selectedAgent.id}`).emit("order:offer", {
     orderId,
     orderNumber: orderId.slice(-6).toUpperCase(),
     expiresInSeconds: 30,
+    restaurantName: order.restaurant.name,
+    pickupAddress: formatAddress(order.restaurant.address),
+    dropoffAddress: formatAddress(order.deliveryAddress),
+    distanceKm: Math.round(selectedAgent.distance * 10) / 10,
     pickup: {
       name: order.restaurant.name,
       address: order.restaurant.address,
@@ -396,6 +423,8 @@ export const assignDeliveryAgent = async (orderId, io) => {
     dropoff: {
       address: order.deliveryAddress,
     },
+    pickupLat: restaurantLat,
+    pickupLng: restaurantLng,
     items: order.items,
     estimatedEarnings: Math.round(40 + selectedAgent.distance * 5), // ₹40 base + ₹5/km
   });

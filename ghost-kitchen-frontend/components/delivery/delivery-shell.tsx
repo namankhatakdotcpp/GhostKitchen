@@ -128,7 +128,9 @@ function IncomingAssignmentModal() {
               <div className="mt-5 grid grid-cols-3 gap-2">
                 <div className="rounded-[20px] border border-white/10 px-3 py-3">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Distance</p>
-                  <p className="mt-1.5 text-xl font-bold">{incomingAssignment.distanceKm.toFixed(1)} km</p>
+                  <p className="mt-1.5 text-xl font-bold">
+                    {typeof incomingAssignment.distanceKm === "number" ? `${incomingAssignment.distanceKm.toFixed(1)} km` : "--"}
+                  </p>
                 </div>
                 <div className="rounded-[20px] border border-white/10 px-3 py-3">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Base pay</p>
@@ -207,11 +209,39 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
     // which the backend now only emits AFTER real acceptance (to the
     // customer/shop rooms, not this rider's room) — listening for it here
     // would never have fired in the new flow.
+    //
+    // The raw socket payload is mapped field-by-field rather than blindly
+    // cast to DeliveryAssignment — it used to be cast directly, but the
+    // payload's actual shape (pickup/dropoff nested objects, no top-level
+    // distanceKm) never matched the type. That mismatch is exactly what
+    // crashed this modal with "Cannot read properties of undefined (reading
+    // 'toFixed')" on incomingAssignment.distanceKm — the field simply never
+    // existed on the payload. Every numeric field gets an explicit fallback
+    // here as defense-in-depth even though the backend now sends distanceKm.
     function handleOrderOffer(payload: any) {
-      const order = payload.order ?? payload;
-      if (order && order.orderId) {
-        receiveAssignment(order as DeliveryAssignment);
-      }
+      const raw = payload.order ?? payload;
+      if (!raw?.orderId) return;
+
+      const assignment: DeliveryAssignment = {
+        orderId: raw.orderId,
+        restaurantName: raw.restaurantName ?? raw.pickup?.name ?? "Restaurant",
+        pickupAddress: raw.pickupAddress ?? "",
+        dropoffAddress: raw.dropoffAddress ?? "",
+        distanceKm: typeof raw.distanceKm === "number" ? raw.distanceKm : 0,
+        estimatedEarnings: typeof raw.estimatedEarnings === "number" ? raw.estimatedEarnings : 0,
+        itemsSummary: Array.isArray(raw.items)
+          ? raw.items.map((i: any) => i?.name).filter(Boolean)
+          : [],
+        customerName: raw.customerName ?? "Customer",
+        customerPhone: raw.customerPhone ?? "",
+        restaurantPhone: raw.restaurantPhone ?? "",
+        pickupLat: raw.pickupLat ?? raw.pickup?.lat ?? 0,
+        pickupLng: raw.pickupLng ?? raw.pickup?.lng ?? 0,
+        dropoffLat: raw.dropoffLat ?? 0,
+        dropoffLng: raw.dropoffLng ?? 0,
+      };
+
+      receiveAssignment(assignment);
     }
 
     socket.on("connect", handleConnect);

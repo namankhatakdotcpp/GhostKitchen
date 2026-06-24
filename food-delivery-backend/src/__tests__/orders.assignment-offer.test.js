@@ -91,6 +91,43 @@ describe("assignDeliveryAgent — offer step", () => {
     );
     expect(io._emit).not.toHaveBeenCalledWith("order:assigned", expect.anything());
   });
+
+  // Regression for Bug B: a restaurant with no lat/lng used to skip the
+  // radius filter entirely (`!restaurantHasCoords || distance <= radius`
+  // short-circuited true for any distance), so a rider many km away got
+  // blind-assigned via the no-city-match full-pool fallback. It must now
+  // refuse to fall back to the full pool at all when ungeocoded — only a
+  // real city match is trusted — and stay unassigned otherwise.
+  it("never assigns an agent when the restaurant has no coordinates and no city match exists (no blind full-pool fallback)", async () => {
+    const ungeocoded = { ...baseRestaurant, city: null, lat: null, lng: null, address: {} };
+    const farAgent = { ...baseAgent, id: "agent-far", city: "mumbai", currentLat: 19.07, currentLng: 72.87 };
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder, restaurant: ungeocoded });
+    prisma.user.findMany.mockResolvedValue([farAgent]);
+
+    const io = makeIo();
+    const selected = await assignDeliveryAgent("ord-1", io);
+
+    expect(selected).toBeNull();
+    expect(prisma.order.update).not.toHaveBeenCalled();
+    expect(io._emit).toHaveBeenCalledWith(
+      "order:no-agent",
+      expect.objectContaining({ orderId: "ord-1", reason: "no_agents_in_radius" }),
+    );
+  });
+
+  it("still assigns within the full pool when the restaurant HAS coordinates but no city match", async () => {
+    const noCity = { ...baseRestaurant, city: null, address: {} }; // keeps real lat/lng (28.6, 77.2)
+    const closeAgent = { ...baseAgent, id: "agent-close", city: "mumbai", currentLat: 28.61, currentLng: 77.21 };
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder, restaurant: noCity });
+    prisma.user.findMany.mockResolvedValue([closeAgent]);
+    prisma.order.update.mockResolvedValue({ ...baseOrder, pendingAgentId: closeAgent.id });
+    prisma.user.update.mockResolvedValue(closeAgent);
+
+    const io = makeIo();
+    const selected = await assignDeliveryAgent("ord-1", io);
+
+    expect(selected?.id).toBe("agent-close");
+  });
 });
 
 describe("acceptOrderOffer", () => {

@@ -254,4 +254,43 @@ describe("validateStatusUpdate", () => {
     const err = validateStatusUpdate({ status: "CANCELLED" }, "PLACED", "ADMIN");
     expect(err).toBeNull();
   });
+
+  // Regression for Bug A: "Mark Ready" on the shop dashboard always sends
+  // OUT_FOR_DELIVERY (there is no separate READY_FOR_PICKUP status in this
+  // system — see schema.prisma's OrderStatus enum). The accept flow makes
+  // two sequential PATCHes (CONFIRMED, then PREPARING); if the second one
+  // ever fails or is skipped, the order is left sitting at CONFIRMED while
+  // the UI's "Preparing" column (which covers both CONFIRMED and PREPARING)
+  // still shows a "Mark Ready" button for it. Clicking it must succeed
+  // instead of repeatedly 400ing with no way to recover.
+  it("allows RESTAURANT to mark ready (PREPARING -> OUT_FOR_DELIVERY)", () => {
+    const err = validateStatusUpdate({ status: "OUT_FOR_DELIVERY" }, "PREPARING", "RESTAURANT");
+    expect(err).toBeNull();
+  });
+
+  it("allows RESTAURANT to mark ready directly from CONFIRMED (order never made it to PREPARING)", () => {
+    const err = validateStatusUpdate({ status: "OUT_FOR_DELIVERY" }, "CONFIRMED", "RESTAURANT");
+    expect(err).toBeNull();
+  });
+
+  it("rejects an invalid transition with a structured, debuggable error body", () => {
+    const err = validateStatusUpdate({ status: "OUT_FOR_DELIVERY" }, "PLACED", "RESTAURANT");
+    expect(err).toMatchObject({
+      error: "Invalid transition",
+      from: "PLACED",
+      to: "OUT_FOR_DELIVERY",
+      allowedNext: ["CONFIRMED", "CANCELLED"],
+    });
+    expect(err.message).toBe("Cannot transition from PLACED to OUT_FOR_DELIVERY");
+  });
+
+  it("rejects a role attempting a status it has no permission for, with role context in the error", () => {
+    const err = validateStatusUpdate({ status: "DELIVERED" }, "OUT_FOR_DELIVERY", "RESTAURANT");
+    expect(err).toMatchObject({
+      error: "Not permitted",
+      role: "RESTAURANT",
+      from: "OUT_FOR_DELIVERY",
+      to: "DELIVERED",
+    });
+  });
 });

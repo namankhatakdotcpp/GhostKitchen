@@ -2,6 +2,8 @@ import { prisma } from "../../config/prisma.js";
 import { generateTokenPair, buildTokenPayload } from "../../utils/jwt.js";
 import AppError from "../../utils/AppError.js";
 import { getSiteConfigCached } from "../config/config.service.js";
+import { geocodeAddress } from "../restaurant/restaurant.service.js";
+import { logger } from "../../utils/logger.js";
 
 const USER_ROLE_SELECT = {
   id: true, name: true, email: true, phone: true,
@@ -100,6 +102,29 @@ export async function registerRestaurant(userId, restaurantData) {
     .replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 50)
     + "-" + Date.now().toString(36);
 
+  // Onboarding only ever submits a city/address string, never lat/lng — so
+  // every restaurant created through this flow used to land with lat/lng
+  // permanently null (createRestaurant in restaurant.service.js geocodes,
+  // but the onboarding flow goes through here, which never did). That null
+  // is exactly what later made assignDeliveryAgent fall back to a blind
+  // "full pool" rider match with no real distance to check. Geocode here
+  // before the transaction — it's a network call and must not run inside
+  // Prisma's transaction timeout.
+  let lat = restaurantData.lat ?? null;
+  let lng = restaurantData.lng ?? null;
+  if (lat == null || lng == null) {
+    const addressText = [restaurantData.addressLine, restaurantData.city, "India"]
+      .filter(Boolean).join(", ");
+    const geocoded = await geocodeAddress(addressText);
+    if (geocoded) {
+      ({ lat, lng } = geocoded);
+    } else {
+      logger.warn("Restaurant registered without coordinates — geocoding failed", {
+        userId, city: restaurantData.city,
+      });
+    }
+  }
+
   // Wrap create + user-update in a transaction so a partial failure can never
   // leave the restaurant row orphaned with the user roles un-updated.
   const { restaurant, updated } = await prisma.$transaction(async (tx) => {
@@ -118,8 +143,10 @@ export async function registerRestaurant(userId, restaurantData) {
           deliveryTime: restaurantData.deliveryTime || 30,
           minOrder: restaurantData.minOrder || 9900,
         },
-        lat: restaurantData.lat ?? null,
-        lng: restaurantData.lng ?? null,
+        // Scalar mirror of address.city — see schema.prisma comment.
+        city: restaurantData.city || null,
+        lat,
+        lng,
         deliveryRadius: requestedRadius,
         isApproved: !cfg.requireApproval,
         isOpen: !cfg.requireApproval,
@@ -195,6 +222,21 @@ export async function addRestaurant(userId, restaurantData) {
     .replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 50)
     + "-" + Date.now().toString(36);
 
+  let branchLat = restaurantData.lat ?? null;
+  let branchLng = restaurantData.lng ?? null;
+  if (branchLat == null || branchLng == null) {
+    const addressText = [restaurantData.addressLine, restaurantData.city, "India"]
+      .filter(Boolean).join(", ");
+    const geocoded = await geocodeAddress(addressText);
+    if (geocoded) {
+      ({ lat: branchLat, lng: branchLng } = geocoded);
+    } else {
+      logger.warn("Branch restaurant created without coordinates — geocoding failed", {
+        userId, city: restaurantData.city,
+      });
+    }
+  }
+
   const restaurant = await prisma.restaurant.create({
     data: {
       name: restaurantData.name,
@@ -210,8 +252,9 @@ export async function addRestaurant(userId, restaurantData) {
         deliveryTime: restaurantData.deliveryTime || 30,
         minOrder: restaurantData.minOrder || 9900,
       },
-      lat: restaurantData.lat ?? null,
-      lng: restaurantData.lng ?? null,
+      city: restaurantData.city || null,
+      lat: branchLat,
+      lng: branchLng,
       deliveryRadius: requestedRadius2,
       isApproved: !cfg.requireApproval,
       isOpen: !cfg.requireApproval,
