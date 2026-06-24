@@ -23,6 +23,21 @@ vi.mock("../config/prisma.js", () => ({
 vi.mock("../modules/config/config.service.js", () => ({
   getSiteConfigCached: vi.fn(),
 }));
+// Default PlatformSettings (₹10 base, ₹2/km, ₹5 flat platform fee, 20/50/30
+// split) — matches the schema's @default values exactly, so these tests
+// exercise the real defaults rather than an arbitrary test fixture.
+vi.mock("../modules/pricing/platformSettings.service.js", () => ({
+  getPlatformSettingsCached: vi.fn().mockResolvedValue({
+    deliveryBaseFee: 1000,
+    deliveryPerKmFee: 200,
+    platformFeeMode: "FLAT",
+    platformFeeValue: 500,
+    splitRestaurantPct: 20,
+    splitRiderPct: 50,
+    splitAdminPct: 30,
+  }),
+  snapshotSettings: vi.fn((s) => ({ ...s })),
+}));
 vi.mock("../utils/eta.js", () => ({
   computeETA: vi.fn(() => new Date(Date.now() + 30 * 60_000)),
 }));
@@ -39,6 +54,7 @@ vi.mock("../modules/notification/notification.service.js", () => ({
 
 const { prisma } = await import("../config/prisma.js");
 const { getSiteConfigCached } = await import("../modules/config/config.service.js");
+const { getPlatformSettingsCached } = await import("../modules/pricing/platformSettings.service.js");
 const { listOrders, getOrderById, createOrder, calculateOrderTotal } = await import("../modules/orders/orders.service.js");
 
 const baseCfg = { defaultDeliveryFee: 3000, cashOnDelivery: true, codMinOrder: 0, autoConfirmOrders: false };
@@ -195,6 +211,71 @@ describe("createOrder", () => {
 
     expect(result.total).toBe(68000);
   });
+
+  it("computes each order from the PlatformSettings live AT CREATION TIME — a later settings change never retroactively alters an already-created order's stored breakdown", async () => {
+    prisma.restaurant.findUnique.mockResolvedValue({ isOpen: true, suspended: false, isApproved: true, address: { minOrder: 9900 } });
+    prisma.menuItem.findMany.mockResolvedValue(menuItems);
+    getSiteConfigCached.mockResolvedValue({ ...baseCfg, defaultDeliveryFee: 3000 });
+
+    let capturedCreateData;
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        coupon: { findUnique: vi.fn(), updateMany: vi.fn() },
+        order: {
+          create: vi.fn((args) => {
+            capturedCreateData = args.data;
+            return Promise.resolve({ ...baseOrder, ...args.data });
+          }),
+        },
+      };
+      return fn(tx);
+    });
+
+    // "Today's" settings — order 1 created under these.
+    getPlatformSettingsCached.mockResolvedValue({
+      deliveryBaseFee: 1000, deliveryPerKmFee: 200,
+      platformFeeMode: "FLAT", platformFeeValue: 500,
+      splitRestaurantPct: 20, splitRiderPct: 50, splitAdminPct: 30,
+    });
+    await createOrder(payload, "u-1");
+    const order1Snapshot = capturedCreateData.pricingSnapshot;
+    const order1RiderPayout = capturedCreateData.riderPayout;
+    const order1AdminRevenue = capturedCreateData.adminRevenue;
+
+    // Admin changes the split "tomorrow" — order 2 created under the new settings.
+    getPlatformSettingsCached.mockResolvedValue({
+      deliveryBaseFee: 1000, deliveryPerKmFee: 200,
+      platformFeeMode: "FLAT", platformFeeValue: 500,
+      splitRestaurantPct: 50, splitRiderPct: 20, splitAdminPct: 30,
+    });
+    await createOrder(payload, "u-1");
+    const order2Snapshot = capturedCreateData.pricingSnapshot;
+    const order2RiderPayout = capturedCreateData.riderPayout;
+
+    // The two orders' stored payouts genuinely differ (proving the split is
+    // really applied at creation time, not some cached/frozen constant)...
+    expect(order1RiderPayout).not.toBe(order2RiderPayout);
+    expect(order1RiderPayout).toBeGreaterThan(order2RiderPayout); // 50% > 20% of the same pool
+    // ...and each order's own snapshot reflects exactly the settings that
+    // were live when IT was created, not whatever is live now.
+    expect(order1Snapshot.splitRiderPct).toBe(50);
+    expect(order2Snapshot.splitRiderPct).toBe(20);
+    // Since nothing ever re-reads PlatformSettings to recompute an existing
+    // order, order 1's already-returned riderPayout/adminRevenue are exactly
+    // what got persisted — there is no code path that would later overwrite
+    // them when settings change again.
+    expect(order1AdminRevenue).toBe(order2AdminRevenueUnchangedSanity(order1Snapshot));
+
+    function order2AdminRevenueUnchangedSanity(snapshot) {
+      // Recompute order 1's expected adminRevenue directly from its own
+      // frozen snapshot, independent of whatever getPlatformSettingsCached
+      // returns now — this is what "immutable" means here.
+      const splitPool = 1000 + 500; // deliveryFee (base only, no distance) + platformFee
+      const restaurantShare = Math.round(splitPool * (snapshot.splitRestaurantPct / 100));
+      const riderShare = Math.round(splitPool * (snapshot.splitRiderPct / 100));
+      return splitPool - restaurantShare - riderShare;
+    }
+  });
 });
 
 // ── calculateOrderTotal ───────────────────────────────────────────────────────
@@ -212,8 +293,11 @@ describe("calculateOrderTotal", () => {
       items: [{ menuItemId: "mi-1", quantity: 2 }],
     });
 
+    // itemTotal 40000; +2.5% packaging (1000) +2.5% GST (1000)
+    // +deliveryFee 1000 (base only, no distance) +5% GST (50)
+    // +platformFee 500 flat +5% GST (25) = 43575
     expect(result.subtotal).toBe(40000); // 2 × 20000
-    expect(result.total).toBe(43000); // + 3000 delivery
+    expect(result.total).toBe(43575);
     expect(result.discount).toBe(0);
   });
 
@@ -236,7 +320,7 @@ describe("calculateOrderTotal", () => {
     });
 
     expect(result.discount).toBe(4000); // 10% of 40000
-    expect(result.total).toBe(39000); // 40000 - 4000 + 3000
+    expect(result.total).toBe(39575); // 43575 customerTotal - 4000 discount
   });
 
   it("applies FLAT coupon correctly", async () => {
@@ -258,7 +342,7 @@ describe("calculateOrderTotal", () => {
     });
 
     expect(result.discount).toBe(5000);
-    expect(result.total).toBe(38000); // 40000 - 5000 + 3000
+    expect(result.total).toBe(38575); // 43575 customerTotal - 5000 discount
   });
 
   it("throws when coupon is invalid", async () => {

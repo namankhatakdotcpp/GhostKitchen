@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -271,7 +272,8 @@ export function DeliveryShell({ children }: DeliveryShellProps) {
     <div className="min-h-screen bg-surface">
       <IncomingAssignmentModal />
       <header className="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-white/95 px-4 backdrop-blur">
-        <span className="text-base font-extrabold tracking-tight">
+        <span className="flex items-center gap-1.5 text-base font-extrabold tracking-tight">
+          <Image alt="" aria-hidden="true" className="h-6 w-6 rounded-lg" height={32} src="/icon-512.png" width={32} />
           <span className="text-text-primary">ghost</span><span className="text-brand">kitchen</span>
         </span>
         <RoleSwitcher />

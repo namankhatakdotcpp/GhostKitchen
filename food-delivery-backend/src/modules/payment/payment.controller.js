@@ -224,12 +224,13 @@ export const createPaymentOrder = async (req, res, next) => {
     });
     if (!customer) return res.status(404).json({ message: "User not found" });
 
-    const { orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+    const pricing = await calculateOrderTotal({
       restaurantId,
       items,
       couponCode,
       deliveryAddress,
     });
+    const { orderItems, subtotal, deliveryFee, discount, total } = pricing;
 
     const cfOrderId = `GK-${uuid().slice(0, 8).toUpperCase()}`;
 
@@ -275,7 +276,7 @@ export const createPaymentOrder = async (req, res, next) => {
         status: "PENDING",
         // Full priced snapshot — order creation after payment must use exactly
         // these amounts, never a recalculation against a menu that may have changed.
-        itemsSnapshot: JSON.stringify({ orderItems, subtotal, deliveryFee, discount, total }),
+        itemsSnapshot: JSON.stringify(pricing),
         deliveryAddress: JSON.stringify(deliveryAddress),
         couponCode: couponCode || null,
       },
@@ -286,6 +287,7 @@ export const createPaymentOrder = async (req, res, next) => {
       paymentSessionId,
       orderAmount: total / 100,
       deliveryFee,
+      pricing,
     });
   } catch (error) {
     if (

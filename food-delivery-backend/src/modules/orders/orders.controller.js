@@ -1,5 +1,6 @@
 import {
   assignDeliveryAgent,
+  calculateOrderTotal,
   createOrder,
   getOrderById,
   listOrders,
@@ -146,6 +147,33 @@ export const placeOrder = async (req, res) => {
 
     logger.error("Order creation error", { error: error.message });
     return res.status(500).json({ message: "Unable to place order" });
+  }
+};
+
+// POST /api/orders/calculate
+// Preview-only — returns the full pricing breakdown without creating
+// anything, so checkout can show exact line items (and the COD "Place
+// Order — ₹X" total) before the customer commits. Same calculateOrderTotal
+// the paid flow uses to build its Cashfree session, so the preview can
+// never drift from what actually gets charged.
+export const calculateOrderPreview = async (req, res) => {
+  try {
+    const { restaurantId, items, couponCode, deliveryAddress } = req.body;
+    if (!restaurantId || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "restaurantId and items are required" });
+    }
+    const pricing = await calculateOrderTotal({ restaurantId, items, couponCode, deliveryAddress });
+    return res.json({ pricing });
+  } catch (error) {
+    if (
+      error.message?.includes("Invalid items") ||
+      error.message?.includes("coupon") ||
+      error.message?.includes("Coupon") ||
+      error.message?.includes("same city")
+    ) {
+      return res.status(400).json({ message: error.message });
+    }
+    return res.status(500).json({ message: "Unable to calculate order total" });
   }
 };
 

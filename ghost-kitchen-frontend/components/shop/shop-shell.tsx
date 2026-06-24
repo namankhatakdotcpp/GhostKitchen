@@ -1,11 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { BarChart3, ChevronDown, Settings, ShoppingBag, Store, UtensilsCrossed } from "lucide-react";
 
+import NotificationBell from "@/components/ui/NotificationBell";
 import RoleSwitcher from "@/components/ui/role-switcher";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -98,11 +100,15 @@ export function ShopShell({ children }: ShopShellProps) {
       {/* Wide sidebar on larger screens showing restaurant selector */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-border bg-white xl:flex">
         <div className="flex h-16 items-center justify-between border-b border-border px-4">
-          <Link className="text-xl font-extrabold tracking-[-0.04em]" href="/shop/orders">
+          <Link className="flex items-center gap-1.5 text-xl font-extrabold tracking-[-0.04em]" href="/shop/orders">
+            <Image alt="" aria-hidden="true" className="h-7 w-7 rounded-lg" height={32} src="/icon-512.png" width={32} />
             <span className="text-text-primary">ghost</span>
             <span className="text-brand">kitchen</span>
           </Link>
-          <RoleSwitcher />
+          <div className="flex items-center gap-1.5">
+            <NotificationBell />
+            <RoleSwitcher />
+          </div>
         </div>
 
         <RestaurantSelector />
@@ -133,11 +139,15 @@ export function ShopShell({ children }: ShopShellProps) {
 
       {/* Mobile top header with logo + role switcher */}
       <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-white px-4 md:hidden">
-        <Link className="text-xl font-extrabold tracking-[-0.04em]" href="/shop/orders">
+        <Link className="flex items-center gap-1.5 text-xl font-extrabold tracking-[-0.04em]" href="/shop/orders">
+          <Image alt="" aria-hidden="true" className="h-6 w-6 rounded-lg" height={32} src="/icon-512.png" width={32} />
           <span className="text-text-primary">ghost</span>
           <span className="text-brand">kitchen</span>
         </Link>
-        <RoleSwitcher />
+        <div className="flex items-center gap-1.5">
+          <NotificationBell />
+          <RoleSwitcher />
+        </div>
       </header>
 
       <main className="pt-14 pb-24 md:pt-0 md:pl-[72px] md:pb-0 xl:pl-56">{children}</main>

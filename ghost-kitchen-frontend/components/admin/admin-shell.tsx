@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,6 +14,7 @@ import {
   LineChart,
   LogOut,
   Map,
+  Percent,
   Siren,
   Settings,
   ShoppingBag,
@@ -51,6 +53,7 @@ const navGroups = [
       { href: "/admin/payments",       label: "Payments",        icon: Wallet },
       { href: "/admin/payouts",        label: "Payouts",         icon: DollarSign },
       { href: "/admin/coupons",        label: "Coupons",         icon: Tag },
+      { href: "/admin/pricing-settings", label: "Pricing",       icon: Percent },
     ],
   },
   {
@@ -87,7 +90,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
         {/* Logo */}
         <div className="px-6 pt-7 pb-6">
           <Link href="/admin/dashboard" className="block">
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-center gap-1.5">
+              <Image alt="" aria-hidden="true" className="h-7 w-7 rounded-lg" height={32} src="/icon-512.png" width={32} />
               <span className="text-[22px] font-extrabold tracking-tight text-white">ghost</span>
               <span className="text-[22px] font-extrabold tracking-tight text-[#FF5200]">kitchen</span>
             </div>

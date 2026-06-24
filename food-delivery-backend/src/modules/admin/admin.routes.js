@@ -44,6 +44,8 @@ import {
   getAuditLogEntries,
   getSettings,
   updateSettings,
+  getPricingSettings,
+  updatePricingSettings,
   approveRestaurant,
   getAnalytics,
   getDeliveryAgents,
@@ -141,6 +143,8 @@ router.get("/audit-log", getAuditLogEntries);
 router.get("/audit-log/export", exportAuditLog);
 router.get("/settings", getSettings);
 router.patch("/settings", updateSettings);
+router.get("/pricing-settings", getPricingSettings);
+router.patch("/pricing-settings", updatePricingSettings);
 router.patch("/restaurants/:id/approve", approveRestaurant);
 router.get("/analytics", getAnalytics);
 router.get("/delivery-agents", getDeliveryAgents);

@@ -26,6 +26,22 @@ interface SavedAddress {
   state?: string | null
   pincode?: string | null
   isDefault: boolean
+  lat?: number | null
+  lng?: number | null
+}
+
+interface PricingBreakdown {
+  itemTotal: number
+  restaurantPackaging: number
+  gstOnItemTotal: number
+  deliveryFee: number
+  gstOnDeliveryFee: number
+  platformFee: number
+  gstOnPlatformFee: number
+  customerTotal: number
+  distanceKm: number | null
+  discount: number
+  total: number
 }
 
 function CheckoutPageContent() {
@@ -48,7 +64,8 @@ function CheckoutPageContent() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ONLINE')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [deliveryFee, setDeliveryFee] = useState<number | null>(null)
+  const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
+  const [pricingLoading, setPricingLoading] = useState(false)
   const [orderInProgress, setOrderInProgress] = useState(false)
   const [codEnabled, setCodEnabled] = useState(true)
 
@@ -57,11 +74,10 @@ function CheckoutPageContent() {
   useEffect(() => {
     api.get('/config')
       .then(r => {
-        setDeliveryFee(Number(r.data?.defaultDeliveryFee) || 3000)
         // Respect admin COD toggle
         if (r.data?.cashOnDelivery === false) setCodEnabled(false)
       })
-      .catch(() => setDeliveryFee(3000))
+      .catch(() => {})
 
     api.get('/user/addresses')
       .then(r => {
@@ -75,15 +91,53 @@ function CheckoutPageContent() {
       .catch(() => setUseNewAddress(true))
   }, [])
 
-  function getDeliveryAddress(): { line1: string; city: string } | null {
+  function getDeliveryAddress(): { line1: string; city: string; lat?: number; lng?: number } | null {
     if (useNewAddress) {
       if (!newAddressText.trim()) return null
+      // Free-text addresses have no coordinates — the backend's delivery-fee
+      // formula falls back to the base fee only (no per-km charge) when
+      // distance is unknown, rather than guessing.
       return { line1: newAddressText.trim(), city: newAddressCity.trim() || 'Delhi' }
     }
     const addr = savedAddresses.find(a => a.id === selectedAddressId)
     if (!addr) return null
-    return { line1: addr.line1, city: addr.city }
+    return {
+      line1: addr.line1,
+      city: addr.city,
+      ...(addr.lat != null && addr.lng != null ? { lat: addr.lat, lng: addr.lng } : {}),
+    }
   }
+
+  // Server-calculated price breakdown — re-fetched whenever the cart,
+  // address, or coupon changes, debounced slightly so it doesn't fire once
+  // per keystroke while typing a new address. This is the SAME endpoint
+  // (and the SAME calculateOrderTotal under the hood) used to build the
+  // Cashfree payment session, so the preview can never drift from what
+  // actually gets charged.
+  useEffect(() => {
+    const deliveryAddress = getDeliveryAddress()
+    if (!restaurantId || items.length === 0 || !deliveryAddress) {
+      setPricing(null)
+      return
+    }
+
+    let cancelled = false
+    setPricingLoading(true)
+    const timer = window.setTimeout(() => {
+      api.post('/orders/calculate', {
+        restaurantId,
+        items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
+        deliveryAddress,
+        couponCode: couponCode || undefined,
+      })
+        .then(({ data }) => { if (!cancelled) setPricing(data.pricing) })
+        .catch(() => { if (!cancelled) setPricing(null) })
+        .finally(() => { if (!cancelled) setPricingLoading(false) })
+    }, 300)
+
+    return () => { cancelled = true; window.clearTimeout(timer) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId, items, useNewAddress, newAddressText, newAddressCity, selectedAddressId, couponCode])
 
   async function handleApplyCoupon() {
     if (!couponInput.trim()) { setCouponError('Please enter a coupon code'); return }
@@ -113,15 +167,19 @@ function CheckoutPageContent() {
     setCouponError('')
   }
 
-  const discountPaise = appliedCoupon?.discountAmount ?? 0
-  const totalPaise = deliveryFee !== null
-    ? Math.max(subtotalPaise + deliveryFee - discountPaise, 0)
-    : null
-
+  // pricing is the server-calculated breakdown (POST /orders/calculate) —
+  // the only source of truth for what the customer will actually be
+  // charged. While it's loading (or unavailable, e.g. no address picked
+  // yet), fall back to a bare item subtotal so the page isn't blank.
   const subtotalRupees = toRupees(subtotalPaise)
-  const deliveryFeeRupees = deliveryFee !== null ? toRupees(deliveryFee) : null
-  const discountRupees = toRupees(discountPaise)
-  const totalRupees = totalPaise !== null ? toRupees(totalPaise) : null
+  const restaurantPackagingRupees = pricing ? toRupees(pricing.restaurantPackaging) : null
+  const deliveryFeeRupees = pricing ? toRupees(pricing.deliveryFee) : null
+  const platformFeeRupees = pricing ? toRupees(pricing.platformFee) : null
+  const gstTotalRupees = pricing
+    ? toRupees(pricing.gstOnItemTotal + pricing.gstOnDeliveryFee + pricing.gstOnPlatformFee)
+    : null
+  const discountRupees = pricing ? toRupees(pricing.discount) : toRupees(appliedCoupon?.discountAmount ?? 0)
+  const totalRupees = pricing ? toRupees(pricing.total) : null
 
   async function handlePlaceOrderCOD(deliveryAddress: { line1: string; city: string }) {
     const { data } = await api.post('/orders', {
@@ -142,7 +200,7 @@ function CheckoutPageContent() {
       couponCode: couponCode || undefined,
     })
 
-    if (data.deliveryFee) setDeliveryFee(data.deliveryFee)
+    if (data.pricing) setPricing(data.pricing)
 
     const cashfree = await load({
       mode: process.env.NEXT_PUBLIC_CASHFREE_ENV === 'production' ? 'production' : 'sandbox',
@@ -228,12 +286,24 @@ function CheckoutPageContent() {
         ))}
         <div className="mt-3 space-y-1 text-sm text-gray-500">
           <div className="flex justify-between">
-            <span>Subtotal</span>
+            <span>Item total</span>
             <span>₹{subtotalRupees}</span>
           </div>
           <div className="flex justify-between">
-            <span>Delivery fee</span>
-            <span>₹{deliveryFeeRupees !== null ? deliveryFeeRupees : '...'}</span>
+            <span>Restaurant packaging</span>
+            <span>{restaurantPackagingRupees !== null ? `₹${restaurantPackagingRupees}` : '...'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Delivery fee{pricing?.distanceKm != null ? ` (${pricing.distanceKm.toFixed(1)} km)` : ''}</span>
+            <span>{deliveryFeeRupees !== null ? `₹${deliveryFeeRupees}` : '...'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Platform fee</span>
+            <span>{platformFeeRupees !== null ? `₹${platformFeeRupees}` : '...'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>GST &amp; other charges</span>
+            <span>{gstTotalRupees !== null ? `₹${gstTotalRupees.toFixed(2)}` : '...'}</span>
           </div>
           {discountRupees > 0 && (
             <div className="flex justify-between text-green-600 font-medium">
@@ -243,7 +313,7 @@ function CheckoutPageContent() {
           )}
           <div className="flex justify-between pt-2 font-bold text-gray-900 border-t border-gray-100 text-base">
             <span>Total</span>
-            <span>₹{totalRupees !== null ? totalRupees.toFixed(2) : '...'}</span>
+            <span>₹{totalRupees !== null ? totalRupees.toFixed(2) : (pricingLoading ? '...' : '—')}</span>
           </div>
         </div>
         <p className="text-xs text-gray-400 mt-1">Final amount confirmed at payment</p>
@@ -435,7 +505,7 @@ function CheckoutPageContent() {
 
       <button
         onClick={handlePlaceOrder}
-        disabled={isLoading || items.length === 0 || deliveryFee === null || orderInProgress}
+        disabled={isLoading || items.length === 0 || pricing === null || pricingLoading || orderInProgress}
         className="w-full h-14 bg-brand hover:bg-brand-dark disabled:bg-gray-300 text-white font-bold text-base rounded-xl transition-colors"
       >
         {buttonLabel}

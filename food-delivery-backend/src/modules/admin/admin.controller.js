@@ -7,6 +7,7 @@
 
 import * as adminService from "./admin.service.js";
 import { getSiteConfig, updateSiteConfig, broadcastMaintenanceNotification } from "../config/config.service.js";
+import { getPlatformSettings, updatePlatformSettings } from "../pricing/platformSettings.service.js";
 import { auditLog } from "../../utils/audit.js";
 import { logger } from "../../utils/logger.js";
 import { sendRestaurantApprovedEmail } from "../../services/email.service.js";
@@ -393,6 +394,30 @@ export const updateSettings = async (req, res, next) => {
     }
 
     res.json({ success: true, settings: config });
+  } catch (error) { next(error); }
+};
+
+export const getPricingSettings = async (req, res, next) => {
+  try {
+    const settings = await getPlatformSettings();
+    res.json({ success: true, settings });
+  } catch (error) { next(error); }
+};
+
+export const updatePricingSettings = async (req, res, next) => {
+  try {
+    const settings = await updatePlatformSettings(req.body);
+    try {
+      await auditLog({
+        userId: req.user.userId,
+        action: "ADMIN_UPDATE_PRICING_SETTINGS",
+        entityType: "PlatformSettings",
+        entityId: "singleton",
+        meta: req.body,
+        req,
+      });
+    } catch { /* non-fatal */ }
+    res.json({ success: true, settings });
   } catch (error) { next(error); }
 };
 

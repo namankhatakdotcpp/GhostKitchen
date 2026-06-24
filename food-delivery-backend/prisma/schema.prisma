@@ -49,50 +49,50 @@ enum IncidentStatus {
 }
 
 model User {
-  id              String    @id @default(uuid())
-  name            String
-  email           String    @unique
-  phone           String?
-  password        String
+  id       String  @id @default(uuid())
+  name     String
+  email    String  @unique
+  phone    String?
+  password String
 
   // Multi-role system
-  roles           Role[]    @default([CUSTOMER])
-  activeRole      Role      @default(CUSTOMER)
-  secondRole      Role?
-  restaurantId    String?   // set when secondRole = RESTAURANT
+  roles        Role[]  @default([CUSTOMER])
+  activeRole   Role    @default(CUSTOMER)
+  secondRole   Role?
+  restaurantId String? // set when secondRole = RESTAURANT
 
   // Delivery agent fields
-  vehicleType     String?
-  vehicleNumber   String?
-  isOnDuty        Boolean   @default(false)
+  vehicleType   String?
+  vehicleNumber String?
+  isOnDuty      Boolean @default(false)
   // Rider's operating city (collected at onboarding) and max distance they'll
   // travel from a restaurant, in km — used by assignDeliveryAgent to avoid
   // matching a rider in one city to an order in another.
-  city            String?
-  maxRadiusKm     Int       @default(20)
+  city          String?
+  maxRadiusKm   Int     @default(20)
 
-  isBlocked       Boolean   @default(false)
-  isSuspended     Boolean   @default(false)
+  isBlocked   Boolean @default(false)
+  isSuspended Boolean @default(false)
 
   // Legacy location tracking (for delivery agents)
-  isAvailable     Boolean   @default(false)
-  currentLat      Float?
-  currentLng      Float?
+  isAvailable Boolean @default(false)
+  currentLat  Float?
+  currentLng  Float?
 
-  restaurants     Restaurant[]   @relation("RestaurantOwner")
-  customerOrders  Order[]        @relation("CustomerOrders")
-  agentOrders     Order[]        @relation("AgentOrders")
-  refreshTokens   RefreshToken[]
-  cartItems       CartItem[]     @relation("UserCart")
-  notifications   Notification[]
-  addresses       Address[]
-  favorites       Favorite[]
-  riderLocation   RiderLocation? @relation("UserRiderLocation")
-  riderSessions   RiderSession[] @relation("UserRiderSessions")
-  reportedIncidents Incident[]   @relation("IncidentCreator")
-  resolvedIncidents Incident[]   @relation("IncidentResolver")
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  restaurants       Restaurant[]   @relation("RestaurantOwner")
+  customerOrders    Order[]        @relation("CustomerOrders")
+  agentOrders       Order[]        @relation("AgentOrders")
+  refreshTokens     RefreshToken[]
+  cartItems         CartItem[]     @relation("UserCart")
+  notifications     Notification[]
+  addresses         Address[]
+  favorites         Favorite[]
+  riderLocation     RiderLocation? @relation("UserRiderLocation")
+  riderSessions     RiderSession[] @relation("UserRiderSessions")
+  reportedIncidents Incident[]     @relation("IncidentCreator")
+  resolvedIncidents Incident[]     @relation("IncidentResolver")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([email])
   @@index([activeRole])
@@ -126,20 +126,20 @@ model CartItem {
 }
 
 model Address {
-  id         String   @id @default(uuid())
-  userId     String
-  label      String   @default("Home")
-  line1      String
-  line2      String?
-  city       String
-  state      String?
-  pincode    String?
-  lat        Float?
-  lng        Float?
-  isDefault  Boolean  @default(false)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  label     String   @default("Home")
+  line1     String
+  line2     String?
+  city      String
+  state     String?
+  pincode   String?
+  lat       Float?
+  lng       Float?
+  isDefault Boolean  @default(false)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
@@ -217,7 +217,7 @@ model Order {
   id              String      @id @default(cuid())
   customerId      String
   restaurantId    String
-  agentId         String?     // rider who has ACCEPTED — confirmed assignment
+  agentId         String? // rider who has ACCEPTED — confirmed assignment
   // Rider who has been OFFERED this order but hasn't responded yet. Set by
   // assignDeliveryAgent, cleared by the accept/reject endpoints (or by the
   // stale-offer sweep in the reassignment job). agentId is only ever set
@@ -231,15 +231,43 @@ model Order {
   discount        Float       @default(0)
   total           Float       @default(0)
   deliveryAddress Json?
-  cfOrderId           String?     @unique
-  placedAt            DateTime    @default(now())
-  acceptedAt          DateTime?   // restaurant accepted (CONFIRMED transition)
-  readyAt             DateTime?   // food ready for pickup (PREPARING → OUT_FOR_DELIVERY)
-  pickedUpAt          DateTime?   // rider collected from restaurant
-  deliveredAt         DateTime?
-  estimatedDelivery   DateTime?
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+
+  // ── Pricing/commission breakdown (all paise, all computed once at order
+  // creation — see src/modules/orders/pricing.js). itemTotal duplicates
+  // `subtotal` numerically; kept as its own column because the pricing spec
+  // calls for it by this exact name for auditability, without renaming
+  // `subtotal` everywhere it's already read across the codebase.
+  itemTotal           Float? // == subtotal, sum of menu item price × qty
+  restaurantPackaging Float? // 2.5% of itemTotal, 100% to restaurant
+  gstOnItemTotal      Float? // 2.5% of itemTotal, tax passthrough
+  gstOnDeliveryFee    Float? // 5% of deliveryFee, tax passthrough
+  platformFee         Float? // admin-configured flat ₹ or % of itemTotal
+  gstOnPlatformFee    Float? // 5% of platformFee, tax passthrough
+  distanceKm          Float? // restaurant → delivery address, haversine; null if either end has no coordinates
+
+  // ── 3-way revenue split, computed once at order creation from
+  // PlatformSettings as they were AT THAT TIME (see pricingSnapshot) — an
+  // admin changing the split tomorrow must never retroactively change what
+  // a rider earned on an order placed today.
+  restaurantPayout Float? // restaurantPackaging + split share of (deliveryFee + platformFee)
+  riderPayout      Float? // split share of (deliveryFee + platformFee)
+  adminRevenue     Float? // split share of (deliveryFee + platformFee)
+
+  // Exact PlatformSettings values used to compute this order's pricing —
+  // PlatformSettings is a singleton with no history table, so snapshotting
+  // the literal numbers onto the order (same pattern as Payment.itemsSnapshot
+  // elsewhere in this codebase) is the simplest way to make old orders immune
+  // to later settings changes without building full settings versioning.
+  pricingSnapshot   Json?
+  cfOrderId         String?   @unique
+  placedAt          DateTime  @default(now())
+  acceptedAt        DateTime? // restaurant accepted (CONFIRMED transition)
+  readyAt           DateTime? // food ready for pickup (PREPARING → OUT_FOR_DELIVERY)
+  pickedUpAt        DateTime? // rider collected from restaurant
+  deliveredAt       DateTime?
+  estimatedDelivery DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
@@ -311,15 +339,15 @@ model PaymentWebhook {
 }
 
 model Refund {
-  id            String   @id @default(uuid())
-  cfOrderId     String
-  cfRefundId    String?  @unique
-  amount        Int      // paise
-  status        String   @default("PENDING")
-  reason        String?
-  initiatedBy   String   // admin userId
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String   @id @default(uuid())
+  cfOrderId   String
+  cfRefundId  String?  @unique
+  amount      Int // paise
+  status      String   @default("PENDING")
+  reason      String?
+  initiatedBy String // admin userId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([cfOrderId])
   @@index([status])
@@ -357,37 +385,61 @@ model AuditLog {
 }
 
 model SiteConfig {
+  id                     String    @id @default("singleton")
+  maintenanceMode        Boolean   @default(false)
+  newRestaurantReg       Boolean   @default(true)
+  riderRegistrations     Boolean   @default(true)
+  cashOnDelivery         Boolean   @default(true)
+  codMinOrder            Int       @default(0)
+  maxDeliveryRadius      Int       @default(20)
+  defaultDeliveryFee     Int       @default(3000)
+  requireApproval        Boolean   @default(false)
+  allowBranches          Boolean   @default(true)
+  maxMenuItems           Int       @default(200)
+  requireEmailVerify     Boolean   @default(false)
+  autoConfirmOrders      Boolean   @default(false)
+  maintenanceReason      String?
+  maintenanceScheduledAt DateTime?
+  maintenanceEndsAt      DateTime?
+  updatedAt              DateTime  @updatedAt
+}
+
+// Global, admin-configurable pricing/commission settings — singleton (one
+// row, id always "singleton", same upsert-by-fixed-id pattern as SiteConfig
+// above). Deliberately NOT per-restaurant/per-city; that's a known future
+// extension, not a gap in this implementation. All ₹ amounts in paise.
+// Orders snapshot these values onto themselves at creation time (see
+// Order.pricingSnapshot) — editing this row never changes a past order's
+// stored totals or payouts, only future ones.
+model PlatformSettings {
   id                 String   @id @default("singleton")
-  maintenanceMode    Boolean  @default(false)
-  newRestaurantReg   Boolean  @default(true)
-  riderRegistrations Boolean  @default(true)
-  cashOnDelivery     Boolean  @default(true)
-  codMinOrder        Int      @default(0)
-  maxDeliveryRadius  Int      @default(20)
-  defaultDeliveryFee Int      @default(3000)
-  requireApproval    Boolean  @default(false)
-  allowBranches      Boolean  @default(true)
-  maxMenuItems       Int      @default(200)
-  requireEmailVerify Boolean  @default(false)
-  autoConfirmOrders       Boolean   @default(false)
-  maintenanceReason       String?
-  maintenanceScheduledAt  DateTime?
-  maintenanceEndsAt       DateTime?
-  updatedAt               DateTime  @updatedAt
+  deliveryBaseFee    Int      @default(1000) // ₹10 — paise
+  deliveryPerKmFee   Int      @default(200) // ₹2/km — paise
+  // "FLAT": platformFeeValue is a paise amount. "PERCENT": platformFeeValue
+  // is a percentage of itemTotal (e.g. 5 means 5%).
+  platformFeeMode    String   @default("FLAT")
+  platformFeeValue   Float    @default(500) // ₹5 flat by default
+  // 3-way split of (deliveryFee + platformFee), excluding all GST and
+  // excluding restaurantPackaging. Must always sum to 100 — enforced in
+  // platformSettings.schema.js, not just here.
+  splitRestaurantPct Float    @default(20)
+  splitRiderPct      Float    @default(50)
+  splitAdminPct      Float    @default(30)
+  updatedAt          DateTime @updatedAt
 }
 
 // Live GPS position for a delivery rider, powering the admin live operations map.
 // One row per rider (riderId unique); upserted on every POST /api/delivery/location.
 model RiderLocation {
-  id         String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  riderId    String   @unique
+  riderId String @unique
 
-  latitude   Float
-  longitude  Float
+  latitude  Float
+  longitude Float
 
-  heading    Float?
-  speed      Float?
+  heading Float?
+  speed   Float?
 
   lastSeenAt DateTime @updatedAt
 
@@ -409,11 +461,11 @@ model Incident {
   entityId    String?
 
   // null for incidents the system raised automatically from a fleet alert
-  createdById  String?
-  createdBy    User?     @relation("IncidentCreator", fields: [createdById], references: [id])
-  resolvedById String?
-  resolvedBy   User?     @relation("IncidentResolver", fields: [resolvedById], references: [id])
-  resolvedAt   DateTime?
+  createdById    String?
+  createdBy      User?     @relation("IncidentCreator", fields: [createdById], references: [id])
+  resolvedById   String?
+  resolvedBy     User?     @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  resolvedAt     DateTime?
   acknowledgedAt DateTime?
 
   // Escalation engine
@@ -421,9 +473,9 @@ model Incident {
   escalationCount Int       @default(0)
   lastNotifiedAt  DateTime?
 
-  events      IncidentEvent[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  events    IncidentEvent[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   @@index([status])
   @@index([severity])
@@ -438,7 +490,7 @@ model RiderSession {
   rider       User      @relation("UserRiderSessions", fields: [riderId], references: [id], onDelete: Cascade)
   startedAt   DateTime  @default(now())
   endedAt     DateTime?
-  durationMin Float?    // set when session is closed; null while still active
+  durationMin Float? // set when session is closed; null while still active
   createdAt   DateTime  @default(now())
 
   @@index([riderId, startedAt])

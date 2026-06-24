@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -86,9 +87,10 @@ export function CustomerNavbar() {
       <div className="mx-auto flex h-16 w-full max-w-shell items-center justify-between gap-2 px-4 md:gap-3 md:px-6 lg:px-8">
         <Link
           aria-label="GhostKitchen — go to home"
-          className="text-xl font-extrabold tracking-[-0.04em] md:text-2xl"
+          className="flex items-center gap-1.5 text-xl font-extrabold tracking-[-0.04em] md:text-2xl"
           href="/"
         >
+          <Image alt="" aria-hidden="true" className="h-7 w-7 rounded-lg md:h-8 md:w-8" height={32} src="/icon-512.png" width={32} />
           <span aria-hidden="true" className="text-text-primary">ghost</span>
           <span aria-hidden="true" className="text-brand">kitchen</span>
         </Link>

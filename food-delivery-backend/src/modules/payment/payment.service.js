@@ -24,17 +24,21 @@ export const createOrderFromPayment = async (payment) => {
     if (parsed && Array.isArray(parsed.orderItems)) snapshot = parsed;
   } catch { /* legacy format handled below */ }
 
-  let orderItems, subtotal, deliveryFee, discount, total;
+  let orderItems, subtotal, deliveryFee, discount, total, pricingFields;
   if (snapshot) {
     ({ orderItems, subtotal, deliveryFee, discount, total } = snapshot);
+    pricingFields = snapshot;
   } else {
     // Legacy snapshot ([{menuItemId, quantity}]) — recalculate from the menu
     const items = JSON.parse(payment.itemsSnapshot);
-    ({ orderItems, subtotal, deliveryFee, discount, total } = await calculateOrderTotal({
+    const calculated = await calculateOrderTotal({
       restaurantId: payment.restaurantId,
       items,
       couponCode: payment.couponCode,
-    }));
+      deliveryAddress: JSON.parse(payment.deliveryAddress),
+    });
+    ({ orderItems, subtotal, deliveryFee, discount, total } = calculated);
+    pricingFields = calculated;
   }
 
   // Honor the admin autoConfirmOrders setting for paid orders too
@@ -59,6 +63,20 @@ export const createOrderFromPayment = async (payment) => {
         total,
         deliveryAddress: JSON.parse(payment.deliveryAddress),
         cfOrderId: payment.cfOrderId,
+        // Pre-pricing-system payments (old itemsSnapshot shape) have none of
+        // these — null is correct for them, not 0, since 0 would falsely
+        // claim "we computed this and it was zero".
+        itemTotal: pricingFields.itemTotal ?? null,
+        restaurantPackaging: pricingFields.restaurantPackaging ?? null,
+        gstOnItemTotal: pricingFields.gstOnItemTotal ?? null,
+        gstOnDeliveryFee: pricingFields.gstOnDeliveryFee ?? null,
+        platformFee: pricingFields.platformFee ?? null,
+        gstOnPlatformFee: pricingFields.gstOnPlatformFee ?? null,
+        distanceKm: pricingFields.distanceKm ?? null,
+        restaurantPayout: pricingFields.restaurantPayout ?? null,
+        riderPayout: pricingFields.riderPayout ?? null,
+        adminRevenue: pricingFields.adminRevenue ?? null,
+        pricingSnapshot: pricingFields.pricingSnapshot ?? null,
       },
       include: { restaurant: true },
     });

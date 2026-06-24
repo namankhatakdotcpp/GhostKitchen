@@ -1,20 +1,12 @@
 import { prisma } from "../../config/prisma.js";
 import { getSiteConfigCached } from "../config/config.service.js";
+import { getPlatformSettingsCached, snapshotSettings } from "../pricing/platformSettings.service.js";
+import { computeOrderPricing } from "./pricing.js";
 import { computeETA } from "../../utils/eta.js";
+import { haversine } from "../../utils/geo.js";
 import { logger } from "../../utils/logger.js";
 
 // All monetary values are in PAISE (₹50 = 5000).
-const FALLBACK_DELIVERY_FEE = 3000; // ₹30 — used only if SiteConfig is unreadable
-
-async function getDeliveryFee() {
-  try {
-    const cfg = await getSiteConfigCached();
-    const fee = Number(cfg.defaultDeliveryFee);
-    return Number.isFinite(fee) && fee >= 0 ? fee : FALLBACK_DELIVERY_FEE;
-  } catch {
-    return FALLBACK_DELIVERY_FEE;
-  }
-}
 
 // Shared coupon validation — values in DB are paise. Throws on any failure.
 function computeCouponDiscount(coupon, subtotal, restaurantId) {
@@ -46,6 +38,11 @@ function formatAddress(address) {
   return [address.line1, address.city].filter(Boolean).join(", ");
 }
 
+// Pricing breakdown fields are nullable in the schema (orders placed before
+// this feature shipped have none) — coerce to Number only when present so
+// old orders serialize as `null`, not `NaN`/`0`-looking-like-real-data.
+const numOrNull = (v) => (v == null ? null : Number(v));
+
 function serializeOrder(order) {
   if (!order) return null;
   return {
@@ -54,6 +51,16 @@ function serializeOrder(order) {
     deliveryFee: Number(order.deliveryFee),
     discount: Number(order.discount),
     total: Number(order.total),
+    itemTotal: numOrNull(order.itemTotal),
+    restaurantPackaging: numOrNull(order.restaurantPackaging),
+    gstOnItemTotal: numOrNull(order.gstOnItemTotal),
+    gstOnDeliveryFee: numOrNull(order.gstOnDeliveryFee),
+    platformFee: numOrNull(order.platformFee),
+    gstOnPlatformFee: numOrNull(order.gstOnPlatformFee),
+    distanceKm: numOrNull(order.distanceKm),
+    restaurantPayout: numOrNull(order.restaurantPayout),
+    riderPayout: numOrNull(order.riderPayout),
+    adminRevenue: numOrNull(order.adminRevenue),
     estimatedDelivery: order.estimatedDelivery?.toISOString() ?? null,
   };
 }
@@ -109,7 +116,7 @@ export const createOrder = async (payload, customerId) => {
   // 0. Verify restaurant exists and is accepting orders
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: payload.restaurantId },
-    select: { isOpen: true, suspended: true, isApproved: true, city: true, address: true },
+    select: { isOpen: true, suspended: true, isApproved: true, city: true, address: true, lat: true, lng: true },
   });
   if (!restaurant) throw new Error("Restaurant not found");
   if (restaurant.suspended || !restaurant.isApproved) throw new Error("Restaurant not found");
@@ -143,8 +150,8 @@ export const createOrder = async (payload, customerId) => {
       throw new Error("Invalid items: Menu item not found");
     }
 
-    const itemTotal = Number(dbItem.price) * requestItem.quantity;
-    subtotal += itemTotal;
+    const lineTotal = Number(dbItem.price) * requestItem.quantity;
+    subtotal += lineTotal;
 
     // Build items JSON to store in order
     itemsToStore.push({
@@ -166,8 +173,18 @@ export const createOrder = async (payload, customerId) => {
     throw new Error(`Cash on delivery requires a minimum order of ₹${(Number(cfg.codMinOrder) / 100).toFixed(0)}`);
   }
 
-  const deliveryFee = await getDeliveryFee();
   const initialStatus = cfg?.autoConfirmOrders ? "CONFIRMED" : "PLACED";
+
+  // 5b. Full pricing breakdown (item total, packaging, GST, delivery fee,
+  // platform fee, 3-way split) — settings and distance are both resolved
+  // here, before the transaction, since they're pure reads. Discount is
+  // applied afterward, against the formula's customerTotal, inside the
+  // transaction below (it needs the coupon's atomic-claim check).
+  const pricing = await priceOrder({
+    itemTotal: subtotal,
+    restaurant,
+    deliveryAddress: payload.deliveryAddress,
+  });
 
   // 6-8. Create order in transaction with coupon validation inside (atomicity)
   const order = await prisma.$transaction(async (tx) => {
@@ -190,7 +207,13 @@ export const createOrder = async (payload, customerId) => {
       }
     }
 
-    const finalTotal = Math.max(subtotal + deliveryFee - discount, 0);
+    // Coupon discount comes off what the customer pays, not off the
+    // restaurant/rider/admin payouts — those are computed from the gross
+    // fees pool above, unaffected by a marketing discount funded by the
+    // platform's own margin. The formula doesn't address coupons at all;
+    // this mirrors the pre-existing `subtotal + deliveryFee - discount`
+    // behavior (discount only ever reduced the customer-facing total).
+    const finalTotal = Math.max(pricing.customerTotal - discount, 0);
 
     // Create order with server-calculated values only
     return tx.order.create({
@@ -201,10 +224,21 @@ export const createOrder = async (payload, customerId) => {
         status: initialStatus,
         items: itemsToStore,
         subtotal,
-        deliveryFee,
+        deliveryFee: pricing.deliveryFee,
         discount,
         total: finalTotal,
         deliveryAddress: payload.deliveryAddress,
+        itemTotal: pricing.itemTotal,
+        restaurantPackaging: pricing.restaurantPackaging,
+        gstOnItemTotal: pricing.gstOnItemTotal,
+        gstOnDeliveryFee: pricing.gstOnDeliveryFee,
+        platformFee: pricing.platformFee,
+        gstOnPlatformFee: pricing.gstOnPlatformFee,
+        distanceKm: pricing.distanceKm,
+        restaurantPayout: pricing.restaurantPayout,
+        riderPayout: pricing.riderPayout,
+        adminRevenue: pricing.adminRevenue,
+        pricingSnapshot: pricing.pricingSnapshot,
       },
       include: {
         restaurant: true,
@@ -246,16 +280,25 @@ export const updateAgentAvailability = async (agentId, isAvailable, coords) => {
   });
 };
 
-function haversine(lat1, lng1, lat2, lng2) {
-  const R = 6371; // km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// Restaurant → delivery-address distance for pricing — null if either end
+// has no real coordinates (free-text addresses, ungeocoded restaurants).
+// Same haversine calculation assignDeliveryAgent uses below, not reimplemented.
+function computeDeliveryDistanceKm(restaurant, deliveryAddress) {
+  const restaurantHasCoords =
+    restaurant?.lat != null && restaurant?.lng != null && !(restaurant.lat === 0 && restaurant.lng === 0);
+  const addressHasCoords =
+    deliveryAddress?.lat != null && deliveryAddress?.lng != null && !(deliveryAddress.lat === 0 && deliveryAddress.lng === 0);
+  if (!restaurantHasCoords || !addressHasCoords) return null;
+  return haversine(restaurant.lat, restaurant.lng, deliveryAddress.lat, deliveryAddress.lng);
+}
+
+// Shared by createOrder and calculateOrderTotal — the one place the pricing
+// formula gets wired up with live PlatformSettings and a real distance.
+async function priceOrder({ itemTotal, restaurant, deliveryAddress }) {
+  const settings = await getPlatformSettingsCached();
+  const distanceKm = computeDeliveryDistanceKm(restaurant, deliveryAddress);
+  const pricing = computeOrderPricing({ itemTotal, distanceKm, settings });
+  return { ...pricing, pricingSnapshot: snapshotSettings(settings) };
 }
 
 export const assignDeliveryAgent = async (orderId, io) => {
@@ -518,13 +561,11 @@ export const rejectOrderOffer = async (orderId, agentId, io) => {
 };
 
 export const calculateOrderTotal = async ({ restaurantId, items, couponCode, deliveryAddress }) => {
-  if (deliveryAddress) {
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId },
-      select: { city: true, address: true },
-    });
-    if (restaurant) assertDeliveryCityMatches(restaurant, deliveryAddress);
-  }
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { city: true, address: true, lat: true, lng: true },
+  });
+  if (deliveryAddress && restaurant) assertDeliveryCityMatches(restaurant, deliveryAddress);
 
   // 1. Extract menuItemIds from request
   const menuItemIds = items.map((item) => item.menuItemId);
@@ -553,8 +594,8 @@ export const calculateOrderTotal = async ({ restaurantId, items, couponCode, del
       throw new Error("Invalid items: Menu item not found");
     }
 
-    const itemTotal = Number(dbItem.price) * requestItem.quantity;
-    subtotal += itemTotal;
+    const lineTotal = Number(dbItem.price) * requestItem.quantity;
+    subtotal += lineTotal;
 
     // Build items JSON to store in order
     orderItems.push({
@@ -566,8 +607,10 @@ export const calculateOrderTotal = async ({ restaurantId, items, couponCode, del
     });
   }
 
-  // 5. Delivery fee from admin-configured SiteConfig (paise)
-  const deliveryFee = await getDeliveryFee();
+  // 5. Full pricing breakdown — item total, packaging, GST, delivery fee
+  // (using real restaurant→address distance when both are geocoded),
+  // platform fee, and the 3-way split, all from live PlatformSettings.
+  const pricing = await priceOrder({ itemTotal: subtotal, restaurant, deliveryAddress });
 
   // 6. Validate and apply coupon if provided
   let discount = 0;
@@ -581,8 +624,27 @@ export const calculateOrderTotal = async ({ restaurantId, items, couponCode, del
     couponId = coupon.id;
   }
 
-  // 7. Calculate total = subtotal + deliveryFee - discount
-  const total = Math.max(subtotal + deliveryFee - discount, 0);
+  // 7. Coupon discount reduces what the customer pays, not the
+  // restaurant/rider/admin payouts — see createOrder for the same rule.
+  const total = Math.max(pricing.customerTotal - discount, 0);
 
-  return { orderItems, subtotal, deliveryFee, discount, total, couponId };
+  return {
+    orderItems,
+    subtotal,
+    deliveryFee: pricing.deliveryFee,
+    discount,
+    total,
+    couponId,
+    itemTotal: pricing.itemTotal,
+    restaurantPackaging: pricing.restaurantPackaging,
+    gstOnItemTotal: pricing.gstOnItemTotal,
+    gstOnDeliveryFee: pricing.gstOnDeliveryFee,
+    platformFee: pricing.platformFee,
+    gstOnPlatformFee: pricing.gstOnPlatformFee,
+    distanceKm: pricing.distanceKm,
+    restaurantPayout: pricing.restaurantPayout,
+    riderPayout: pricing.riderPayout,
+    adminRevenue: pricing.adminRevenue,
+    pricingSnapshot: pricing.pricingSnapshot,
+  };
 };
