@@ -1,21 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import { useRef } from "react";
 
 // Purely visual for now — no click/filter wiring (explicit decision, see
 // Feature 3 in the customer-portal spec: filtering is a separate future
-// feature). Circular emoji placeholders instead of fetched images — no
-// real image CDN was wired up, and a broken <img> is worse than a clean
-// colored circle with an emoji.
+// feature). Hot-linked directly from Unsplash (images.unsplash.com is
+// already in next.config.js's remotePatterns) — no download/storage in
+// the repo, sized via Unsplash's own URL params for a small circular
+// thumbnail instead of shipping a full-resolution image.
 const moodCategories = [
-  { label: "North Indian", emoji: "🍛", bg: "bg-brand-light" },
-  { label: "Pizzas", emoji: "🍕", bg: "bg-[#FFE8D6]" },
-  { label: "Cakes", emoji: "🍰", bg: "bg-[#FDEBEF]" },
-  { label: "Burgers", emoji: "🍔", bg: "bg-[#FFF3D6]" },
-  { label: "Desserts", emoji: "🍨", bg: "bg-[#F1EBFF]" },
-  { label: "Momos", emoji: "🥟", bg: "bg-[#E8F6EE]" },
-  { label: "Chinese", emoji: "🥡", bg: "bg-[#FFEAD9]" },
+  { label: "North Indian", photoId: "1631452180539-96aca7d48617" },
+  { label: "Pizzas", photoId: "1513104890138-7c749659a591" },
+  { label: "Cakes", photoId: "1578985545062-69928b1d9587" },
+  { label: "Burgers", photoId: "1568901346375-23c9450c58cd" },
+  { label: "Desserts", photoId: "1551024601-bec78aea704b" },
+  { label: "Momos", photoId: "1496116218417-1a781b1c416c" },
+  { label: "Chinese", photoId: "1525755662778-989d0524087e" },
 ] as const;
+
+function moodImageUrl(photoId: string) {
+  return `https://images.unsplash.com/photo-${photoId}?w=200&h=200&fit=crop&q=80`;
+}
 
 function ArrowIcon({ direction }: { direction: "left" | "right" }) {
   return (
@@ -65,8 +71,14 @@ export function MoodCategoryStrip() {
       <div className="scrollbar-none mt-4 flex gap-5 overflow-x-auto pb-2" ref={scrollRef}>
         {moodCategories.map((category) => (
           <div className="flex shrink-0 flex-col items-center gap-2" key={category.label}>
-            <div className={`flex h-20 w-20 items-center justify-center rounded-full text-4xl ${category.bg}`}>
-              <span aria-hidden="true">{category.emoji}</span>
+            <div className="relative h-20 w-20 overflow-hidden rounded-full border border-border">
+              <Image
+                alt={category.label}
+                className="object-cover"
+                fill
+                sizes="80px"
+                src={moodImageUrl(category.photoId)}
+              />
             </div>
             <span className="text-xs font-semibold text-text-primary">{category.label}</span>
           </div>
