@@ -128,6 +128,46 @@ describe("assignDeliveryAgent — offer step", () => {
 
     expect(selected?.id).toBe("agent-close");
   });
+
+  // Regression for Bug D: the Bug B fix above restricted ungeocoded
+  // restaurants to city-matched candidates only, but the radius filter
+  // still ran haversine(null, null, agentLat, agentLng) for that exact
+  // case — JS coerces null to 0 in arithmetic, so it computed a bogus
+  // ~8700km distance from (0, 0) (the Gulf of Guinea) instead of skipping
+  // the distance check. A city-matched agent must be assignable for an
+  // ungeocoded restaurant, with no fabricated distance anywhere in the
+  // offer payload.
+  it("assigns a city-matched agent for an ungeocoded restaurant without computing a fake distance", async () => {
+    const ungeocodedSameCity = { ...baseRestaurant, lat: null, lng: null, city: "bahadurgarh", address: {} };
+    const cityAgent = { ...baseAgent, id: "agent-city", city: "bahadurgarh", currentLat: 28.69, currentLng: 76.93 };
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder, restaurant: ungeocodedSameCity });
+    prisma.user.findMany.mockResolvedValue([cityAgent]);
+    prisma.order.update.mockResolvedValue({ ...baseOrder, pendingAgentId: cityAgent.id });
+    prisma.user.update.mockResolvedValue(cityAgent);
+
+    const io = makeIo();
+    const selected = await assignDeliveryAgent("ord-1", io);
+
+    expect(selected?.id).toBe("agent-city");
+    const offerPayload = io._emit.mock.calls.find(([event]) => event === "order:offer")?.[1];
+    expect(offerPayload.distanceKm).toBeNull();
+  });
+
+  // (0, 0) must be treated identically to null — never trusted as a real
+  // restaurant location, and never fed into haversine as a real point.
+  it("treats (0, 0) coordinates the same as null — never computes distance from them", async () => {
+    const zeroCoordSameCity = { ...baseRestaurant, lat: 0, lng: 0, city: "bahadurgarh", address: {} };
+    const cityAgent = { ...baseAgent, id: "agent-city", city: "bahadurgarh", currentLat: 28.69, currentLng: 76.93 };
+    prisma.order.findUnique.mockResolvedValue({ ...baseOrder, restaurant: zeroCoordSameCity });
+    prisma.user.findMany.mockResolvedValue([cityAgent]);
+    prisma.order.update.mockResolvedValue({ ...baseOrder, pendingAgentId: cityAgent.id });
+    prisma.user.update.mockResolvedValue(cityAgent);
+
+    const io = makeIo();
+    const selected = await assignDeliveryAgent("ord-1", io);
+
+    expect(selected?.id).toBe("agent-city");
+  });
 });
 
 describe("acceptOrderOffer", () => {

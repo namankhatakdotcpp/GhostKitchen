@@ -2,7 +2,7 @@
  * Restaurant service tests — approval flow, suspension filtering, ownership.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../config/prisma.js", () => ({
   prisma: {
@@ -48,7 +48,7 @@ vi.mock("../modules/config/config.service.js", () => ({
   getSiteConfigCached: vi.fn().mockResolvedValue({ requireApproval: false, maxMenuItems: 50 }),
 }));
 
-const { getRestaurantById, getRestaurantByIdAndOwner, createRestaurant } = await import(
+const { getRestaurantById, getRestaurantByIdAndOwner, createRestaurant, geocodeAddress } = await import(
   "../modules/restaurant/restaurant.service.js"
 );
 const { prisma } = await import("../config/prisma.js");
@@ -148,5 +148,43 @@ describe("createRestaurant", () => {
         data: expect.objectContaining({ isApproved: false }),
       })
     );
+  });
+});
+
+// Regression for Bug D: geocodeAddress must NEVER resolve to a 0/0 (or any
+// other sentinel numeric) fallback on failure — only null, so callers can
+// never accidentally persist a fake location. Mocks global.fetch directly
+// rather than hitting the real Nominatim API.
+describe("geocodeAddress", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("returns null (not 0,0) when the geocoding request errors", async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error("network down"));
+    const result = await geocodeAddress("Bahadurgarh, India");
+    expect(result).toBeNull();
+  });
+
+  it("returns null (not 0,0) when the response is not ok", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 });
+    const result = await geocodeAddress("Bahadurgarh, India");
+    expect(result).toBeNull();
+  });
+
+  it("returns null (not 0,0) when there are no geocoding results", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    const result = await geocodeAddress("Nonexistent Place Xyz");
+    expect(result).toBeNull();
+  });
+
+  it("returns real coordinates (not 0,0) on a successful lookup", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ lat: "28.6953", lon: "76.9279" }],
+    });
+    const result = await geocodeAddress("Bahadurgarh, India");
+    expect(result).toEqual({ lat: 28.6953, lng: 76.9279 });
   });
 });

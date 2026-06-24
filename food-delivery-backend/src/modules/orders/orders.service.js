@@ -312,7 +312,14 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // either, leave the order unassigned for this pass rather than guess.
   const restaurantCity = (order.restaurant.city || order.restaurant.address?.city || "")
     .toLowerCase().trim();
-  const restaurantHasCoords = order.restaurant.lat != null && order.restaurant.lng != null;
+  // (0, 0) is treated the same as null — it's the Gulf of Guinea, never a
+  // real restaurant location in this app's domain, and is exactly what a
+  // future bad write (or stale row from before this defensive check
+  // existed) would look like if it ever bypassed the null-only contract.
+  const restaurantHasCoords =
+    order.restaurant.lat != null &&
+    order.restaurant.lng != null &&
+    !(order.restaurant.lat === 0 && order.restaurant.lng === 0);
 
   const cityMatched = restaurantCity
     ? availableAgents.filter((agent) => (agent.city || "").toLowerCase().trim() === restaurantCity)
@@ -337,16 +344,29 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // 4. Radius filter — each rider has their own max radius (default 20km).
   // This is NOT a soft fallback: maxRadiusKm has always defaulted to a
   // generous value for every rider, so an empty result here means a
-  // genuine "nobody is close enough", not missing data. Restaurants with no
-  // coordinates never reach this filter with a non-empty candidatePool (see
-  // above), so there is no made-up-distance case to special-case here.
+  // genuine "nobody is close enough", not missing data.
+  //
+  // EXCEPTION: candidatePool CAN be non-empty here even when the restaurant
+  // has no coordinates — that happens whenever there's a city match (the
+  // candidatePool assembly above doesn't require coords for that branch,
+  // only the full-pool fallback does). Calling haversine(null, null, ...) in
+  // that case doesn't throw — JS arithmetic coerces null to 0 — so it
+  // silently computed a distance from (0,0) (the Gulf of Guinea) to the
+  // agent's real location, producing a nonsense ~8700km "distance" for an
+  // Indian restaurant. That distance then got compared against a real
+  // radius and (usually) correctly rejected the agent, but for the wrong
+  // reason and with misleading logs. Skip the distance computation/check
+  // entirely when there are no real coordinates — the city match is the
+  // only signal available, and candidatePool is already restricted to it.
   const restaurantLat = order.restaurant.lat;
   const restaurantLng = order.restaurant.lng;
 
   const inRangeAgents = candidatePool
     .map((agent) => ({
       ...agent,
-      distance: haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng),
+      distance: restaurantHasCoords
+        ? haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng)
+        : null,
     }))
     .filter((agent) => {
       // maxRadiusKm is NOT NULL DEFAULT 20 in schema, but guard against any
@@ -354,12 +374,13 @@ export const assignDeliveryAgent = async (orderId, io) => {
       // silently rejecting every agent for that rider.
       const radius = Number.isFinite(agent.maxRadiusKm) && agent.maxRadiusKm > 0 ? agent.maxRadiusKm : 20;
       logger.info("Assigning agent for order — computed distance", {
-        orderId, agentId: agent.id, distanceKm: Math.round(agent.distance * 10) / 10, radiusKm: radius,
-        restaurantHasCoords,
+        orderId, agentId: agent.id,
+        distanceKm: agent.distance != null ? Math.round(agent.distance * 10) / 10 : null,
+        radiusKm: radius, restaurantHasCoords,
       });
-      return agent.distance <= radius;
+      return !restaurantHasCoords || agent.distance <= radius;
     })
-    .sort((a, b) => a.distance - b.distance);
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
 
   if (inRangeAgents.length === 0) {
     logger.warn("Assigning agent for order — no agents within radius", { orderId, city: restaurantCity || null });
@@ -413,7 +434,9 @@ export const assignDeliveryAgent = async (orderId, io) => {
     restaurantName: order.restaurant.name,
     pickupAddress: formatAddress(order.restaurant.address),
     dropoffAddress: formatAddress(order.deliveryAddress),
-    distanceKm: Math.round(selectedAgent.distance * 10) / 10,
+    // selectedAgent.distance is null for an ungeocoded, city-matched
+    // restaurant (see step 4 above) — there's no real distance to report.
+    distanceKm: selectedAgent.distance != null ? Math.round(selectedAgent.distance * 10) / 10 : null,
     pickup: {
       name: order.restaurant.name,
       address: order.restaurant.address,
@@ -426,7 +449,7 @@ export const assignDeliveryAgent = async (orderId, io) => {
     pickupLat: restaurantLat,
     pickupLng: restaurantLng,
     items: order.items,
-    estimatedEarnings: Math.round(40 + selectedAgent.distance * 5), // ₹40 base + ₹5/km
+    estimatedEarnings: Math.round(40 + (selectedAgent.distance ?? 0) * 5), // ₹40 base + ₹5/km
   });
 
   return selectedAgent;

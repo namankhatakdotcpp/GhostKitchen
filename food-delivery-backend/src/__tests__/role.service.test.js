@@ -210,6 +210,39 @@ describe("registerRestaurant", () => {
     expect(createData.lat).toBe(28.7);
     expect(createData.lng).toBe(77.1);
   });
+
+  // Regression for Bug D: on geocoding failure the written row must have
+  // lat: null, lng: null — never 0 or any other sentinel number. A 0/0
+  // write here is exactly what later made assignDeliveryAgent compute a
+  // bogus ~8700km haversine distance (null coerces to 0 in arithmetic,
+  // and 0,0 is real, indistinguishable "valid" data to that filter).
+  it("regression: writes lat/lng as null (not 0) when geocoding fails", async () => {
+    prisma.user.findUnique.mockResolvedValue(baseUser);
+    prisma.restaurant.findMany.mockResolvedValue([]);
+    mockGeocodeAddress.mockResolvedValueOnce(null); // geocoding failure
+
+    let createData;
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        restaurant: {
+          create: vi.fn((args) => {
+            createData = args.data;
+            return Promise.resolve({ id: "r-new", ...args.data });
+          }),
+        },
+        user: { update: vi.fn().mockResolvedValue(baseUser) },
+        menuItem: { create: vi.fn() },
+      };
+      return fn(tx);
+    });
+
+    await registerRestaurant("u-1", { ...restaurantData, city: "Nowhereville" });
+
+    expect(createData.lat).toBeNull();
+    expect(createData.lng).toBeNull();
+    expect(createData.lat).not.toBe(0);
+    expect(createData.lng).not.toBe(0);
+  });
 });
 
 // ── registerRider ─────────────────────────────────────────────────────────────

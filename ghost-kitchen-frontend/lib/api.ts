@@ -46,15 +46,19 @@ let refreshInFlight: Promise<{
   user?: unknown;
 }> | null = null;
 
+function getStoredRefreshToken(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem("gk-auth");
+    return raw ? JSON.parse(raw)?.state?.refreshToken : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function performRefresh() {
   if (!refreshInFlight) {
-    let refreshToken: string | undefined;
-    if (typeof window !== "undefined") {
-      try {
-        const raw = localStorage.getItem("gk-auth");
-        refreshToken = raw ? JSON.parse(raw)?.state?.refreshToken : undefined;
-      } catch { /* ignore */ }
-    }
+    const refreshToken = getStoredRefreshToken();
     refreshInFlight = api
       .post("/auth/refresh", refreshToken ? { refreshToken } : {})
       .then((res) => res.data?.data ?? {})
@@ -70,9 +74,21 @@ api.interceptors.response.use(
   async (error: AxiosError<{ code?: string; message?: string; error?: string }>) => {
     const originalConfig = error.config as typeof error.config & { _retry?: boolean };
 
+    // Auto-refresh-and-retry on ANY 401, not just the explicitly-coded
+    // TOKEN_EXPIRED case — the backend's auth middleware only attaches that
+    // code for a genuinely expired JWT (auth.middleware.js); a transient
+    // first-load 401 ("No token provided"/"Invalid token", no code at all)
+    // used to fall straight through to the caller with zero recovery path.
+    // For a request wrapped in TanStack Query that's papered over by its
+    // default retry; for a raw axios call with no retry config of its own
+    // (e.g. shop-shell.tsx's RestaurantSelector effect) it meant permanently
+    // empty state until a manual page reload. Gate only on "do we have a
+    // refresh token at all" — if not, this really is a logged-out user and
+    // the existing redirect-to-/login behavior below still applies.
+    const hasRefreshToken = !!getStoredRefreshToken();
     if (
       error.response?.status === 401 &&
-      error.response.data?.code === "TOKEN_EXPIRED" &&
+      hasRefreshToken &&
       !originalConfig._retry
     ) {
       originalConfig._retry = true;
