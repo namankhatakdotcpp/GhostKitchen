@@ -293,4 +293,27 @@ describe("validateStatusUpdate", () => {
       to: "DELIVERED",
     });
   });
+
+  // Regression for Bug F: after a rider accepts an offer, the order's real
+  // status is already OUT_FOR_DELIVERY (set when the shop marked it ready —
+  // see Bug A). The delivery app's "active delivery" screen models three
+  // physical checkpoints (reached restaurant / picked up / delivered), but
+  // this schema's OrderStatus enum has no ARRIVED/PICKED_UP value — only the
+  // final "delivered" checkpoint is a real backend transition. The first two
+  // checkpoints used to PATCH status: "OUT_FOR_DELIVERY" — a no-op
+  // self-transition — and correctly 400 every single time.
+  it("allows DELIVERY to complete the real transition after accepting (OUT_FOR_DELIVERY -> DELIVERED)", () => {
+    const err = validateStatusUpdate({ status: "DELIVERED" }, "OUT_FOR_DELIVERY", "DELIVERY");
+    expect(err).toBeNull();
+  });
+
+  it("rejects a no-op OUT_FOR_DELIVERY -> OUT_FOR_DELIVERY self-transition with a clear allowedNext", () => {
+    const err = validateStatusUpdate({ status: "OUT_FOR_DELIVERY" }, "OUT_FOR_DELIVERY", "DELIVERY");
+    expect(err).toMatchObject({
+      error: "Invalid transition",
+      from: "OUT_FOR_DELIVERY",
+      to: "OUT_FOR_DELIVERY",
+      allowedNext: ["DELIVERED"],
+    });
+  });
 });

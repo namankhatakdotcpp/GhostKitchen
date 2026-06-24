@@ -86,23 +86,30 @@ export function DeliveryActivePage() {
   }
 
   async function handleStep(step: 1 | 2 | 3) {
-    const statusByStep = { 1: "OUT_FOR_DELIVERY", 2: "OUT_FOR_DELIVERY", 3: "DELIVERED" } as const;
-    const newStatus = statusByStep[step];
+    // Steps 1 ("reached restaurant") and 2 ("picked up") are local UI
+    // progress checkpoints only — this schema's OrderStatus enum has no
+    // ARRIVED/PICKED_UP value, and the order is already OUT_FOR_DELIVERY
+    // from the moment the shop marked it ready (before the rider even
+    // accepted). Sending status: "OUT_FOR_DELIVERY" here used to PATCH the
+    // order to the status it was already in — a no-op self-transition that
+    // STATUS_TRANSITIONS correctly rejects (OUT_FOR_DELIVERY's only allowed
+    // next state is DELIVERED), 400ing on every single tap of either
+    // button. Only step 3 is a real backend transition.
+    if (step !== 3) {
+      advanceStep();
+      return;
+    }
 
     try {
-      await api.patch(`/orders/${activeAssignment!.orderId}/status`, { status: newStatus });
+      await api.patch(`/orders/${activeAssignment!.orderId}/status`, { status: "DELIVERED" });
     } catch {
       toast.error("Failed to update status — please retry");
       return;
     }
 
-    if (step === 3) {
-      completeDelivery();
-      toast.success("Delivery complete! Earnings added 🎉");
-      router.push("/delivery/home");
-      return;
-    }
-    advanceStep();
+    completeDelivery();
+    toast.success("Delivery complete! Earnings added 🎉");
+    router.push("/delivery/home");
   }
 
   const a = activeAssignment;
