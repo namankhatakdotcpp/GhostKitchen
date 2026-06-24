@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
-import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X } from "lucide-react";
+import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone } from "lucide-react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 interface Address {
@@ -385,6 +385,21 @@ function ProfilePageContent() {
               </button>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Help & Support */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-800 mb-4">Help &amp; Support</h2>
+        {process.env.NEXT_PUBLIC_SUPPORT_PHONE ? (
+          <a
+            href={`tel:${process.env.NEXT_PUBLIC_SUPPORT_PHONE}`}
+            className="flex items-center justify-center gap-2 w-full py-3 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition"
+          >
+            <Phone className="h-4 w-4" /> Call Customer Care
+          </a>
+        ) : (
+          <p className="text-sm text-gray-400">Customer care number not configured.</p>
         )}
       </div>
     </div>

@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { MoodCategoryStrip } from "@/components/customer/mood-category-strip";
 import { RestaurantCard } from "@/components/customer/RestaurantCard";
 import { Button } from "@/components/ui/button";
 import {
@@ -272,6 +273,8 @@ export function CustomerHomePage() {
           </div>
         </section>
       )}
+
+      <MoodCategoryStrip />
 
       <section className="mt-5">
         <motion.div

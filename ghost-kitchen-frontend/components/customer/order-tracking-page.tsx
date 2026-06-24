@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { DeliveredCelebration } from "@/components/customer/delivered-celebration";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import type {
@@ -435,6 +436,15 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
 
   const isDelivered = order.status === "DELIVERED";
 
+  // Full-screen takeover, not the regular tracker — triggers identically
+  // whether DELIVERED arrived live via the order:status-updated socket event
+  // (patchOrderStatus above) or the customer is just opening an already-
+  // delivered order's tracking link directly, since both paths converge on
+  // the same order.status field.
+  if (isDelivered) {
+    return <DeliveredCelebration order={order} />;
+  }
+
   return (
     <div className="min-h-screen bg-surface pb-10">
       <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur">
@@ -490,9 +500,7 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     {headlineByStatus[order.status as OrderStatus] || "Order Update"}
                   </h2>
                   <p className="mt-2 text-sm text-text-secondary">
-                    {isDelivered
-                      ? "Delivered successfully"
-                      : `Estimated delivery: ${countdownLabel}`}
+                    Estimated delivery: {countdownLabel}
                   </p>
                 </div>
                 <div className="track-pulse flex h-16 w-16 items-center justify-center rounded-full bg-brand-light text-3xl">
@@ -659,15 +667,6 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
               )}
             </section>
 
-            {isDelivered ? (
-              <section className="rounded-[28px] border border-success/20 bg-success/5 p-5">
-                <p className="text-sm font-semibold text-success">Delivered</p>
-                <p className="mt-2 text-sm leading-6 text-text-secondary">
-                  This order is complete. Live updates have stopped and your final
-                  summary is locked in.
-                </p>
-              </section>
-            ) : null}
           </aside>
         </div>
       </div>
