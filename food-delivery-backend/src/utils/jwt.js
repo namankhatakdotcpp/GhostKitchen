@@ -8,9 +8,14 @@ export const generateAccessToken = (payload) =>
   jwt.sign(payload, env.JWT_SECRET, { expiresIn: "15m", algorithm: "HS256" });
 
 export const generateRefreshToken = (payload) =>
-  // Refresh tokens carry only userId — minimal surface area
+  // Refresh tokens carry only userId plus a random jti — minimal surface
+  // area, but the jti matters: without it, two refresh tokens minted for
+  // the same user within the same second (e.g. two tabs racing a refresh)
+  // are byte-identical JWTs, since signing is deterministic given the same
+  // payload+iat+secret. That collided with tokenHash's unique DB constraint
+  // and threw an unhandled error instead of just minting two valid tokens.
   jwt.sign(
-    { userId: payload.userId },
+    { userId: payload.userId, jti: crypto.randomUUID() },
     env.JWT_REFRESH_SECRET,
     { expiresIn: "7d", algorithm: "HS256" }
   );

@@ -88,13 +88,38 @@ export const me = async (req, res, next) => {
 };
 
 // POST /api/auth/refresh
-// Accepts refresh token from cookie (browser) or request body (cross-origin clients).
+// Accepts refresh token from cookie (browser) or request body (cross-origin
+// clients). Refresh tokens rotate on every use (auth.service.js deletes the
+// old DB row and issues a new one), so the cookie and the client's
+// localStorage-tracked token can fall out of sync after a single hiccup —
+// e.g. a Set-Cookie that didn't get applied, or a request that raced an
+// earlier rotation. Treating the cookie as the *only* candidate (the old
+// `cookies?.refresh_token || body?.refreshToken` short-circuit) meant that
+// once that happened, the stale cookie permanently shadowed a perfectly
+// valid, freshly-rotated token in the body, and every future refresh failed
+// with "revoked or expired" even though the client genuinely had a live
+// token. Try both candidates and use whichever the rotation table accepts.
 export const refresh = async (req, res, next) => {
   try {
-    const rawRefreshToken = req.cookies?.refresh_token || req.body?.refreshToken;
-    if (!rawRefreshToken) throw new AppError("Refresh token missing", 401);
+    const cookieToken = req.cookies?.refresh_token;
+    const bodyToken = req.body?.refreshToken;
 
-    const result = await refreshAccessToken(rawRefreshToken);
+    if (!cookieToken && !bodyToken) throw new AppError("Refresh token missing", 401);
+
+    let result;
+    let lastError;
+    for (const candidate of [cookieToken, bodyToken]) {
+      if (!candidate) continue;
+      try {
+        result = await refreshAccessToken(candidate);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!result) throw lastError ?? new AppError("Refresh token missing", 401);
+
     const { accessToken, refreshToken } = result.data.tokens;
     setAuthCookies(res, accessToken, refreshToken);
     res.status(200).json({ success: true, data: { user: result.data.user, accessToken, refreshToken } });
