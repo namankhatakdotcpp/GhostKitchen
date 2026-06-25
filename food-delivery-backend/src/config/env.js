@@ -60,5 +60,5 @@ export const env = {
   // the existing Socket.IO real-time updates, not a hard dependency.
   VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || null,
   VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || null,
-  VAPID_SUBJECT: process.env.VAPID_SUBJECT || "mailto:admin@ghostkitchen.in",
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT || "mailto:admin@ghostkitchen.com",
 };
