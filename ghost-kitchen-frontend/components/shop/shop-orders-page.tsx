@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { BellRing, Volume2, VolumeX } from "lucide-react";
+import { BellRing, Volume2, VolumeX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ function orderToBoard(order: any): ShopBoardItem {
       : "completed",
     prepTimeMinutes: 15,
     autoRejectAt: order.status === "PLACED"
-      ? new Date(new Date(order.placedAt ?? order.createdAt).getTime() + 3 * 60 * 1000).toISOString()
+      ? new Date(new Date(order.placedAt ?? order.createdAt).getTime() + 5 * 60 * 1000).toISOString()
       : undefined,
     assignedAgentName: order.agent?.name ?? undefined,
     // pendingAgentId means an offer is out but not yet accepted — distinct
@@ -60,7 +60,7 @@ function useCountdownLabel(targetDate?: string) {
   const total = Math.max(new Date(targetDate).getTime() - now, 0);
   return {
     secondsLeft: Math.floor(total / 1000),
-    progress: total / (3 * 60 * 1000),
+    progress: total / (5 * 60 * 1000),
   };
 }
 
@@ -98,6 +98,8 @@ function OrderCard({
   onAccept,
   onReject,
   onReady,
+  onCancel,
+  onHide,
   onPrepTimeChange,
   isPending,
 }: {
@@ -105,6 +107,8 @@ function OrderCard({
   onAccept: (orderId: string) => void;
   onReject: (orderId: string) => void;
   onReady: (orderId: string) => void;
+  onCancel: (orderId: string) => void;
+  onHide: (orderId: string) => void;
   onPrepTimeChange: (orderId: string, minutes: number) => void;
   isPending: boolean;
 }) {
@@ -124,6 +128,21 @@ function OrderCard({
           : { duration: 0.22, ease: "easeOut" }
       }
     >
+      {/* Cross/dismiss — view-only, does not touch order status. Subtle and
+          neutral on purpose so it's never confused with Cancel/Reject below,
+          which is a real, destructive cancellation. */}
+      {order.status !== "completed" ? (
+        <button
+          aria-label="Dismiss from board (does not cancel the order)"
+          className="absolute right-3 top-3 z-20 rounded-full p-1 text-text-muted transition hover:bg-[#F3F4F6] hover:text-text-secondary"
+          disabled={isPending}
+          onClick={() => onHide(order.id)}
+          title="Hide from this board — the order itself is unaffected"
+          type="button"
+        >
+          <X aria-hidden="true" className="h-4 w-4" />
+        </button>
+      ) : null}
       {order.status === "new" ? (
         <svg className="pointer-events-none absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 160 160">
           <rect x="8" y="8" width="144" height="144" rx="20" ry="20" fill="none" opacity="0.12" stroke="#FF5200" strokeWidth="3" />
@@ -208,6 +227,14 @@ function OrderCard({
             <Button className="h-11 w-full rounded-[14px]" disabled={isPending} onClick={() => onReady(order.id)}>
               Mark Ready
             </Button>
+            <button
+              className="h-10 w-full rounded-[14px] border border-danger/30 bg-white text-sm font-bold text-danger transition hover:bg-danger/5 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isPending}
+              onClick={() => onCancel(order.id)}
+              type="button"
+            >
+              Cancel order
+            </button>
           </div>
         ) : null}
 
@@ -270,7 +297,7 @@ export function ShopOrdersPage() {
           const shouldKeep = new Date(item.autoRejectAt).getTime() > Date.now();
 
           if (!shouldKeep) {
-            setBanner(`Order ${item.id} auto-rejected after 3 minutes.`);
+            setBanner(`Order ${item.id} auto-rejected after 5 minutes.`);
           }
 
           return shouldKeep;
@@ -303,7 +330,7 @@ export function ShopOrdersPage() {
       const boardItem: ShopBoardItem = {
         ...orderToBoard(raw),
         status: "new",
-        autoRejectAt: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+        autoRejectAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       };
       queryClient.setQueryData<ShopBoardItem[] | undefined>(["shop-orders-board", restaurantId], (current) => [
         boardItem,
@@ -396,6 +423,11 @@ export function ShopOrdersPage() {
   }
 
   async function rejectOrder(orderId: string) {
+    // Real cancellation (status -> CANCELLED) — a misclick here cancels a
+    // paying customer's order, so confirm first.
+    if (!window.confirm("Reject this order? The customer will be notified and refunded if they paid online.")) {
+      return;
+    }
     setPending(orderId, true);
     try {
       await api.patch(`/orders/${orderId}/status`, { status: "CANCELLED" });
@@ -403,6 +435,41 @@ export function ShopOrdersPage() {
       setBanner(`Order ${orderId} rejected.`);
     } catch (err: any) {
       setBanner(err.error ?? "Failed to reject order. Please try again.");
+    } finally {
+      setPending(orderId, false);
+    }
+  }
+
+  // Same real cancellation as rejectOrder, surfaced as "Cancel order" on the
+  // Preparing column — an order already accepted can still need cancelling
+  // (e.g. the restaurant ran out of an ingredient mid-prep).
+  async function cancelOrder(orderId: string) {
+    if (!window.confirm("Cancel this order? The customer will be notified and refunded if they paid online.")) {
+      return;
+    }
+    setPending(orderId, true);
+    try {
+      await api.patch(`/orders/${orderId}/status`, { status: "CANCELLED" });
+      updateBoard((item) => (item.id === orderId ? null : item));
+      setBanner(`Order ${orderId} cancelled.`);
+    } catch (err: any) {
+      setBanner(err.error ?? "Failed to cancel order. Please try again.");
+    } finally {
+      setPending(orderId, false);
+    }
+  }
+
+  // View-only dismissal — does NOT change order status, just hides this
+  // card from the board going forward (persisted server-side so it doesn't
+  // reappear on refresh). No confirm needed: nothing irreversible happens to
+  // the order itself.
+  async function hideFromBoard(orderId: string) {
+    setPending(orderId, true);
+    try {
+      await api.patch(`/orders/${orderId}/hide-from-board`);
+      updateBoard((item) => (item.id === orderId ? null : item));
+    } catch (err: any) {
+      setBanner(err.error ?? "Failed to dismiss order. Please try again.");
     } finally {
       setPending(orderId, false);
     }
@@ -524,6 +591,8 @@ export function ShopOrdersPage() {
                           isPending={pendingIds.has(order.id)}
                           key={order.id}
                           onAccept={acceptOrder}
+                          onCancel={cancelOrder}
+                          onHide={hideFromBoard}
                           onPrepTimeChange={updatePrepTime}
                           onReady={markReady}
                           onReject={rejectOrder}

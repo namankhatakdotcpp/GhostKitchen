@@ -251,7 +251,7 @@ const liveOrdersBoardSeed: ShopBoardItem[] = [
     totalAmount: 487,
     placedAt: isoMinutesAgo(1),
     status: "new",
-    autoRejectAt: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+    autoRejectAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
   },
   {
     id: "SO-8098",

@@ -32,7 +32,11 @@ export const getOrders = async (req, res) => {
       }
 
       const orders = await prisma.order.findMany({
-        where: { restaurantId },
+        // The shop's own board view excludes cards staff has dismissed
+        // (hiddenFromShopBoard) — admin's view of the same restaurant's
+        // orders is a separate, broader operational view and still sees
+        // everything, dismissed or not.
+        where: { restaurantId, ...(role === "RESTAURANT" ? { hiddenFromShopBoard: false } : {}) },
         include: {
           customer: { select: { id: true, name: true, phone: true } },
           agent: { select: { id: true, name: true, phone: true } },
@@ -84,6 +88,30 @@ export const getOrder = async (req, res) => {
     return res.json({ order });
   } catch (error) {
     return res.status(500).json({ message: "Unable to fetch order" });
+  }
+};
+
+// PATCH /api/orders/:id/hide-from-board
+// RESTAURANT-only, view-only dismissal — does NOT touch order.status. Only
+// hides this card from the calling restaurant's own Orders Board (e.g. a
+// stuck/stale order the shop wants out of view). Persisted so it survives a
+// refresh, rather than being purely client-side React state.
+export const hideFromShopBoard = async (req, res) => {
+  try {
+    const order = await getOrderById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const { prisma } = await import("../../config/prisma.js");
+    const owned = await prisma.restaurant.findFirst({
+      where: { id: order.restaurantId, ownerId: req.user.userId },
+      select: { id: true },
+    });
+    if (!owned) return res.status(403).json({ message: "Not authorized for this restaurant's orders" });
+
+    await prisma.order.update({ where: { id: req.params.id }, data: { hiddenFromShopBoard: true } });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ message: "Unable to dismiss order from board" });
   }
 };
 
@@ -261,6 +289,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
       emitOrderStatusUpdated({
         orderId,
         restaurantId: currentOrder.restaurantId,
+        agentId: updatedOrder.agentId,
         status: newStatus,
         estimatedDelivery: estimatedDelivery instanceof Date
           ? estimatedDelivery.toISOString()
@@ -277,6 +306,47 @@ export const updateOrderStatusHTTP = async (req, res) => {
       createNotification({ userId: customerId, title: "Rider assigned", body: `${updatedOrder.agent.name} is on the way.`, type: "ORDER_UPDATE", entityId: orderId });
     } else if (newStatus === "DELIVERED") {
       createNotification({ userId: customerId, title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", type: "REVIEW_REQUEST", entityId: orderId });
+    } else if (newStatus === "CANCELLED") {
+      createNotification({
+        userId: customerId,
+        title: "Order cancelled",
+        body: `${updatedOrder.restaurant?.name ?? "The restaurant"} cancelled your order.`,
+        type: "ORDER_UPDATE",
+        entityId: orderId,
+      });
+      // The rider may already have an active offer/assignment on this order
+      // (cancellation can happen any time up to pickup) — let them know it's
+      // off, separately from the customer-facing notification above.
+      if (updatedOrder.agentId) {
+        createNotification({
+          userId: updatedOrder.agentId,
+          title: "Order cancelled",
+          body: "This order was cancelled by the restaurant — no pickup needed.",
+          type: "ORDER_UPDATE",
+          entityId: orderId,
+        });
+      }
+
+      // Auto-refund a paid order on cancellation, reusing the existing
+      // Cashfree refund flow (refund.service.js) rather than building a
+      // second one — this is the same function the admin-initiated manual
+      // refund endpoint calls. Idempotent (initiateRefund no-ops if a refund
+      // already exists), and COD orders have no cfOrderId so this is a no-op
+      // for them.
+      if (updatedOrder.cfOrderId) {
+        (async () => {
+          try {
+            const { initiateRefund } = await import("../payment/refund.service.js");
+            await initiateRefund({
+              cfOrderId: updatedOrder.cfOrderId,
+              reason: "Order cancelled by restaurant",
+              adminId: req.user.userId,
+            });
+          } catch (err) {
+            logger.error("Auto-refund on order cancellation failed", { orderId, error: err.message });
+          }
+        })();
+      }
     }
 
     // Fire-and-forget order status email

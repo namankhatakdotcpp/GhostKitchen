@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +23,15 @@ import type {
 type OrderTrackingPageProps = {
   orderId: string;
 };
+
+// Leaflet touches `window` at import time, so the map must be client-only —
+// same ssr:false pattern as the admin live-ops map.
+const OrderTrackingMap = dynamic(() => import("@/components/customer/OrderTrackingMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-sm text-text-secondary">Loading map…</div>
+  ),
+});
 
 type StatusUpdateEvent = {
   status: OrderStatus;
@@ -560,15 +570,26 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                     Call
                   </a>
                 </div>
-                <div className="mt-5 rounded-[22px] border border-border bg-surface p-5">
-                  <p className="text-sm font-semibold text-text-primary">Live location</p>
-                  <p className="mt-2 text-sm text-text-secondary">
-                    Rider location updates are streaming. Map embed placeholder for
-                    Google Maps goes here.
-                  </p>
-                  <div className="mt-4 rounded-[18px] border border-dashed border-border bg-white p-4 text-sm text-text-secondary">
-                    Lat {typeof order.agentLocation?.lat === "number" ? order.agentLocation.lat.toFixed(4) : "--"} • Lng{" "}
-                    {typeof order.agentLocation?.lng === "number" ? order.agentLocation.lng.toFixed(4) : "--"}
+                <div className="mt-5 rounded-[22px] border border-border bg-surface p-2">
+                  <p className="px-3 pt-2 text-sm font-semibold text-text-primary">Live location</p>
+                  <div className="mt-2 h-[280px] overflow-hidden rounded-[16px]">
+                    <OrderTrackingMap
+                      destination={
+                        typeof order.deliveryAddress?.lat === "number" && typeof order.deliveryAddress?.lng === "number"
+                          ? { lat: order.deliveryAddress.lat, lng: order.deliveryAddress.lng }
+                          : null
+                      }
+                      restaurant={
+                        typeof order.restaurant?.address?.lat === "number" && typeof order.restaurant?.address?.lng === "number"
+                          ? { lat: order.restaurant.address.lat, lng: order.restaurant.address.lng }
+                          : null
+                      }
+                      rider={
+                        typeof order.agentLocation?.lat === "number" && typeof order.agentLocation?.lng === "number"
+                          ? { lat: order.agentLocation.lat, lng: order.agentLocation.lng }
+                          : null
+                      }
+                    />
                   </div>
                 </div>
               </section>

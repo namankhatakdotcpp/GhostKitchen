@@ -258,16 +258,22 @@ model Order {
   // the literal numbers onto the order (same pattern as Payment.itemsSnapshot
   // elsewhere in this codebase) is the simplest way to make old orders immune
   // to later settings changes without building full settings versioning.
-  pricingSnapshot   Json?
-  cfOrderId         String?   @unique
-  placedAt          DateTime  @default(now())
-  acceptedAt        DateTime? // restaurant accepted (CONFIRMED transition)
-  readyAt           DateTime? // food ready for pickup (PREPARING → OUT_FOR_DELIVERY)
-  pickedUpAt        DateTime? // rider collected from restaurant
-  deliveredAt       DateTime?
-  estimatedDelivery DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  pricingSnapshot     Json?
+  // View-only dismissal from the shop's live Orders Board — distinct from
+  // CANCELLED. The order's real status/lifecycle is untouched; this only
+  // hides the card from THIS restaurant's board (e.g. a stuck/stale order
+  // the shop wants out of view). Persisted rather than client-only state so
+  // a page refresh doesn't bring the card back.
+  hiddenFromShopBoard Boolean   @default(false)
+  cfOrderId           String?   @unique
+  placedAt            DateTime  @default(now())
+  acceptedAt          DateTime? // restaurant accepted (CONFIRMED transition)
+  readyAt             DateTime? // food ready for pickup (PREPARING → OUT_FOR_DELIVERY)
+  pickedUpAt          DateTime? // rider collected from restaurant
+  deliveredAt         DateTime?
+  estimatedDelivery   DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])

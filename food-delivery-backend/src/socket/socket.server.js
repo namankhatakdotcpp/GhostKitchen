@@ -10,7 +10,7 @@ function withSocketServer(callback) {
   }
 }
 
-export function emitOrderStatusUpdated({ orderId, restaurantId = null, status, estimatedDelivery = null, timestamp }) {
+export function emitOrderStatusUpdated({ orderId, restaurantId = null, agentId = null, status, estimatedDelivery = null, timestamp }) {
   withSocketServer((io) => {
     const payload = { orderId, status, estimatedDelivery, timestamp };
     io.to(`order-${orderId}`).emit("order:status-updated", payload);
@@ -20,6 +20,11 @@ export function emitOrderStatusUpdated({ orderId, restaurantId = null, status, e
     // doesn't listen for this event, relying on order:new/agent:assigned plus
     // a 30s poll), but still wrong and worth fixing for future listeners.
     if (restaurantId) io.to(`shop-${restaurantId}`).emit("order:status-updated", payload);
+    // The assigned rider's own room — useDeliverySocket already listens for
+    // this event, but nothing previously targeted `agent-${agentId}`, so a
+    // rider never actually got a real-time push for their assigned order's
+    // status changing (e.g. the shop cancelling it after a rider was offered).
+    if (agentId) io.to(`agent-${agentId}`).emit("order:status-updated", payload);
     io.to("admin").emit("order:status-updated", payload);
   });
 }
