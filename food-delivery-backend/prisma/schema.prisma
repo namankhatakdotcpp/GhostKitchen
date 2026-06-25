@@ -79,20 +79,22 @@ model User {
   currentLat  Float?
   currentLng  Float?
 
-  restaurants       Restaurant[]   @relation("RestaurantOwner")
-  customerOrders    Order[]        @relation("CustomerOrders")
-  agentOrders       Order[]        @relation("AgentOrders")
+  restaurants       Restaurant[]       @relation("RestaurantOwner")
+  customerOrders    Order[]            @relation("CustomerOrders")
+  agentOrders       Order[]            @relation("AgentOrders")
   refreshTokens     RefreshToken[]
-  cartItems         CartItem[]     @relation("UserCart")
+  cartItems         CartItem[]         @relation("UserCart")
   notifications     Notification[]
   addresses         Address[]
   favorites         Favorite[]
-  riderLocation     RiderLocation? @relation("UserRiderLocation")
-  riderSessions     RiderSession[] @relation("UserRiderSessions")
-  reportedIncidents Incident[]     @relation("IncidentCreator")
-  resolvedIncidents Incident[]     @relation("IncidentResolver")
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  riderLocation     RiderLocation?     @relation("UserRiderLocation")
+  riderSessions     RiderSession[]     @relation("UserRiderSessions")
+  reportedIncidents Incident[]         @relation("IncidentCreator")
+  resolvedIncidents Incident[]         @relation("IncidentResolver")
+  wallet            Wallet?            @relation("UserWallet")
+  pushSubscriptions PushSubscription[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([email])
   @@index([activeRole])
@@ -418,20 +420,74 @@ model SiteConfig {
 // Order.pricingSnapshot) — editing this row never changes a past order's
 // stored totals or payouts, only future ones.
 model PlatformSettings {
-  id                 String   @id @default("singleton")
-  deliveryBaseFee    Int      @default(1000) // ₹10 — paise
-  deliveryPerKmFee   Int      @default(200) // ₹2/km — paise
+  id                      String   @id @default("singleton")
+  deliveryBaseFee         Int      @default(1000) // ₹10 — paise
+  deliveryPerKmFee        Int      @default(200) // ₹2/km — paise
   // "FLAT": platformFeeValue is a paise amount. "PERCENT": platformFeeValue
   // is a percentage of itemTotal (e.g. 5 means 5%).
-  platformFeeMode    String   @default("FLAT")
-  platformFeeValue   Float    @default(500) // ₹5 flat by default
+  platformFeeMode         String   @default("FLAT")
+  platformFeeValue        Float    @default(500) // ₹5 flat by default
   // 3-way split of (deliveryFee + platformFee), excluding all GST and
   // excluding restaurantPackaging. Must always sum to 100 — enforced in
   // platformSettings.schema.js, not just here.
-  splitRestaurantPct Float    @default(20)
-  splitRiderPct      Float    @default(50)
-  splitAdminPct      Float    @default(30)
-  updatedAt          DateTime @updatedAt
+  splitRestaurantPct      Float    @default(20)
+  splitRiderPct           Float    @default(50)
+  splitAdminPct           Float    @default(30)
+  // ── Loyalty points / wallet (Item 1) ──────────────────────────────────────
+  // Points earned per ₹1 of itemTotal on DELIVERED (not gross total — fees/
+  // GST excluded). Default 0.1 = 1 point per ₹10 spent.
+  loyaltyEarnRate         Float    @default(0.1)
+  // ₹ value of 1 point when redeemed at checkout, in paise. Default 100 = ₹1.
+  loyaltyPointValuePaise  Int      @default(100)
+  // Max % of an order's value that points redemption can cover, so points
+  // alone can never zero out an order.
+  loyaltyRedemptionCapPct Float    @default(20)
+  updatedAt               DateTime @updatedAt
+}
+
+// One row per customer — points balance only; full ledger lives in
+// WalletTransaction. Same singleton-adjacent upsert-by-userId pattern as the
+// rest of this app's per-user side tables (RiderLocation, etc.).
+model Wallet {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  balance      Int                 @default(0) // points, always a non-negative integer
+  user         User                @relation("UserWallet", fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type        String // "EARNED" | "REDEEMED"
+  points      Int // always positive — direction comes from `type`
+  orderId     String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  @@index([walletId])
+  @@index([orderId])
+}
+
+// A browser's Web Push subscription (Item 2) — one row per device/browser a
+// user has granted notification permission on, since the same user can have
+// several (phone + laptop). `endpoint` is unique per the Push API spec
+// (one push service URL per subscribed device), used as the natural key for
+// upsert-on-resubscribe and for pruning a subscription the push service
+// reports as gone (410/404).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String // subscription.keys.p256dh
+  auth      String // subscription.keys.auth
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // Live GPS position for a delivery rider, powering the admin live operations map.

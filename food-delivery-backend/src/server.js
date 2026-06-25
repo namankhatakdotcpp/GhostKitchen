@@ -13,7 +13,7 @@ import { env } from "./config/env.js";
 import { prisma } from "./config/prisma.js";
 import { connectRedis } from "./config/redis.js";
 import { initSocket } from "./socket/socketServer.js";
-import { startOrderTimeoutJob } from "./jobs/orderTimeout.job.js";
+import { startOrderTimeoutJob, startAutoRejectJob } from "./jobs/orderTimeout.job.js";
 import { startIncidentJob } from "./jobs/incident.job.js";
 import { startAgentReassignmentJob } from "./jobs/agentReassignment.job.js";
 import { getSiteConfigCached, applyMaintenanceSchedule } from "./modules/config/config.service.js";
@@ -65,6 +65,7 @@ const startServer = async () => {
       // Background jobs safely
       try {
         startOrderTimeoutJob();
+        startAutoRejectJob();
         startIncidentJob();
         startAgentReassignmentJob();
       } catch (jobError) {

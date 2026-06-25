@@ -67,6 +67,15 @@ export const validateCreateOrder = (payload) => {
     return "couponCode must be a string";
   }
 
+  // Optional: loyalty points redemption — actual balance/cap enforcement
+  // happens atomically in createOrder; this just rejects an obviously bad
+  // value before it gets there.
+  if (payload.pointsToRedeem !== undefined) {
+    if (typeof payload.pointsToRedeem !== "number" || !Number.isInteger(payload.pointsToRedeem) || payload.pointsToRedeem < 0) {
+      return "pointsToRedeem must be a non-negative integer";
+    }
+  }
+
   return null;
 };
 

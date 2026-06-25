@@ -1,6 +1,7 @@
 import {
   assignDeliveryAgent,
   calculateOrderTotal,
+  cancelOrderById,
   createOrder,
   getOrderById,
   listOrders,
@@ -13,6 +14,8 @@ import { createNotification } from "../notification/notification.service.js";
 import { sendOrderPlacedEmail, sendOrderStatusEmail } from "../../services/email.service.js";
 import { computeETA } from "../../utils/eta.js";
 import { logger } from "../../utils/logger.js";
+import { awardPointsForOrder } from "../wallet/wallet.service.js";
+import { sendPushToUser } from "../push/push.service.js";
 
 export const getOrders = async (req, res) => {
   try {
@@ -262,90 +265,76 @@ export const updateOrderStatusHTTP = async (req, res) => {
       estimatedDelivery = computeETA(restaurant, agent, newStatus, currentOrder.deliveryAddress);
     }
 
-    // Update order status (and persist ETA)
-    const updatedOrder = await updateOrderStatus({
-      orderId,
-      status: newStatus,
-      agentId: req.user.role === "DELIVERY" ? req.user.userId : undefined,
-      estimatedDelivery: estimatedDelivery ?? undefined,
-    });
-
-    // Assign a delivery agent on CONFIRMED, and retry on every later
-    // transition (PREPARING, OUT_FOR_DELIVERY) if still unassigned — e.g. no
-    // rider was online at CONFIRMED time but one came online since. Without
-    // this retry, an order that missed its first assignment attempt is
-    // stuck with agentId=null forever; a periodic job also retries (see
-    // jobs/orderTimeout.job.js) for orders nobody touches again after this.
-    const assignableStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
-    if (assignableStatuses.includes(newStatus) && !updatedOrder.agentId && io) {
-      const assignedAgent = await assignDeliveryAgent(orderId, io);
-      if (!assignedAgent) {
-        logger.warn("No agents available for order", { orderId, status: newStatus });
-      }
-    }
-
-    // Emit socket event to notify all parties
-    if (io) {
-      emitOrderStatusUpdated({
+    // CANCELLED is handled entirely by the shared cancelOrderById (status
+    // update, socket emit, customer+rider notify, auto-refund) — the same
+    // function the auto-reject housekeeping job calls, so a manual cancel and
+    // a timer-triggered one can never drift apart. Everything else below
+    // (ETA, agent (re)assignment, the generic emit/notify block) only
+    // applies to non-terminal transitions.
+    let updatedOrder;
+    if (newStatus === "CANCELLED") {
+      updatedOrder = await cancelOrderById(orderId, {
+        reason: `Order cancelled by ${req.user.role.toLowerCase()}`,
+        actorId: req.user.userId,
+      });
+    } else {
+      updatedOrder = await updateOrderStatus({
         orderId,
-        restaurantId: currentOrder.restaurantId,
-        agentId: updatedOrder.agentId,
         status: newStatus,
-        estimatedDelivery: estimatedDelivery instanceof Date
-          ? estimatedDelivery.toISOString()
-          : (estimatedDelivery ?? null),
-        timestamp: new Date().toISOString(),
+        agentId: req.user.role === "DELIVERY" ? req.user.userId : undefined,
+        estimatedDelivery: estimatedDelivery ?? undefined,
       });
-    }
 
-    // Notify customer based on new status
-    const customerId = updatedOrder.customerId;
-    if (newStatus === "CONFIRMED") {
-      createNotification({ userId: customerId, title: "Restaurant confirmed your order", body: "Your order is being prepared.", type: "ORDER_UPDATE", entityId: orderId });
-    } else if (newStatus === "OUT_FOR_DELIVERY" && updatedOrder.agent) {
-      createNotification({ userId: customerId, title: "Rider assigned", body: `${updatedOrder.agent.name} is on the way.`, type: "ORDER_UPDATE", entityId: orderId });
-    } else if (newStatus === "DELIVERED") {
-      createNotification({ userId: customerId, title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", type: "REVIEW_REQUEST", entityId: orderId });
-    } else if (newStatus === "CANCELLED") {
-      createNotification({
-        userId: customerId,
-        title: "Order cancelled",
-        body: `${updatedOrder.restaurant?.name ?? "The restaurant"} cancelled your order.`,
-        type: "ORDER_UPDATE",
-        entityId: orderId,
-      });
-      // The rider may already have an active offer/assignment on this order
-      // (cancellation can happen any time up to pickup) — let them know it's
-      // off, separately from the customer-facing notification above.
-      if (updatedOrder.agentId) {
-        createNotification({
-          userId: updatedOrder.agentId,
-          title: "Order cancelled",
-          body: "This order was cancelled by the restaurant — no pickup needed.",
-          type: "ORDER_UPDATE",
-          entityId: orderId,
+      // Assign a delivery agent on CONFIRMED, and retry on every later
+      // transition (PREPARING, OUT_FOR_DELIVERY) if still unassigned — e.g. no
+      // rider was online at CONFIRMED time but one came online since. Without
+      // this retry, an order that missed its first assignment attempt is
+      // stuck with agentId=null forever; a periodic job also retries (see
+      // jobs/orderTimeout.job.js) for orders nobody touches again after this.
+      const assignableStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+      if (assignableStatuses.includes(newStatus) && !updatedOrder.agentId && io) {
+        const assignedAgent = await assignDeliveryAgent(orderId, io);
+        if (!assignedAgent) {
+          logger.warn("No agents available for order", { orderId, status: newStatus });
+        }
+      }
+
+      // Emit socket event to notify all parties
+      if (io) {
+        emitOrderStatusUpdated({
+          orderId,
+          restaurantId: currentOrder.restaurantId,
+          agentId: updatedOrder.agentId,
+          status: newStatus,
+          estimatedDelivery: estimatedDelivery instanceof Date
+            ? estimatedDelivery.toISOString()
+            : (estimatedDelivery ?? null),
+          timestamp: new Date().toISOString(),
         });
       }
 
-      // Auto-refund a paid order on cancellation, reusing the existing
-      // Cashfree refund flow (refund.service.js) rather than building a
-      // second one — this is the same function the admin-initiated manual
-      // refund endpoint calls. Idempotent (initiateRefund no-ops if a refund
-      // already exists), and COD orders have no cfOrderId so this is a no-op
-      // for them.
-      if (updatedOrder.cfOrderId) {
-        (async () => {
-          try {
-            const { initiateRefund } = await import("../payment/refund.service.js");
-            await initiateRefund({
-              cfOrderId: updatedOrder.cfOrderId,
-              reason: "Order cancelled by restaurant",
-              adminId: req.user.userId,
-            });
-          } catch (err) {
-            logger.error("Auto-refund on order cancellation failed", { orderId, error: err.message });
-          }
-        })();
+      // Notify customer based on new status — in-app (createNotification,
+      // shown in the notification bell while the app is open) and, where
+      // configured, a real Web Push notification that also reaches a closed
+      // tab/app. Push is fire-and-forget and never blocks the response; the
+      // status transition itself already succeeded by this point regardless.
+      const customerId = updatedOrder.customerId;
+      if (newStatus === "CONFIRMED") {
+        createNotification({ userId: customerId, title: "Restaurant confirmed your order", body: "Your order is being prepared.", type: "ORDER_UPDATE", entityId: orderId });
+        sendPushToUser(customerId, { title: "Order confirmed", body: "Your order is being prepared.", url: `/order/${orderId}/track` }).catch(() => {});
+      } else if (newStatus === "OUT_FOR_DELIVERY" && updatedOrder.agent) {
+        createNotification({ userId: customerId, title: "Rider assigned", body: `${updatedOrder.agent.name} is on the way.`, type: "ORDER_UPDATE", entityId: orderId });
+        sendPushToUser(customerId, { title: "Out for delivery", body: `${updatedOrder.agent.name} is on the way.`, url: `/order/${orderId}/track` }).catch(() => {});
+      } else if (newStatus === "DELIVERED") {
+        createNotification({ userId: customerId, title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", type: "REVIEW_REQUEST", entityId: orderId });
+        sendPushToUser(customerId, { title: "Order delivered!", body: "Enjoy your meal! Rate your experience.", url: `/order/${orderId}/track` }).catch(() => {});
+        // Points are only ever awarded here, on DELIVERED — never on
+        // placement — so an order that gets cancelled later never earns
+        // anything. Non-fatal: a points-award failure must never block the
+        // delivery confirmation itself.
+        awardPointsForOrder(updatedOrder).catch((err) =>
+          logger.error("Loyalty points award failed", { orderId, error: err.message }),
+        );
       }
     }
 
@@ -354,7 +343,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
       (async () => {
         try {
           const { prisma } = await import("../../config/prisma.js");
-          const user = await prisma.user.findUnique({ where: { id: customerId }, select: { email: true, name: true } });
+          const user = await prisma.user.findUnique({ where: { id: updatedOrder.customerId }, select: { email: true, name: true } });
           if (user?.email) {
             await sendOrderStatusEmail({
               to: user.email,

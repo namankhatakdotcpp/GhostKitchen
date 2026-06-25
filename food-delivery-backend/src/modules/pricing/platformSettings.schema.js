@@ -11,6 +11,9 @@ export const platformSettingsSchema = z
     splitRestaurantPct: z.number().finite().min(0).max(100),
     splitRiderPct: z.number().finite().min(0).max(100),
     splitAdminPct: z.number().finite().min(0).max(100),
+    loyaltyEarnRate: z.number().finite().min(0),
+    loyaltyPointValuePaise: z.number().finite().min(0),
+    loyaltyRedemptionCapPct: z.number().finite().min(0).max(100),
   })
   .partial()
   .refine(
@@ -47,6 +50,9 @@ export const fullPlatformSettingsSchema = z
     splitRestaurantPct: z.number().finite().min(0).max(100),
     splitRiderPct: z.number().finite().min(0).max(100),
     splitAdminPct: z.number().finite().min(0).max(100),
+    loyaltyEarnRate: z.number().finite().min(0),
+    loyaltyPointValuePaise: z.number().finite().min(0),
+    loyaltyRedemptionCapPct: z.number().finite().min(0).max(100),
   })
   .refine(
     (data) => Math.abs(data.splitRestaurantPct + data.splitRiderPct + data.splitAdminPct - 100) < 0.01,

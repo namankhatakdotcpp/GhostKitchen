@@ -1,4 +1,3 @@
-import { updateAgentAvailability, updateOrderStatus } from "../modules/orders/orders.service.js";
 import { getIO } from "./socketServer.js";
 
 function withSocketServer(callback) {

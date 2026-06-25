@@ -62,6 +62,13 @@ function CheckoutPageContent() {
   const [couponError, setCouponError] = useState('')
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ONLINE')
+  // Loyalty points — redemption is wired up for the COD path only this
+  // round (online payments go through a separate snapshot-based
+  // payment.service.js pipeline that doesn't thread pointsToRedeem through
+  // yet — a known gap, not an oversight).
+  const [walletBalance, setWalletBalance] = useState(0)
+  const [pointsInput, setPointsInput] = useState(0)
+  const [pointsPreview, setPointsPreview] = useState<{ points: number; discountPaise: number } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [pricing, setPricing] = useState<PricingBreakdown | null>(null)
@@ -89,7 +96,26 @@ function CheckoutPageContent() {
         else setUseNewAddress(true)
       })
       .catch(() => setUseNewAddress(true))
+
+    api.get('/wallet').then(r => setWalletBalance(r.data?.balance ?? 0)).catch(() => {})
   }, [])
+
+  // Debounced preview of what the requested points would actually discount
+  // (server caps at both balance and the admin redemption %, so the UI must
+  // never just multiply pointsInput × pointValue itself).
+  useEffect(() => {
+    if (paymentMethod !== 'COD' || pointsInput <= 0 || !pricing) {
+      setPointsPreview(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      api.post('/wallet/redeem-preview', { points: pointsInput, orderTotalPaise: pricing.total })
+        .then(({ data }) => { if (!cancelled) setPointsPreview({ points: data.points, discountPaise: data.discountPaise }) })
+        .catch(() => { if (!cancelled) setPointsPreview(null) })
+    }, 300)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [paymentMethod, pointsInput, pricing])
 
   function getDeliveryAddress(): { line1: string; city: string; lat?: number; lng?: number } | null {
     if (useNewAddress) {
@@ -187,6 +213,7 @@ function CheckoutPageContent() {
       items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
       deliveryAddress,
       couponCode: couponCode || undefined,
+      pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
     })
     clearCart()
     router.push(`/order/${data.order.id}/track`)
@@ -434,6 +461,36 @@ function CheckoutPageContent() {
 
         {restaurantId && <AvailableCoupons restaurantId={restaurantId} onSelect={code => { setCouponInput(code); setCouponError('') }} />}
       </div>
+
+      {/* Loyalty points redemption — COD only for now (see note on pointsInput above) */}
+      {walletBalance > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 space-y-2">
+          <label className="block text-sm font-semibold text-gray-800">
+            Redeem points <span className="text-gray-400 font-normal">({walletBalance} available)</span>
+          </label>
+          {paymentMethod !== 'COD' ? (
+            <p className="text-xs text-gray-500">Points redemption is available for Cash on Delivery orders for now.</p>
+          ) : (
+            <>
+              <input
+                type="number"
+                min={0}
+                max={walletBalance}
+                value={pointsInput || ''}
+                onChange={e => setPointsInput(Math.max(0, Number(e.target.value) || 0))}
+                placeholder="0"
+                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+              {pointsPreview && pointsPreview.points > 0 && (
+                <p className="text-xs text-green-700">
+                  Applying {pointsPreview.points} points = ₹{(pointsPreview.discountPaise / 100).toFixed(2)} off
+                  {pointsPreview.points < pointsInput ? ' (capped by balance or the redemption limit)' : ''}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Payment method */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">

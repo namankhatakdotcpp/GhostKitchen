@@ -15,6 +15,9 @@ interface PlatformSettings {
   splitRestaurantPct: number;
   splitRiderPct: number;
   splitAdminPct: number;
+  loyaltyEarnRate: number; // points earned per ₹1 of itemTotal
+  loyaltyPointValuePaise: number; // ₹ value of 1 point, in paise
+  loyaltyRedemptionCapPct: number; // max % of order value points can cover
 }
 
 async function fetchPricingSettings(): Promise<PlatformSettings> {
@@ -186,6 +189,25 @@ export function AdminPricingSettingsPage() {
         <p className={`mt-3 text-sm font-semibold ${splitValid ? "text-green-600" : "text-red-600"}`}>
           Sum: {splitSum.toFixed(2)}% {splitValid ? "✓" : "— must equal 100%"}
         </p>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-6">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-[#6B7280]">Loyalty points / wallet</h2>
+        <p className="mt-1 text-xs text-[#6B7280]">
+          Points are earned on DELIVERED orders only, based on item total (fees/GST excluded), and can be
+          redeemed for a discount at checkout up to the cap below.
+        </p>
+        <div className="mt-2">
+          <FieldRow label="Earn rate" hint="Points earned per ₹1 of item total — 0.1 = 1 point per ₹10 spent">
+            <NumInput value={local.loyaltyEarnRate} onChange={(v) => set("loyaltyEarnRate", v)} suffix="pts/₹" step={0.01} />
+          </FieldRow>
+          <FieldRow label="Point value" hint="₹ credited per point redeemed at checkout">
+            <NumInput value={toRupees(local.loyaltyPointValuePaise)} onChange={(v) => set("loyaltyPointValuePaise", toPaise(v))} suffix="₹/pt" />
+          </FieldRow>
+          <FieldRow label="Redemption cap" hint="Max % of an order's value points can cover — keeps points from zeroing out an order">
+            <NumInput value={local.loyaltyRedemptionCapPct} onChange={(v) => set("loyaltyRedemptionCapPct", v)} suffix="%" max={100} step={1} />
+          </FieldRow>
+        </div>
       </section>
 
       <div className="mt-6 flex items-center justify-end gap-3">

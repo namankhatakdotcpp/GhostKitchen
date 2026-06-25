@@ -54,4 +54,11 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || null,
   EMAIL_FROM: process.env.EMAIL_FROM || "GhostKitchen <noreply@ghostkitchen.in>",
   LOG_LEVEL: process.env.LOG_LEVEL || "info",
+  // Web Push (Item 2) — optional. Without these, push.service.js no-ops
+  // (subscriptions are still stored, sends are just skipped) rather than
+  // crashing the server, since push notifications are additive on top of
+  // the existing Socket.IO real-time updates, not a hard dependency.
+  VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY || null,
+  VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY || null,
+  VAPID_SUBJECT: process.env.VAPID_SUBJECT || "mailto:admin@ghostkitchen.in",
 };

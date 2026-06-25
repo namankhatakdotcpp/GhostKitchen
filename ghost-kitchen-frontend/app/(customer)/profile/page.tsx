@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
-import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone } from "lucide-react";
+import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone, Bell, BellOff } from "lucide-react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { WalletCard } from "@/components/customer/WalletCard";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface Address {
   id: string;
@@ -40,6 +42,7 @@ const EMPTY_FORM: AddressFormState = {
 
 function ProfilePageContent() {
   const { user } = useAuthStore();
+  const { permission, isSubscribing, subscribe } = usePushNotifications();
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -223,6 +226,45 @@ function ProfilePageContent() {
           </div>
         )}
       </div>
+
+      {/* Wallet / loyalty points */}
+      <WalletCard />
+
+      {/* Push notifications */}
+      {permission !== "unsupported" && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {permission === "granted" ? (
+              <Bell className="h-5 w-5 text-green-600" />
+            ) : (
+              <BellOff className="h-5 w-5 text-gray-400" />
+            )}
+            <div>
+              <p className="font-semibold text-gray-800">Push notifications</p>
+              <p className="text-xs text-gray-500">
+                {permission === "granted"
+                  ? "Enabled — you'll get order updates even when the app is closed."
+                  : permission === "denied"
+                    ? "Blocked in your browser settings. Re-enable from your browser's site settings."
+                    : "Get notified when your order is accepted, out for delivery, or delivered."}
+              </p>
+            </div>
+          </div>
+          {permission === "default" && (
+            <button
+              onClick={async () => {
+                const ok = await subscribe()
+                if (ok) toast.success('Notifications enabled')
+                else toast.error('Could not enable notifications')
+              }}
+              disabled={isSubscribing}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50 shrink-0"
+            >
+              {isSubscribing ? 'Enabling…' : 'Enable'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Saved Addresses */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">

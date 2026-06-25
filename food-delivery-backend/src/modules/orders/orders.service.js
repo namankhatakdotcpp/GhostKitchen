@@ -5,6 +5,9 @@ import { computeOrderPricing } from "./pricing.js";
 import { computeETA } from "../../utils/eta.js";
 import { haversine } from "../../utils/geo.js";
 import { logger } from "../../utils/logger.js";
+import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
+import { createNotification } from "../notification/notification.service.js";
+import { claimPointsInTx } from "../wallet/wallet.service.js";
 
 // All monetary values are in PAISE (₹50 = 5000).
 
@@ -186,7 +189,12 @@ export const createOrder = async (payload, customerId) => {
     deliveryAddress: payload.deliveryAddress,
   });
 
-  // 6-8. Create order in transaction with coupon validation inside (atomicity)
+  // Loyalty points redemption — fetched once, outside the transaction, since
+  // it only affects the cap calculation and the guarded claim below re-checks
+  // the real balance atomically anyway.
+  const loyaltySettings = payload.pointsToRedeem ? await getPlatformSettingsCached() : null;
+
+  // 6-8. Create order in transaction with coupon + points redemption validated inside (atomicity)
   const order = await prisma.$transaction(async (tx) => {
     let discount = 0;
 
@@ -213,10 +221,28 @@ export const createOrder = async (payload, customerId) => {
     // platform's own margin. The formula doesn't address coupons at all;
     // this mirrors the pre-existing `subtotal + deliveryFee - discount`
     // behavior (discount only ever reduced the customer-facing total).
-    const finalTotal = Math.max(pricing.customerTotal - discount, 0);
+    const afterCoupon = Math.max(pricing.customerTotal - discount, 0);
+
+    // Points redemption stacks on top of the coupon discount, off the same
+    // customer-facing total — capped (not rejected) at the lesser of the
+    // wallet's real balance and the admin-configured % of order value, so
+    // points alone can never zero out an order. The wallet balance is read
+    // inside this transaction and the decrement below is guarded
+    // (balance >= points in the WHERE), so two concurrent checkouts from the
+    // same wallet can never both spend the same points.
+    let pointsRedeemed = 0;
+    let pointsDiscount = 0;
+    if (payload.pointsToRedeem > 0 && loyaltySettings) {
+      const wallet = await tx.wallet.upsert({ where: { userId: customerId }, create: { userId: customerId }, update: {} });
+      const maxByCapPaise = Math.floor((afterCoupon * loyaltySettings.loyaltyRedemptionCapPct) / 100);
+      const maxByCapPoints = Math.floor(maxByCapPaise / loyaltySettings.loyaltyPointValuePaise);
+      pointsRedeemed = Math.min(payload.pointsToRedeem, wallet.balance, maxByCapPoints);
+      pointsDiscount = pointsRedeemed * loyaltySettings.loyaltyPointValuePaise;
+    }
+    const finalTotal = Math.max(afterCoupon - pointsDiscount, 0);
 
     // Create order with server-calculated values only
-    return tx.order.create({
+    const created = await tx.order.create({
       data: {
         customerId,
         restaurantId: payload.restaurantId,
@@ -225,7 +251,7 @@ export const createOrder = async (payload, customerId) => {
         items: itemsToStore,
         subtotal,
         deliveryFee: pricing.deliveryFee,
-        discount,
+        discount: discount + pointsDiscount,
         total: finalTotal,
         deliveryAddress: payload.deliveryAddress,
         itemTotal: pricing.itemTotal,
@@ -245,6 +271,15 @@ export const createOrder = async (payload, customerId) => {
         agent: true,
       },
     });
+
+    if (pointsRedeemed > 0) {
+      await claimPointsInTx(tx, customerId, pointsRedeemed, {
+        orderId: created.id,
+        description: `Redeemed at checkout on order #${created.id.slice(-6).toUpperCase()}`,
+      });
+    }
+
+    return created;
   });
 
   return serializeOrder(order);
@@ -266,6 +301,65 @@ export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDel
   });
 
   return serializeOrder(order);
+};
+
+// Single source of truth for cancelling an order with its full side-effect
+// chain (socket push, customer + rider notification, auto-refund for paid
+// orders) — used by both the manual Cancel/Reject button (orders.controller.js)
+// and the auto-reject housekeeping job (jobs/orderTimeout.job.js) so the two
+// trigger paths can never drift apart. `actorId` is the admin/initiator id
+// for the refund's audit trail — null for a system/job-triggered cancellation.
+export const cancelOrderById = async (orderId, { reason = "Order cancelled", actorId = null } = {}) => {
+  const existing = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!existing) return null;
+  if (["DELIVERED", "CANCELLED"].includes(existing.status)) return serializeOrder(existing);
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { status: "CANCELLED" },
+    include: { restaurant: true, agent: true },
+  });
+
+  emitOrderStatusUpdated({
+    orderId,
+    restaurantId: updated.restaurantId,
+    agentId: updated.agentId,
+    status: "CANCELLED",
+    estimatedDelivery: null,
+    timestamp: new Date().toISOString(),
+  });
+
+  createNotification({
+    userId: updated.customerId,
+    title: "Order cancelled",
+    body: `${updated.restaurant?.name ?? "The restaurant"} cancelled your order.`,
+    type: "ORDER_UPDATE",
+    entityId: orderId,
+  });
+  if (updated.agentId) {
+    createNotification({
+      userId: updated.agentId,
+      title: "Order cancelled",
+      body: "This order was cancelled — no pickup needed.",
+      type: "ORDER_UPDATE",
+      entityId: orderId,
+    });
+  }
+
+  // Auto-refund a paid order, reusing the existing Cashfree refund flow
+  // rather than a second one. Idempotent; COD orders have no cfOrderId so
+  // this is a no-op for them.
+  if (updated.cfOrderId) {
+    try {
+      const { initiateRefund } = await import("../payment/refund.service.js");
+      await initiateRefund({ cfOrderId: updated.cfOrderId, reason, adminId: actorId });
+    } catch (err) {
+      logger.error("Auto-refund on order cancellation failed", { orderId, error: err.message });
+    }
+  }
+
+  logger.info("Order cancelled", { orderId, reason });
+  return serializeOrder(updated);
 };
 
 export const updateAgentAvailability = async (agentId, isAvailable, coords) => {

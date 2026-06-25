@@ -575,14 +575,26 @@ export const getRestaurantAnalyticsData = async (restaurantId, range) => {
       id: true,
       customerId: true,
       total: true,
+      restaurantPayout: true,
+      restaurantPackaging: true,
       items: true,
       createdAt: true,
     },
     orderBy: { createdAt: "asc" },
   });
 
+  // What the restaurant actually nets per order — restaurantPayout (its
+  // share of the delivery fee + platform fee split) plus restaurantPackaging
+  // (100% theirs), NOT the customer-facing `total`, which also includes
+  // GST passthrough and the platform's own cut. Orders placed before the
+  // pricing system shipped have no breakdown (restaurantPayout is null) —
+  // those fall back to gross `total` as the closest available approximation
+  // rather than silently contributing ₹0 to the period's revenue.
+  const restaurantRevenueOf = (o) =>
+    o.restaurantPayout != null ? o.restaurantPayout + (o.restaurantPackaging ?? 0) : o.total || 0;
+
   const totalOrders = orders.length;
-  const totalRevenue = orders.reduce((s, o) => s + (o.total || 0), 0);
+  const totalRevenue = orders.reduce((s, o) => s + restaurantRevenueOf(o), 0);
   const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
   // Peak ordering hour
@@ -619,7 +631,7 @@ export const getRestaurantAnalyticsData = async (restaurantId, range) => {
         : d.toLocaleDateString("en-IN", { weekday: "short" });
     if (!byDate[label]) byDate[label] = { orders: 0, revenue: 0 };
     byDate[label].orders++;
-    byDate[label].revenue += o.total || 0;
+    byDate[label].revenue += restaurantRevenueOf(o);
   }
   const timeline = Object.entries(byDate).map(([label, v]) => ({
     label,
@@ -627,19 +639,24 @@ export const getRestaurantAnalyticsData = async (restaurantId, range) => {
     revenue: Math.round(v.revenue),
   }));
 
-  // Top items by quantity sold (from JSON items array on each order)
-  const itemCounts = {};
+  // Best-selling items — by quantity AND by revenue (item.price × quantity,
+  // gross of the per-order fee split since menu-item pricing has no payout
+  // breakdown of its own; the restaurant-payout adjustment above is an
+  // order-level concept, not a per-item one).
+  const itemStats = {};
   for (const o of orders) {
     const items = Array.isArray(o.items) ? o.items : [];
     for (const item of items) {
       const name = item.name || "Item";
-      if (!itemCounts[name]) itemCounts[name] = { name, value: 0 };
-      itemCounts[name].value += item.quantity || 1;
+      if (!itemStats[name]) itemStats[name] = { name, value: 0, revenue: 0 };
+      const qty = item.quantity || 1;
+      itemStats[name].value += qty;
+      itemStats[name].revenue += (item.price || 0) * qty;
     }
   }
-  const topItems = Object.values(itemCounts)
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 5);
+  const allItems = Object.values(itemStats).map((i) => ({ ...i, revenue: Math.round(i.revenue) }));
+  const topItems = [...allItems].sort((a, b) => b.value - a.value).slice(0, 5);
+  const topItemsByRevenue = [...allItems].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
   const result = {
     keyMetrics: {
@@ -650,6 +667,7 @@ export const getRestaurantAnalyticsData = async (restaurantId, range) => {
       repeatCustomerRate,
     },
     timeline,
+    topItemsByRevenue,
     topItems,
   };
   await cacheSet(cacheKey, result, CACHE_TTL.ANALYTICS);

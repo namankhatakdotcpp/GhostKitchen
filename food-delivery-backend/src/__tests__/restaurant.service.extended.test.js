@@ -532,4 +532,48 @@ describe("getRestaurantAnalyticsData", () => {
     const result = await getRestaurantAnalyticsData("rest-1", "30d");
     expect(result).toBeDefined();
   });
+
+  it("uses the restaurant's actual payout (payout + packaging), not the gross customer-facing total", async () => {
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: "o-1", customerId: "c-1", createdAt: new Date(),
+        total: 100000, // ₹1000 gross — what the customer paid
+        restaurantPayout: 20000, restaurantPackaging: 2500, // ₹225 actually goes to the restaurant
+        items: [],
+      },
+    ]);
+
+    const result = await getRestaurantAnalyticsData("rest-1", "week");
+
+    expect(result.keyMetrics.totalRevenue).toBe(22500);
+    expect(result.keyMetrics.totalRevenue).not.toBe(100000);
+  });
+
+  it("falls back to gross total for legacy orders with no pricing breakdown", async () => {
+    prisma.order.findMany.mockResolvedValue([
+      { id: "o-legacy", customerId: "c-1", createdAt: new Date(), total: 50000, restaurantPayout: null, restaurantPackaging: null, items: [] },
+    ]);
+
+    const result = await getRestaurantAnalyticsData("rest-1", "week");
+
+    expect(result.keyMetrics.totalRevenue).toBe(50000);
+  });
+
+  it("ranks top items by both quantity and revenue, independently", async () => {
+    prisma.order.findMany.mockResolvedValue([
+      {
+        id: "o-1", customerId: "c-1", createdAt: new Date(),
+        total: 100000, restaurantPayout: 20000, restaurantPackaging: 0,
+        items: [
+          { name: "Cheap but popular", price: 5000, quantity: 10 }, // ₹500 total, high qty
+          { name: "Pricey but rare", price: 80000, quantity: 1 },   // ₹800 total, low qty
+        ],
+      },
+    ]);
+
+    const result = await getRestaurantAnalyticsData("rest-1", "week");
+
+    expect(result.topItems[0].name).toBe("Cheap but popular"); // wins by quantity
+    expect(result.topItemsByRevenue[0].name).toBe("Pricey but rare"); // wins by revenue
+  });
 });

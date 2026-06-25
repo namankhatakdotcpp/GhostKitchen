@@ -51,6 +51,10 @@ vi.mock("../socket/socket.server.js", () => ({
 vi.mock("../modules/notification/notification.service.js", () => ({
   createNotification: vi.fn(),
 }));
+const mockClaimPointsInTx = vi.fn();
+vi.mock("../modules/wallet/wallet.service.js", () => ({
+  claimPointsInTx: mockClaimPointsInTx,
+}));
 
 const { prisma } = await import("../config/prisma.js");
 const { getSiteConfigCached } = await import("../modules/config/config.service.js");
@@ -275,6 +279,94 @@ describe("createOrder", () => {
       const riderShare = Math.round(splitPool * (snapshot.splitRiderPct / 100));
       return splitPool - restaurantShare - riderShare;
     }
+  });
+});
+
+// ── createOrder — loyalty points redemption ────────────────────────────────────
+describe("createOrder — loyalty points redemption", () => {
+  const menuItems = [{ id: "mi-1", price: 100000, restaurantId: "rest-1", isAvailable: true }]; // ₹1000 item
+
+  const basePayload = {
+    restaurantId: "rest-1",
+    items: [{ menuItemId: "mi-1", quantity: 1 }],
+    deliveryAddress: { street: "1 Road", city: "Delhi", state: "DL", postalCode: "110001" },
+  };
+
+  function setupTx({ walletBalance }) {
+    let capturedCreateData;
+    let capturedClaim;
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        coupon: { findUnique: vi.fn(), updateMany: vi.fn() },
+        wallet: { upsert: vi.fn().mockResolvedValue({ id: "wallet-1", userId: "u-1", balance: walletBalance }) },
+        order: {
+          create: vi.fn((args) => {
+            capturedCreateData = args.data;
+            return Promise.resolve({ ...baseOrder, ...args.data, id: "ord-redeem-1" });
+          }),
+        },
+      };
+      mockClaimPointsInTx.mockImplementation(async (_tx, _userId, points, opts) => {
+        capturedClaim = { points, ...opts };
+      });
+      const result = await fn(tx);
+      return result;
+    });
+    return { getCapturedCreateData: () => capturedCreateData, getCapturedClaim: () => capturedClaim };
+  }
+
+  beforeEach(() => {
+    prisma.restaurant.findUnique.mockResolvedValue({ isOpen: true, suspended: false, isApproved: true, address: { minOrder: 0 } });
+    prisma.menuItem.findMany.mockResolvedValue(menuItems);
+    getSiteConfigCached.mockResolvedValue(baseCfg);
+    getPlatformSettingsCached.mockResolvedValue({
+      deliveryBaseFee: 1000, deliveryPerKmFee: 200,
+      platformFeeMode: "FLAT", platformFeeValue: 500,
+      splitRestaurantPct: 20, splitRiderPct: 50, splitAdminPct: 30,
+      loyaltyEarnRate: 0.1, loyaltyPointValuePaise: 100, loyaltyRedemptionCapPct: 20,
+    });
+  });
+
+  it("applies the full requested redemption when within both balance and the cap", async () => {
+    const { getCapturedCreateData, getCapturedClaim } = setupTx({ walletBalance: 50 });
+    await createOrder({ ...basePayload, pointsToRedeem: 50 }, "u-1");
+
+    const claim = getCapturedClaim();
+    expect(claim.points).toBe(50);
+    expect(getCapturedCreateData().discount).toBeGreaterThanOrEqual(5000); // 50 points * ₹1 = ₹50 = 5000 paise
+  });
+
+  it("caps redemption at the wallet's real balance, not the requested amount", async () => {
+    const { getCapturedClaim } = setupTx({ walletBalance: 10 });
+    await createOrder({ ...basePayload, pointsToRedeem: 9999 }, "u-1");
+
+    expect(getCapturedClaim().points).toBe(10);
+  });
+
+  it("caps redemption at the admin-configured % of order value even with a large balance", async () => {
+    // Order total is ~₹1000+ fees; 20% cap means redemption can't exceed
+    // roughly ₹200-worth of points regardless of how many points are owned.
+    const { getCapturedClaim } = setupTx({ walletBalance: 100000 });
+    await createOrder({ ...basePayload, pointsToRedeem: 100000 }, "u-1");
+
+    const claim = getCapturedClaim();
+    expect(claim.points).toBeLessThan(100000);
+    expect(claim.points).toBeGreaterThan(0);
+  });
+
+  it("does not touch the wallet at all when pointsToRedeem is omitted", async () => {
+    prisma.$transaction.mockImplementation(async (fn) => {
+      const tx = {
+        coupon: { findUnique: vi.fn(), updateMany: vi.fn() },
+        wallet: { upsert: vi.fn() },
+        order: { create: vi.fn().mockResolvedValue({ ...baseOrder, id: "ord-no-redeem" }) },
+      };
+      return fn(tx);
+    });
+
+    await createOrder(basePayload, "u-1");
+
+    expect(mockClaimPointsInTx).not.toHaveBeenCalled();
   });
 });
 

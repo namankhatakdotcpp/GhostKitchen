@@ -318,6 +318,7 @@ export interface ShopAnalyticsPoint {
 export interface TopSellingItem {
   name: string;
   value: number;
+  revenue?: number;
 }
 
 export interface ShopAnalyticsData {
@@ -330,6 +331,7 @@ export interface ShopAnalyticsData {
   };
   timeline: ShopAnalyticsPoint[];
   topItems: TopSellingItem[];
+  topItemsByRevenue: TopSellingItem[];
 }
 
 export interface DeliveryAssignment {

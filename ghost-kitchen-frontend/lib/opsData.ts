@@ -469,6 +469,7 @@ export async function getShopAnalyticsData(restaurantId: string, range: string):
     },
     timeline: result.timeline ?? [],
     topItems: result.topItems ?? [],
+    topItemsByRevenue: result.topItemsByRevenue ?? [],
   };
 }
 

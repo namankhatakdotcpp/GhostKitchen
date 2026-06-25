@@ -93,7 +93,7 @@ export function ShopAnalyticsPage() {
                   icon: TrendingUp,
                 },
                 {
-                  label: "Total revenue",
+                  label: "Your revenue",
                   value: `₹${data.keyMetrics.totalRevenue.toLocaleString("en-IN")}`,
                   icon: Wallet,
                 },
@@ -161,33 +161,65 @@ export function ShopAnalyticsPage() {
               </div>
             </section>
 
-            <section className="rounded-[20px] border border-border bg-white p-5">
-              <h2 className="text-lg font-bold text-text-primary">Top items by quantity sold</h2>
-              <div className="mt-5 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Tooltip />
-                    <Pie data={data.topItems} dataKey="value" nameKey="name" innerRadius={70} outerRadius={110}>
-                      {data.topItems.map((entry, index) => (
-                        <Cell fill={pieColors[index % pieColors.length]} key={entry.name} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {data.topItems.map((item, index) => (
-                  <div className="rounded-[14px] border border-border px-3 py-2" key={item.name}>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 rounded-full"
-                        style={{ backgroundColor: pieColors[index % pieColors.length] }}
-                      />
-                      <span className="text-sm font-semibold text-text-primary">{item.name}</span>
+            <section className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-[20px] border border-border bg-white p-5">
+                <h2 className="text-lg font-bold text-text-primary">Best sellers by quantity</h2>
+                <div className="mt-5 h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Tooltip />
+                      <Pie data={data.topItems} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100}>
+                        {data.topItems.map((entry, index) => (
+                          <Cell fill={pieColors[index % pieColors.length]} key={entry.name} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {data.topItems.map((item, index) => (
+                    <div className="rounded-[14px] border border-border px-3 py-2" key={item.name}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: pieColors[index % pieColors.length] }}
+                        />
+                        <span className="text-sm font-semibold text-text-primary">{item.name}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-text-secondary">{item.value} sold</p>
                     </div>
-                    <p className="mt-1 text-xs text-text-secondary">{item.value} sold</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[20px] border border-border bg-white p-5">
+                <h2 className="text-lg font-bold text-text-primary">Best sellers by revenue</h2>
+                <div className="mt-5 h-[260px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Tooltip />
+                      <Pie data={data.topItemsByRevenue} dataKey="revenue" nameKey="name" innerRadius={60} outerRadius={100}>
+                        {data.topItemsByRevenue.map((entry, index) => (
+                          <Cell fill={pieColors[index % pieColors.length]} key={entry.name} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {data.topItemsByRevenue.map((item, index) => (
+                    <div className="rounded-[14px] border border-border px-3 py-2" key={item.name}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: pieColors[index % pieColors.length] }}
+                        />
+                        <span className="text-sm font-semibold text-text-primary">{item.name}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-text-secondary">₹{(item.revenue ?? 0).toLocaleString("en-IN")}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
           </>
