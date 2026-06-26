@@ -29,7 +29,11 @@ export default function AdminAnalyticsPage() {
   const statusBreakdown: Record<string, number> = data?.statusBreakdown ?? {};
   const topRestaurants: { restaurantId: string; name: string; revenue: number; orders: number }[] = data?.topRestaurants ?? [];
   const summary = data?.summary ?? { totalOrders: 0, deliveredOrders: 0, totalRevenue: 0 };
-  const delivery = data?.delivery ?? { totalRiderPayouts: 0, totalAdminRevenue: 0, avgDistanceKm: 0, avgDeliveryTimeMin: null };
+  const delivery = data?.delivery ?? {
+    totalRiderPayouts: 0, totalRestaurantPayouts: 0, totalAdminRevenue: 0, totalDeliveryFees: 0,
+    avgRiderPayout: 0, avgRestaurantPayout: 0, avgDistanceKm: 0,
+    cancellationPct: 0, avgPrepTimeMin: null, avgAssignmentTimeMin: null, avgDeliveryTimeMin: null,
+  };
 
   const maxRevenue = Math.max(...trend.map((d) => d.revenue), 1);
   const maxOrders = Math.max(...trend.map((d) => d.orders), 1);
@@ -168,32 +172,21 @@ export default function AdminAnalyticsPage() {
       {/* Delivery metrics */}
       <div className="rounded-[20px] border border-border bg-white p-6">
         <h2 className="mb-4 font-semibold text-text-primary">Delivery performance</h2>
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            {
-              label: "Total rider payouts",
-              value: isLoading ? "—" : `₹${toRupees(delivery.totalRiderPayouts).toLocaleString("en-IN")}`,
-              sub: "paid to riders",
-            },
-            {
-              label: "Platform revenue",
-              value: isLoading ? "—" : `₹${toRupees(delivery.totalAdminRevenue).toLocaleString("en-IN")}`,
-              sub: "admin's net share",
-            },
-            {
-              label: "Avg distance",
-              value: isLoading ? "—" : `${delivery.avgDistanceKm} km`,
-              sub: "per delivered order",
-            },
-            {
-              label: "Avg delivery time",
-              value: isLoading ? "—" : (delivery.avgDeliveryTimeMin != null ? `${delivery.avgDeliveryTimeMin} min` : "—"),
-              sub: "order placed → delivered",
-            },
+            { label: "Rider payouts", value: `₹${toRupees(delivery.totalRiderPayouts).toLocaleString("en-IN")}`, sub: `avg ₹${toRupees(delivery.avgRiderPayout)} / order` },
+            { label: "Restaurant payouts", value: `₹${toRupees(delivery.totalRestaurantPayouts).toLocaleString("en-IN")}`, sub: `avg ₹${toRupees(delivery.avgRestaurantPayout)} / order` },
+            { label: "Platform revenue", value: `₹${toRupees(delivery.totalAdminRevenue).toLocaleString("en-IN")}`, sub: "admin net share" },
+            { label: "Delivery fees collected", value: `₹${toRupees(delivery.totalDeliveryFees).toLocaleString("en-IN")}`, sub: "charged to customers" },
+            { label: "Cancellation rate", value: `${delivery.cancellationPct}%`, sub: "of all orders this period" },
+            { label: "Avg distance", value: `${delivery.avgDistanceKm} km`, sub: "per delivered order" },
+            { label: "Avg prep time", value: delivery.avgPrepTimeMin != null ? `${delivery.avgPrepTimeMin} min` : "—", sub: "restaurant accept → pickup" },
+            { label: "Avg assignment time", value: delivery.avgAssignmentTimeMin != null ? `${delivery.avgAssignmentTimeMin} min` : "—", sub: "placed → rider accepts" },
+            { label: "Avg delivery time", value: delivery.avgDeliveryTimeMin != null ? `${delivery.avgDeliveryTimeMin} min` : "—", sub: "placed → delivered" },
           ].map((m) => (
             <div key={m.label} className="rounded-[14px] border border-border p-4">
               <p className="text-xs text-text-muted">{m.label}</p>
-              <p className="mt-1 text-xl font-bold text-text-primary">{m.value}</p>
+              <p className="mt-1 text-xl font-bold text-text-primary">{isLoading ? "—" : m.value}</p>
               <p className="mt-0.5 text-xs text-text-muted">{m.sub}</p>
             </div>
           ))}

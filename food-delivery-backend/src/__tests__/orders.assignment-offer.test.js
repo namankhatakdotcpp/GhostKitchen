@@ -14,9 +14,10 @@ vi.mock("../utils/logger.js", () => ({
 }));
 vi.mock("../config/prisma.js", () => ({
   prisma: {
-    order: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+    order: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn(), groupBy: vi.fn().mockResolvedValue([]) },
     restaurant: { findUnique: vi.fn() },
     user: { findMany: vi.fn(), update: vi.fn() },
+    riderLocation: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn((ops) => Promise.all(ops)),
   },
 }));

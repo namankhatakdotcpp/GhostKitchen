@@ -130,9 +130,13 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
         restaurant: { select: { name: true } },
         // Delivery metrics
         riderPayout: true,
+        restaurantPayout: true,
         adminRevenue: true,
+        deliveryFee: true,
         distanceKm: true,
         placedAt: true,
+        acceptedAt: true,
+        pickedUpAt: true,
         deliveredAt: true,
       },
       orderBy: { createdAt: "asc" },
@@ -190,13 +194,33 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
   const totalOrders = allOrders.length;
   const deliveredOrders = deliveredList.length;
 
-  // Delivery performance metrics
+  // Delivery performance metrics (all monetary values in paise)
   const totalRiderPayouts = deliveredList.reduce((s, o) => s + (typeof o.riderPayout === "number" ? o.riderPayout : 0), 0);
+  const totalRestaurantPayouts = deliveredList.reduce((s, o) => s + (typeof o.restaurantPayout === "number" ? o.restaurantPayout : 0), 0);
   const totalAdminRevenue = deliveredList.reduce((s, o) => s + (typeof o.adminRevenue === "number" ? o.adminRevenue : 0), 0);
+  const totalDeliveryFees = deliveredList.reduce((s, o) => s + (typeof o.deliveryFee === "number" ? o.deliveryFee : 0), 0);
   const totalDistanceKm = deliveredList.reduce((s, o) => s + (typeof o.distanceKm === "number" ? o.distanceKm : 0), 0);
   const avgDistanceKm = deliveredOrders > 0 ? Math.round((totalDistanceKm / deliveredOrders) * 10) / 10 : 0;
+  const avgRiderPayout = deliveredOrders > 0 ? Math.round(totalRiderPayouts / deliveredOrders) : 0;
+  const avgRestaurantPayout = deliveredOrders > 0 ? Math.round(totalRestaurantPayouts / deliveredOrders) : 0;
 
-  // Average delivery time in minutes (placedAt → deliveredAt)
+  // Cancellation percentage
+  const cancelledOrders = allOrders.filter((o) => o.status === "CANCELLED").length;
+  const cancellationPct = totalOrders > 0 ? Math.round((cancelledOrders / totalOrders) * 100) : 0;
+
+  // Average preparation time: acceptedAt → pickedUpAt
+  const prepTimings = deliveredList
+    .filter((o) => o.acceptedAt && o.pickedUpAt)
+    .map((o) => (new Date(o.pickedUpAt).getTime() - new Date(o.acceptedAt).getTime()) / 60000);
+  const avgPrepTimeMin = prepTimings.length > 0 ? Math.round(prepTimings.reduce((s, t) => s + t, 0) / prepTimings.length) : null;
+
+  // Average assignment time: placedAt → acceptedAt (time from order to rider accept)
+  const assignTimings = deliveredList
+    .filter((o) => o.placedAt && o.acceptedAt)
+    .map((o) => (new Date(o.acceptedAt).getTime() - new Date(o.placedAt).getTime()) / 60000);
+  const avgAssignmentTimeMin = assignTimings.length > 0 ? Math.round(assignTimings.reduce((s, t) => s + t, 0) / assignTimings.length) : null;
+
+  // Average end-to-end delivery time: placedAt → deliveredAt
   const timings = deliveredList
     .filter((o) => o.placedAt && o.deliveredAt)
     .map((o) => (new Date(o.deliveredAt).getTime() - new Date(o.placedAt).getTime()) / 60000);
@@ -208,10 +232,17 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
     topRestaurants,
     summary: { totalOrders, deliveredOrders, totalRevenue, days: Number(days) },
     delivery: {
-      totalRiderPayouts,        // paise — total paid to riders
-      totalAdminRevenue,        // paise — total platform revenue
-      avgDistanceKm,            // km
-      avgDeliveryTimeMin,       // minutes, null if no delivered orders with both timestamps
+      totalRiderPayouts,
+      totalRestaurantPayouts,
+      totalAdminRevenue,
+      totalDeliveryFees,
+      avgRiderPayout,
+      avgRestaurantPayout,
+      avgDistanceKm,
+      cancellationPct,
+      avgPrepTimeMin,
+      avgAssignmentTimeMin,
+      avgDeliveryTimeMin,
     },
   };
 };

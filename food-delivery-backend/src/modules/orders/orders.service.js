@@ -508,26 +508,85 @@ export const assignDeliveryAgent = async (orderId, io) => {
   const restaurantLat = order.restaurant.lat;
   const restaurantLng = order.restaurant.lng;
 
-  const inRangeAgents = candidatePool
-    .map((agent) => ({
-      ...agent,
-      distance: restaurantHasCoords
-        ? haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng)
-        : null,
-    }))
-    .filter((agent) => {
-      // maxRadiusKm is NOT NULL DEFAULT 20 in schema, but guard against any
-      // accidental 0/negative/NaN value getting through anyway rather than
-      // silently rejecting every agent for that rider.
-      const radius = Number.isFinite(agent.maxRadiusKm) && agent.maxRadiusKm > 0 ? agent.maxRadiusKm : 20;
-      logger.info("Assigning agent for order — computed distance", {
-        orderId, agentId: agent.id,
-        distanceKm: agent.distance != null ? Math.round(agent.distance * 10) / 10 : null,
-        radiusKm: radius, restaurantHasCoords,
-      });
-      return !restaurantHasCoords || agent.distance <= radius;
+  // Compute distance for every candidate, then filter by each rider's radius
+  const withDistance = candidatePool.map((agent) => ({
+    ...agent,
+    distance: restaurantHasCoords
+      ? haversine(restaurantLat, restaurantLng, agent.currentLat, agent.currentLng)
+      : null,
+  }));
+
+  const inRangeRaw = withDistance.filter((agent) => {
+    const radius = Number.isFinite(agent.maxRadiusKm) && agent.maxRadiusKm > 0 ? agent.maxRadiusKm : 20;
+    logger.info("Assigning agent for order — computed distance", {
+      orderId, agentId: agent.id,
+      distanceKm: agent.distance != null ? Math.round(agent.distance * 10) / 10 : null,
+      radiusKm: radius, restaurantHasCoords,
+    });
+    return !restaurantHasCoords || agent.distance <= radius;
+  });
+
+  // Multi-factor scoring: distance (45%) + acceptance rate (30%) + idle time (25%)
+  // acceptance rate = accepted orders / offered orders over last 30 days
+  // idle time (minutes without a delivery) — higher idle time = higher priority
+  const agentIds = inRangeRaw.map((a) => a.id);
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  // Fetch offered counts and accepted counts per rider in two aggregations
+  const [offeredCounts, acceptedCounts, lastDeliveries, riderLocations] = await Promise.all([
+    prisma.order.groupBy({
+      by: ["pendingAgentId"],
+      where: { pendingAgentId: { in: agentIds }, agentOfferedAt: { gte: thirtyDaysAgo } },
+      _count: { id: true },
+    }),
+    prisma.order.groupBy({
+      by: ["agentId"],
+      where: { agentId: { in: agentIds }, acceptedAt: { gte: thirtyDaysAgo } },
+      _count: { id: true },
+    }),
+    prisma.order.groupBy({
+      by: ["agentId"],
+      where: { agentId: { in: agentIds }, status: "DELIVERED" },
+      _max: { deliveredAt: true },
+    }),
+    prisma.riderLocation.findMany({
+      where: { riderId: { in: agentIds } },
+      select: { riderId: true, updatedAt: true },
+    }),
+  ]);
+
+  const offeredMap = new Map(offeredCounts.map((r) => [r.pendingAgentId, r._count.id]));
+  const acceptedMap = new Map(acceptedCounts.map((r) => [r.agentId, r._count.id]));
+  const lastDeliveryMap = new Map(lastDeliveries.map((r) => [r.agentId, r._max.deliveredAt]));
+  const locationMap = new Map(riderLocations.map((r) => [r.riderId, r.updatedAt]));
+
+  const now = Date.now();
+  const maxDistKm = Math.max(...inRangeRaw.map((a) => a.distance ?? 0), 1);
+
+  const inRangeAgents = inRangeRaw
+    .map((agent) => {
+      const offered = offeredMap.get(agent.id) ?? 0;
+      const accepted = acceptedMap.get(agent.id) ?? 0;
+      const acceptanceRate = offered > 0 ? accepted / offered : 0.8; // 80% prior for new riders
+
+      const lastDeliveredAt = lastDeliveryMap.get(agent.id);
+      const lastLocationAt = locationMap.get(agent.id);
+      const lastActivityMs = Math.max(
+        lastDeliveredAt ? new Date(lastDeliveredAt).getTime() : 0,
+        lastLocationAt ? new Date(lastLocationAt).getTime() : 0,
+      );
+      const idleMinutes = lastActivityMs > 0 ? (now - lastActivityMs) / 60000 : 999;
+
+      // Normalize: distance (lower=better → invert), idleTime (higher=better)
+      const normDistance = agent.distance != null ? 1 - agent.distance / maxDistKm : 0;
+      const normIdle = Math.min(idleMinutes / 120, 1); // cap at 2h
+
+      // score: higher = better pick. Weights: distance 45%, acceptance 30%, idle 25%
+      const score = 0.45 * normDistance + 0.30 * acceptanceRate + 0.25 * normIdle;
+
+      return { ...agent, score, acceptanceRate, idleMinutes };
     })
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+    .sort((a, b) => b.score - a.score);
 
   if (inRangeAgents.length === 0) {
     logger.warn("Assigning agent for order — no agents within radius", { orderId, city: restaurantCity || null });
@@ -541,6 +600,13 @@ export const assignDeliveryAgent = async (orderId, io) => {
   }
 
   const selectedAgent = inRangeAgents[0];
+  logger.info("Assigning agent for order — selected", {
+    orderId, agentId: selectedAgent.id,
+    score: Math.round(selectedAgent.score * 1000) / 1000,
+    distanceKm: selectedAgent.distance != null ? Math.round(selectedAgent.distance * 10) / 10 : null,
+    acceptanceRate: Math.round(selectedAgent.acceptanceRate * 100),
+    idleMinutes: Math.round(selectedAgent.idleMinutes),
+  });
 
   // 4. Offer the order to the selected rider — do NOT write agentId yet.
   // pendingAgentId/agentOfferedAt record "offer sent, awaiting response";

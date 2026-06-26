@@ -42,6 +42,8 @@ type StatusUpdateEvent = {
 type AgentLocationEvent = {
   lat: number;
   lng: number;
+  heading?: number | null;
+  speed?: number | null;
 };
 
 type AgentAssignedEvent = {
@@ -358,14 +360,24 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
     }
 
     function patchAgentLocation(payload: AgentLocationEvent) {
-      const nextLocation: AgentLocation = {
-        lat: payload.lat,
-        lng: payload.lng,
-      };
+      // Freeze heading below 3 km/h — GPS heading is unreliable at low speed
+      // and causes the rider icon to spin erratically while stationary.
+      const speedKmh = typeof payload.speed === "number" && Number.isFinite(payload.speed)
+        ? payload.speed * 3.6   // socket emits speed in m/s
+        : null;
+      const isTooSlow = speedKmh !== null && speedKmh < 3;
 
-      queryClient.setQueryData<TrackedOrder | undefined>(["order", orderId], (current) =>
-        current ? { ...current, agentLocation: nextLocation } : current,
-      );
+      queryClient.setQueryData<TrackedOrder | undefined>(["order", orderId], (current) => {
+        const prevHeading = current?.agentLocation?.heading ?? null;
+        const nextLocation: AgentLocation = {
+          lat: payload.lat,
+          lng: payload.lng,
+          // Keep previous heading while nearly stopped; accept new heading otherwise
+          heading: isTooSlow ? prevHeading : (payload.heading ?? null),
+          speed: payload.speed ?? null,
+        };
+        return current ? { ...current, agentLocation: nextLocation } : current;
+      });
     }
 
     function patchAgentAssigned(payload: AgentAssignedEvent) {

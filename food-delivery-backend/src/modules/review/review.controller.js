@@ -2,6 +2,8 @@ import { prisma } from "../../config/prisma.js";
 import { logger } from "../../utils/logger.js";
 
 export const createReview = async (req, res, next) => {
+  let resolvedRestaurantId = null;
+  let resolvedReviewId = null;
   try {
     const { orderId, rating, comment } = req.body;
     const userId = req.user?.userId;
@@ -22,6 +24,7 @@ export const createReview = async (req, res, next) => {
     }
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (order) resolvedRestaurantId = order.restaurantId;
 
     if (!order || order.customerId !== userId) {
       return res.status(404).json({ error: "Order not found" });
@@ -38,6 +41,7 @@ export const createReview = async (req, res, next) => {
     const review = await prisma.review.create({
       data: { orderId, rating: ratingNum, comment: comment || null },
     });
+    resolvedReviewId = review.id;
 
     // Recalculate restaurant rating
     const agg = await prisma.review.aggregate({
@@ -53,16 +57,24 @@ export const createReview = async (req, res, next) => {
       },
     });
 
-    logger.info(`Review created for order ${orderId} by user ${userId}`);
+    logger.info("Review created", {
+      reviewId: resolvedReviewId,
+      orderId,
+      restaurantId: resolvedRestaurantId,
+      userId,
+      rating: ratingNum,
+    });
     res.json({ success: true, review });
   } catch (error) {
-    // Log the full error so root cause is always auditable in server logs —
-    // the original 500 was undiagnosable without this trace.
+    // Full audit trail — every field needed to reproduce the failure in production
     logger.error("Review creation failed", {
+      requestId: req.headers?.["x-request-id"] ?? null,
       orderId: req.body?.orderId,
       userId: req.user?.userId,
-      errorCode: error.code,        // Prisma error code if applicable
-      errorMeta: error.meta,        // Prisma meta (e.g. which constraint failed)
+      restaurantId: resolvedRestaurantId,   // null if order lookup itself failed
+      reviewId: resolvedReviewId,           // null if create() failed
+      errorCode: error.code,
+      errorMeta: error.meta,
       errorMessage: error.message,
       stack: error.stack,
     });

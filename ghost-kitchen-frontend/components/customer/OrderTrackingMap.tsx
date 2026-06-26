@@ -92,7 +92,22 @@ interface RouteResult {
   durationS: number;
 }
 
+// Module-level LRU-style cache: key = "lat1,lng1→lat2,lng2" (1 decimal = ~11km)
+// TTL 5 min prevents hammering the OSRM demo server for the same route segment.
+const _routeCache = new Map<string, { result: RouteResult | null; expiresAt: number }>();
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function routeCacheKey(origin: LatLng, dest: LatLng): string {
+  // Round to 3 decimal places (~111m) — routes within that radius reuse cache
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  return `${r(origin.lat)},${r(origin.lng)}→${r(dest.lat)},${r(dest.lng)}`;
+}
+
 async function fetchRoute(origin: LatLng, dest: LatLng): Promise<RouteResult | null> {
+  const key = routeCacheKey(origin, dest);
+  const cached = _routeCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
     const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
@@ -103,7 +118,14 @@ async function fetchRoute(origin: LatLng, dest: LatLng): Promise<RouteResult | n
     const polyline: [number, number][] = route.geometry.coordinates.map(
       ([lng, lat]: [number, number]) => [lat, lng],
     );
-    return polyline.length ? { polyline, distanceM: route.distance, durationS: route.duration } : null;
+    const result = polyline.length ? { polyline, distanceM: route.distance, durationS: route.duration } : null;
+    _routeCache.set(key, { result, expiresAt: Date.now() + ROUTE_CACHE_TTL_MS });
+    // Evict old entries when cache grows large
+    if (_routeCache.size > 50) {
+      const now = Date.now();
+      for (const [k, v] of _routeCache) { if (v.expiresAt < now) _routeCache.delete(k); }
+    }
+    return result;
   } catch {
     return null;
   }
