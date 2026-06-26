@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 
 import api from "@/lib/api";
 import { toPaise, toRupees } from "@/lib/utils";
+import ImageUpload from "@/components/ui/ImageUpload";
 
 interface RestaurantSettings {
   id: string;
@@ -163,15 +164,8 @@ export default function ShopSettingsPage() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-semibold mb-1">Cover photo URL</label>
-          <input value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-            className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none"
-            placeholder="https://…" />
-          {imageUrl && (
-            <div className="mt-2 relative h-28 w-full overflow-hidden rounded-xl border border-[#E8E8E8]">
-              <Image src={imageUrl} alt="preview" fill className="object-cover" unoptimized />
-            </div>
-          )}
+          <label className="block text-sm font-semibold mb-1">Cover photo</label>
+          <ImageUpload value={imageUrl} onChange={setImageUrl} folder="ghostkitchen/restaurants" />
         </div>
       </section>
 

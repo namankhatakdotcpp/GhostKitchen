@@ -29,6 +29,7 @@ export default function AdminAnalyticsPage() {
   const statusBreakdown: Record<string, number> = data?.statusBreakdown ?? {};
   const topRestaurants: { restaurantId: string; name: string; revenue: number; orders: number }[] = data?.topRestaurants ?? [];
   const summary = data?.summary ?? { totalOrders: 0, deliveredOrders: 0, totalRevenue: 0 };
+  const delivery = data?.delivery ?? { totalRiderPayouts: 0, totalAdminRevenue: 0, avgDistanceKm: 0, avgDeliveryTimeMin: null };
 
   const maxRevenue = Math.max(...trend.map((d) => d.revenue), 1);
   const maxOrders = Math.max(...trend.map((d) => d.orders), 1);
@@ -162,6 +163,41 @@ export default function AdminAnalyticsPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* Delivery metrics */}
+      <div className="rounded-[20px] border border-border bg-white p-6">
+        <h2 className="mb-4 font-semibold text-text-primary">Delivery performance</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[
+            {
+              label: "Total rider payouts",
+              value: isLoading ? "—" : `₹${toRupees(delivery.totalRiderPayouts).toLocaleString("en-IN")}`,
+              sub: "paid to riders",
+            },
+            {
+              label: "Platform revenue",
+              value: isLoading ? "—" : `₹${toRupees(delivery.totalAdminRevenue).toLocaleString("en-IN")}`,
+              sub: "admin's net share",
+            },
+            {
+              label: "Avg distance",
+              value: isLoading ? "—" : `${delivery.avgDistanceKm} km`,
+              sub: "per delivered order",
+            },
+            {
+              label: "Avg delivery time",
+              value: isLoading ? "—" : (delivery.avgDeliveryTimeMin != null ? `${delivery.avgDeliveryTimeMin} min` : "—"),
+              sub: "order placed → delivered",
+            },
+          ].map((m) => (
+            <div key={m.label} className="rounded-[14px] border border-border p-4">
+              <p className="text-xs text-text-muted">{m.label}</p>
+              <p className="mt-1 text-xl font-bold text-text-primary">{m.value}</p>
+              <p className="mt-0.5 text-xs text-text-muted">{m.sub}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Top restaurants */}

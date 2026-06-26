@@ -128,6 +128,12 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
         id: true, status: true, total: true, createdAt: true,
         restaurantId: true,
         restaurant: { select: { name: true } },
+        // Delivery metrics
+        riderPayout: true,
+        adminRevenue: true,
+        distanceKm: true,
+        placedAt: true,
+        deliveredAt: true,
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -179,17 +185,34 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
     orders: r._count.id,
   }));
 
-  const totalRevenue = allOrders
-    .filter((o) => o.status === "DELIVERED")
-    .reduce((s, o) => s + Number(o.total), 0);
+  const deliveredList = allOrders.filter((o) => o.status === "DELIVERED");
+  const totalRevenue = deliveredList.reduce((s, o) => s + Number(o.total), 0);
   const totalOrders = allOrders.length;
-  const deliveredOrders = allOrders.filter((o) => o.status === "DELIVERED").length;
+  const deliveredOrders = deliveredList.length;
+
+  // Delivery performance metrics
+  const totalRiderPayouts = deliveredList.reduce((s, o) => s + (typeof o.riderPayout === "number" ? o.riderPayout : 0), 0);
+  const totalAdminRevenue = deliveredList.reduce((s, o) => s + (typeof o.adminRevenue === "number" ? o.adminRevenue : 0), 0);
+  const totalDistanceKm = deliveredList.reduce((s, o) => s + (typeof o.distanceKm === "number" ? o.distanceKm : 0), 0);
+  const avgDistanceKm = deliveredOrders > 0 ? Math.round((totalDistanceKm / deliveredOrders) * 10) / 10 : 0;
+
+  // Average delivery time in minutes (placedAt → deliveredAt)
+  const timings = deliveredList
+    .filter((o) => o.placedAt && o.deliveredAt)
+    .map((o) => (new Date(o.deliveredAt).getTime() - new Date(o.placedAt).getTime()) / 60000);
+  const avgDeliveryTimeMin = timings.length > 0 ? Math.round(timings.reduce((s, t) => s + t, 0) / timings.length) : null;
 
   return {
     trend,
     statusBreakdown,
     topRestaurants,
     summary: { totalOrders, deliveredOrders, totalRevenue, days: Number(days) },
+    delivery: {
+      totalRiderPayouts,        // paise — total paid to riders
+      totalAdminRevenue,        // paise — total platform revenue
+      avgDistanceKm,            // km
+      avgDeliveryTimeMin,       // minutes, null if no delivered orders with both timestamps
+    },
   };
 };
 

@@ -6,6 +6,7 @@ import { useState } from "react";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { useUserStore } from "@/store/userStore";
+import ImageUpload from "@/components/ui/ImageUpload";
 
 const VEHICLE_TYPES = [
   { id: "CYCLE", emoji: "🚲", label: "Bicycle", note: "Great for short distances, eco-friendly", color: "green" },
@@ -153,10 +154,8 @@ export default function RiderOnboarding() {
                 placeholder="e.g. Delhi" />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">Profile photo URL <span className="font-normal text-xs text-[#93959F]">(optional)</span></label>
-              <input value={profilePhotoUrl} onChange={e => setProfilePhotoUrl(e.target.value)}
-                className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none"
-                placeholder="https://…" />
+              <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">Profile photo <span className="font-normal text-xs text-[#93959F]">(optional)</span></label>
+              <ImageUpload value={profilePhotoUrl} onChange={setProfilePhotoUrl} folder="ghostkitchen/riders" />
             </div>
           </div>
 
