@@ -22,6 +22,7 @@ import opsRoutes from "./modules/ops/ops.routes.js";
 import execRoutes from "./modules/exec/exec.routes.js";
 import walletRoutes from "./modules/wallet/wallet.routes.js";
 import pushRoutes from "./modules/push/push.routes.js";
+import uploadRoutes from "./modules/upload/upload.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -391,6 +392,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/push", pushRoutes);
+app.use("/api/upload", uploadRoutes);
 
 // ── 15. 404───────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

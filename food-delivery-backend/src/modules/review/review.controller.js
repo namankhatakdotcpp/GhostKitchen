@@ -4,32 +4,39 @@ import { logger } from "../../utils/logger.js";
 export const createReview = async (req, res, next) => {
   try {
     const { orderId, rating, comment } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user?.userId;
 
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    if (!orderId || typeof orderId !== "string") {
+      return res.status(400).json({ error: "orderId is required" });
+    }
+    // rating may arrive as a string when sent from certain HTTP clients — coerce before checking
+    const ratingNum = Number(rating);
+    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
       return res.status(400).json({ error: "Rating must be an integer between 1 and 5" });
     }
-    if (comment !== undefined && (typeof comment !== "string" || comment.length > 1000)) {
+    if (comment !== undefined && comment !== null && (typeof comment !== "string" || comment.length > 1000)) {
       return res.status(400).json({ error: "Comment cannot exceed 1000 characters" });
     }
 
     const order = await prisma.order.findUnique({ where: { id: orderId } });
 
     if (!order || order.customerId !== userId) {
-      return res.status(404).json({ error: "Order not found or unauthorized" });
+      return res.status(404).json({ error: "Order not found" });
     }
-
     if (order.status !== "DELIVERED") {
-      return res.status(400).json({ error: "Can only review delivered orders" });
+      return res.status(400).json({ error: "You can only review orders that have been delivered" });
     }
 
     const existingReview = await prisma.review.findUnique({ where: { orderId } });
     if (existingReview) {
-      return res.status(400).json({ error: "Order already reviewed" });
+      return res.status(400).json({ error: "You have already reviewed this order" });
     }
 
     const review = await prisma.review.create({
-      data: { orderId, rating, comment: comment || null },
+      data: { orderId, rating: ratingNum, comment: comment || null },
     });
 
     // Recalculate restaurant rating

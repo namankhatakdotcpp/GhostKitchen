@@ -134,8 +134,12 @@ function IncomingAssignmentModal() {
                   </p>
                 </div>
                 <div className="rounded-[20px] border border-white/10 px-3 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Base pay</p>
-                  <p className="mt-1.5 text-xl font-bold">₹40</p>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-white/60">Delivery fee</p>
+                  <p className="mt-1.5 text-xl font-bold">
+                    {typeof incomingAssignment.distanceKm === "number" && incomingAssignment.distanceKm > 0
+                      ? `~${incomingAssignment.distanceKm.toFixed(1)} km`
+                      : "—"}
+                  </p>
                 </div>
                 <div className="rounded-[20px] border border-success/30 bg-success/10 px-3 py-3">
                   <p className="text-[10px] uppercase tracking-[0.18em] text-success/80">You earn</p>

@@ -148,6 +148,7 @@ export interface TimelineStage {
   label: string;
   subText: string;
   timestamp: string | null;
+  icon?: string;
 }
 
 export interface AgentLocation {

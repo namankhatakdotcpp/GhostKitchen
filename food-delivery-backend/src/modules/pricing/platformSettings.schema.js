@@ -5,7 +5,10 @@ import { z } from "zod";
 export const platformSettingsSchema = z
   .object({
     deliveryBaseFee: z.number().finite().min(0),
+    deliveryBaseDistanceKm: z.number().finite().min(0),
     deliveryPerKmFee: z.number().finite().min(0),
+    freeDeliveryEnabled: z.boolean(),
+    freeDeliveryMinOrder: z.number().finite().min(0),
     platformFeeMode: z.enum(["FLAT", "PERCENT"]),
     platformFeeValue: z.number().finite().min(0),
     splitRestaurantPct: z.number().finite().min(0).max(100),
@@ -44,7 +47,10 @@ export const platformSettingsSchema = z
 export const fullPlatformSettingsSchema = z
   .object({
     deliveryBaseFee: z.number().finite().min(0),
+    deliveryBaseDistanceKm: z.number().finite().min(0),
     deliveryPerKmFee: z.number().finite().min(0),
+    freeDeliveryEnabled: z.boolean(),
+    freeDeliveryMinOrder: z.number().finite().min(0),
     platformFeeMode: z.enum(["FLAT", "PERCENT"]),
     platformFeeValue: z.number().finite().min(0),
     splitRestaurantPct: z.number().finite().min(0).max(100),

@@ -36,9 +36,13 @@ const GST_ON_PLATFORM_FEE_RATE = 0.05;
 // the line items shown above it.
 const round = (n) => Math.round(n);
 
-export function computeDeliveryFee({ deliveryBaseFee, deliveryPerKmFee, distanceKm }) {
+export function computeDeliveryFee({ deliveryBaseFee, deliveryBaseDistanceKm = 0, deliveryPerKmFee, distanceKm, freeDeliveryEnabled = false, freeDeliveryMinOrder = 0, itemTotal = 0 }) {
+  // Free delivery takes full priority when enabled and the order qualifies
+  if (freeDeliveryEnabled && itemTotal >= freeDeliveryMinOrder) return 0;
   const km = Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0;
-  return round(deliveryBaseFee + deliveryPerKmFee * km);
+  // Only charge per-km beyond the base distance included in the base fee
+  const extraKm = Math.max(0, km - (deliveryBaseDistanceKm ?? 0));
+  return round(deliveryBaseFee + deliveryPerKmFee * extraKm);
 }
 
 export function computePlatformFee({ platformFeeMode, platformFeeValue, itemTotal }) {
@@ -61,8 +65,12 @@ export function computeOrderPricing({ itemTotal, distanceKm, settings }) {
 
   const deliveryFee = computeDeliveryFee({
     deliveryBaseFee: settings.deliveryBaseFee,
+    deliveryBaseDistanceKm: settings.deliveryBaseDistanceKm,
     deliveryPerKmFee: settings.deliveryPerKmFee,
     distanceKm,
+    freeDeliveryEnabled: settings.freeDeliveryEnabled,
+    freeDeliveryMinOrder: settings.freeDeliveryMinOrder,
+    itemTotal,
   });
   const gstOnDeliveryFee = round(deliveryFee * GST_ON_DELIVERY_FEE_RATE);
 
@@ -92,11 +100,25 @@ export function computeOrderPricing({ itemTotal, distanceKm, settings }) {
   // by ±1 paise from the pool they're supposed to add up to).
   const adminShare = splitPool - restaurantShare - riderShare;
 
+  // Delivery fee breakdown — for transparent UI display
+  const baseDistanceKm = settings.deliveryBaseDistanceKm ?? 0;
+  const actualKm = Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0;
+  const extraKm = Math.max(0, actualKm - baseDistanceKm);
+  const deliveryFeeBreakdown = {
+    baseFee: settings.deliveryBaseFee,
+    baseDistanceKm,
+    extraKm: round(extraKm * 10) / 10,
+    extraFee: round(extraKm * settings.deliveryPerKmFee),
+    perKmFee: settings.deliveryPerKmFee,
+    isFree: settings.freeDeliveryEnabled && itemTotal >= (settings.freeDeliveryMinOrder ?? 0),
+  };
+
   return {
     itemTotal,
     restaurantPackaging,
     gstOnItemTotal,
     deliveryFee,
+    deliveryFeeBreakdown,
     gstOnDeliveryFee,
     platformFee,
     gstOnPlatformFee,

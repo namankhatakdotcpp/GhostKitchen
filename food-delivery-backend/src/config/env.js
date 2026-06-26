@@ -54,6 +54,12 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || null,
   EMAIL_FROM: process.env.EMAIL_FROM || "GhostKitchen <noreply@ghostkitchen.in>",
   LOG_LEVEL: process.env.LOG_LEVEL || "info",
+  // Cloudinary (optional) — image uploads for menu items and restaurant photos.
+  // Without these, the /api/upload/image endpoint returns 503 and the UI falls
+  // back to URL input. Safe to leave unset in dev/test environments.
+  CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || null,
+  CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || null,
+  CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || null,
   // Web Push (Item 2) — optional. Without these, push.service.js no-ops
   // (subscriptions are still stored, sends are just skipped) rather than
   // crashing the server, since push notifications are additive on top of

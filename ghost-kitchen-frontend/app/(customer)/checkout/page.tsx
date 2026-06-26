@@ -35,6 +35,14 @@ interface PricingBreakdown {
   restaurantPackaging: number
   gstOnItemTotal: number
   deliveryFee: number
+  deliveryFeeBreakdown?: {
+    baseFee: number
+    baseDistanceKm: number
+    extraKm: number
+    extraFee: number
+    perKmFee: number
+    isFree: boolean
+  }
   gstOnDeliveryFee: number
   platformFee: number
   gstOnPlatformFee: number
@@ -320,10 +328,32 @@ function CheckoutPageContent() {
             <span>Restaurant packaging</span>
             <span>{restaurantPackagingRupees !== null ? `₹${restaurantPackagingRupees}` : '...'}</span>
           </div>
-          <div className="flex justify-between">
-            <span>Delivery fee{pricing?.distanceKm != null ? ` (${pricing.distanceKm.toFixed(1)} km)` : ''}</span>
-            <span>{deliveryFeeRupees !== null ? `₹${deliveryFeeRupees}` : '...'}</span>
-          </div>
+          {pricing?.deliveryFeeBreakdown?.isFree ? (
+            <div className="flex justify-between text-green-600 font-medium">
+              <span>Delivery fee{pricing.distanceKm != null ? ` (${pricing.distanceKm.toFixed(1)} km)` : ''}</span>
+              <span>FREE</span>
+            </div>
+          ) : pricing?.deliveryFeeBreakdown && pricing.deliveryFeeBreakdown.extraKm > 0 ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-gray-400 pl-2">↳ Base ({pricing.deliveryFeeBreakdown.baseDistanceKm} km)</span>
+                <span>₹{toRupees(pricing.deliveryFeeBreakdown.baseFee)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400 pl-2">↳ Extra ({pricing.deliveryFeeBreakdown.extraKm.toFixed(1)} km × ₹{toRupees(pricing.deliveryFeeBreakdown.perKmFee)}/km)</span>
+                <span>₹{toRupees(pricing.deliveryFeeBreakdown.extraFee)}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>Delivery total{pricing.distanceKm != null ? ` (${pricing.distanceKm.toFixed(1)} km)` : ''}</span>
+                <span>{deliveryFeeRupees !== null ? `₹${deliveryFeeRupees}` : '...'}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-between">
+              <span>Delivery fee{pricing?.distanceKm != null ? ` (${pricing.distanceKm.toFixed(1)} km)` : ''}</span>
+              <span>{deliveryFeeRupees !== null ? `₹${deliveryFeeRupees}` : '...'}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Platform fee</span>
             <span>{platformFeeRupees !== null ? `₹${platformFeeRupees}` : '...'}</span>

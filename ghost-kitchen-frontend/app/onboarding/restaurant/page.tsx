@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CitySearch } from "@/components/ui/city-search";
+import ImageUpload from "@/components/ui/ImageUpload";
 import api from "@/lib/api";
 import { getCurrentLocationOption, GeoLocationError } from "@/lib/geolocation";
 import { toPaise } from "@/lib/utils";
@@ -371,19 +372,13 @@ export default function RestaurantOnboarding() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">
-                      Cover photo URL <span className="font-normal text-[#93959F]">(optional)</span>
+                      Cover photo <span className="font-normal text-[#93959F]">(optional)</span>
                     </label>
-                    <input
+                    <ImageUpload
                       value={s1.imageUrl}
-                      onChange={(e) => setS1({ ...s1, imageUrl: e.target.value })}
-                      className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none"
-                      placeholder="https://…"
+                      onChange={url => setS1({ ...s1, imageUrl: url })}
+                      folder="ghostkitchen/restaurants"
                     />
-                    {s1.imageUrl && (
-                      <div className="mt-2 h-32 w-full overflow-hidden rounded-xl border border-[#E8E8E8]">
-                        <img src={s1.imageUrl} alt="Preview" className="h-full w-full object-cover" />
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
@@ -579,12 +574,11 @@ export default function RestaurantOnboarding() {
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">Item photo URL</label>
-                <input
+                <label className="block text-sm font-semibold text-[#1C1C1C] mb-1">Item photo</label>
+                <ImageUpload
                   value={s3.itemImageUrl}
-                  onChange={(e) => setS3({ ...s3, itemImageUrl: e.target.value })}
-                  className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none"
-                  placeholder="https://…"
+                  onChange={url => setS3({ ...s3, itemImageUrl: url })}
+                  folder="ghostkitchen/menu"
                 />
               </div>
               <label className="flex items-center gap-2 cursor-pointer">

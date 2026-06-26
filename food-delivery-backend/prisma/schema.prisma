@@ -422,7 +422,8 @@ model SiteConfig {
 model PlatformSettings {
   id                      String   @id @default("singleton")
   deliveryBaseFee         Int      @default(1000) // ₹10 — paise
-  deliveryPerKmFee        Int      @default(200) // ₹2/km — paise
+  deliveryBaseDistanceKm  Float    @default(2.0)  // km included in base fee (no extra charge within this)
+  deliveryPerKmFee        Int      @default(1000) // ₹10/km — paise (charged only beyond baseDistance)
   // "FLAT": platformFeeValue is a paise amount. "PERCENT": platformFeeValue
   // is a percentage of itemTotal (e.g. 5 means 5%).
   platformFeeMode         String   @default("FLAT")
@@ -436,6 +437,8 @@ model PlatformSettings {
   // ── Loyalty points / wallet (Item 1) ──────────────────────────────────────
   // Points earned per ₹1 of itemTotal on DELIVERED (not gross total — fees/
   // GST excluded). Default 0.1 = 1 point per ₹10 spent.
+  freeDeliveryEnabled     Boolean  @default(false)
+  freeDeliveryMinOrder    Int      @default(0)    // paise; 0 means free on all orders when enabled
   loyaltyEarnRate         Float    @default(0.1)
   // ₹ value of 1 point when redeemed at checkout, in paise. Default 100 = ₹1.
   loyaltyPointValuePaise  Int      @default(100)

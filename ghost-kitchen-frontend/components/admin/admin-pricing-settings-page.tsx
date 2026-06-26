@@ -9,7 +9,10 @@ import { toPaise, toRupees } from "@/lib/utils";
 
 interface PlatformSettings {
   deliveryBaseFee: number; // paise
-  deliveryPerKmFee: number; // paise
+  deliveryBaseDistanceKm: number; // km included in base fee
+  deliveryPerKmFee: number; // paise per km beyond base distance
+  freeDeliveryEnabled: boolean;
+  freeDeliveryMinOrder: number; // paise; 0 = free on all orders when enabled
   platformFeeMode: "FLAT" | "PERCENT";
   platformFeeValue: number; // paise if FLAT, raw percent if PERCENT
   splitRestaurantPct: number;
@@ -117,21 +120,53 @@ export function AdminPricingSettingsPage() {
 
       <section className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-6">
         <h2 className="text-sm font-bold uppercase tracking-wide text-[#6B7280]">Delivery fee</h2>
+        <p className="mt-1 text-xs text-[#6B7280]">
+          Formula: Base fee covers first <strong>{local.deliveryBaseDistanceKm} km</strong>.
+          Beyond that: base fee + (extra km × per-km rate).
+        </p>
         <div className="mt-2">
-          <FieldRow label="Base fee" hint="Charged on every order, regardless of distance">
+          <FieldRow label="Base fee" hint="Charged on every order — covers the base distance">
             <NumInput
               value={toRupees(local.deliveryBaseFee)}
               onChange={(v) => set("deliveryBaseFee", toPaise(v))}
               suffix="₹"
             />
           </FieldRow>
-          <FieldRow label="Per-km rate" hint="Added on top of the base fee, × restaurant-to-customer distance">
+          <FieldRow label="Base distance" hint="Distance covered by the base fee (no extra charge within this)">
+            <NumInput
+              value={local.deliveryBaseDistanceKm}
+              onChange={(v) => set("deliveryBaseDistanceKm", v)}
+              suffix="km"
+              step={0.5}
+              min={0}
+            />
+          </FieldRow>
+          <FieldRow label="Per-km rate" hint="Charged for every km beyond the base distance">
             <NumInput
               value={toRupees(local.deliveryPerKmFee)}
               onChange={(v) => set("deliveryPerKmFee", toPaise(v))}
               suffix="₹/km"
             />
           </FieldRow>
+          <FieldRow label="Free delivery" hint="Toggle to offer free delivery on qualifying orders">
+            <button
+              type="button"
+              onClick={() => set("freeDeliveryEnabled", !local.freeDeliveryEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${local.freeDeliveryEnabled ? "bg-[#FF5200]" : "bg-[#D1D5DB]"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${local.freeDeliveryEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </FieldRow>
+          {local.freeDeliveryEnabled && (
+            <FieldRow label="Minimum order for free delivery" hint="Set 0 to offer free delivery on all orders">
+              <NumInput
+                value={toRupees(local.freeDeliveryMinOrder)}
+                onChange={(v) => set("freeDeliveryMinOrder", toPaise(v))}
+                suffix="₹"
+                min={0}
+              />
+            </FieldRow>
+          )}
         </div>
       </section>
 

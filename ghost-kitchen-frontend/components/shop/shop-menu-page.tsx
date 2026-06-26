@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import ImageUpload from "@/components/ui/ImageUpload";
 import { api } from "@/lib/api";
 import { cn, toPaise, toRupees } from "@/lib/utils";
 
@@ -217,13 +218,12 @@ function ItemSheet({
                 </button>
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-1">Item photo URL</label>
-                <input value={form.imageUrl} onChange={e => setForm({ ...form, imageUrl: e.target.value })} className="w-full rounded-xl border border-border px-4 py-2.5 text-sm focus:border-brand focus:outline-none" placeholder="https://…" />
-                {form.imageUrl && (
-                  <div className="mt-2 relative h-28 overflow-hidden rounded-xl border border-border">
-                    <Image src={form.imageUrl} alt="preview" fill className="object-cover" unoptimized />
-                  </div>
-                )}
+                <label className="block text-sm font-semibold mb-1">Item photo</label>
+                <ImageUpload
+                  value={form.imageUrl}
+                  onChange={url => setForm({ ...form, imageUrl: url })}
+                  folder="ghostkitchen/menu"
+                />
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.isBestseller} onChange={e => setForm({ ...form, isBestseller: e.target.checked })} className="accent-brand" />

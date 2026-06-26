@@ -57,7 +57,10 @@ export async function updatePlatformSettings(patch) {
 export function snapshotSettings(settings) {
   return {
     deliveryBaseFee: settings.deliveryBaseFee,
+    deliveryBaseDistanceKm: settings.deliveryBaseDistanceKm,
     deliveryPerKmFee: settings.deliveryPerKmFee,
+    freeDeliveryEnabled: settings.freeDeliveryEnabled,
+    freeDeliveryMinOrder: settings.freeDeliveryMinOrder,
     platformFeeMode: settings.platformFeeMode,
     platformFeeValue: settings.platformFeeValue,
     splitRestaurantPct: settings.splitRestaurantPct,

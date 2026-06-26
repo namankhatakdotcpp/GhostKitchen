@@ -160,12 +160,12 @@ function patchTimeline(
 }
 
 function buildTimeline(status: OrderStatus): TimelineStage[] {
-  const stages: Array<{ status: OrderStatus; label: string; subText: string }> = [
-    { status: "PLACED", label: "Order Placed", subText: headlineByStatus["PLACED"] },
-    { status: "CONFIRMED", label: "Order Confirmed", subText: headlineByStatus["CONFIRMED"] },
-    { status: "PREPARING", label: "Being Prepared", subText: headlineByStatus["PREPARING"] },
-    { status: "OUT_FOR_DELIVERY", label: "Out for Delivery", subText: headlineByStatus["OUT_FOR_DELIVERY"] },
-    { status: "DELIVERED", label: "Delivered", subText: headlineByStatus["DELIVERED"] },
+  const stages: Array<{ status: OrderStatus; label: string; subText: string; icon: string }> = [
+    { status: "PLACED",           label: "Order Placed",       subText: "Your order has been received",                   icon: "📋" },
+    { status: "CONFIRMED",        label: "Confirmed",           subText: "Restaurant accepted — cooking has started",      icon: "✅" },
+    { status: "PREPARING",        label: "Preparing & Packing", subText: "Your food is being cooked and packed fresh",     icon: "👨‍🍳" },
+    { status: "OUT_FOR_DELIVERY", label: "Out for Delivery",    subText: "Rider picked up — navigating to your location", icon: "🛵" },
+    { status: "DELIVERED",        label: "Delivered",           subText: "Enjoy your meal!",                               icon: "🎉" },
   ];
   const currentIdx = STATUS_ORDER.indexOf(status);
   const now = new Date().toISOString();
@@ -249,17 +249,20 @@ function StageNode({
       </div>
 
       <div className="pb-8">
-        <div
-          className={`text-sm ${
-            isUpcoming ? "text-text-muted" : "text-text-primary"
-          }`}
-        >
-          <div className="font-semibold">{stage.label}</div>
-          <div className="mt-1 text-[13px] leading-5 text-text-secondary">
-            {stage.subText}
+        <div className={`text-sm ${isUpcoming ? "text-text-muted" : "text-text-primary"}`}>
+          <div className="flex items-center gap-2">
+            {stage.icon && !isUpcoming ? (
+              <span className="text-base leading-none">{stage.icon}</span>
+            ) : null}
+            <span className="font-semibold">{stage.label}</span>
           </div>
-          <div className="mt-2 text-xs font-medium text-text-muted">
-            {formatTimelineTimestamp(stage.timestamp)}
+          {!isUpcoming && (
+            <div className="mt-1 text-[13px] leading-5 text-text-secondary">{stage.subText}</div>
+          )}
+          <div className="mt-1 text-xs font-medium text-text-muted">
+            {stage.timestamp
+              ? new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(stage.timestamp))
+              : isUpcoming ? "Pending" : "—"}
           </div>
         </div>
       </div>
@@ -582,13 +585,19 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                       restaurant={
                         typeof order.restaurant?.address?.lat === "number" && typeof order.restaurant?.address?.lng === "number"
                           ? { lat: order.restaurant.address.lat, lng: order.restaurant.address.lng }
-                          : null
+                          : (typeof order.restaurant?.lat === "number" && typeof order.restaurant?.lng === "number"
+                            ? { lat: order.restaurant.lat, lng: order.restaurant.lng }
+                            : null)
                       }
                       rider={
                         typeof order.agentLocation?.lat === "number" && typeof order.agentLocation?.lng === "number"
                           ? { lat: order.agentLocation.lat, lng: order.agentLocation.lng }
                           : null
                       }
+                      riderEnRoute={order.status === "OUT_FOR_DELIVERY"}
+                      etaLabel={order.estimatedDelivery && order.status !== "DELIVERED"
+                        ? countdownLabel
+                        : null}
                     />
                   </div>
                 </div>
