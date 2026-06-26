@@ -72,8 +72,8 @@ export interface DeliveryAgent {
   id: string;
   name: string;
   phone: string;
-  rating: number;
-  vehicleNumber: string;
+  rating?: number;
+  vehicleNumber?: string;
 }
 
 export interface Order {

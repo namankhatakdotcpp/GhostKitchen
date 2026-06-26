@@ -478,7 +478,7 @@ export const assignDeliveryPartner = async (orderId, agentId) => {
 
   const updatedOrder = await prisma.order.update({
     where: { id: orderId },
-    data: { agentId, status: "OUT_FOR_DELIVERY", estimatedDelivery },
+    data: { agentId, status: "OUT_FOR_DELIVERY", estimatedDelivery, pickedUpAt: new Date() },
     include: ORDER_INCLUDE,
   });
 

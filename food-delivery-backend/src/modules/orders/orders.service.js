@@ -299,7 +299,10 @@ export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDel
       status,
       ...(agentId ? { agentId } : {}),
       ...(estimatedDelivery ? { estimatedDelivery } : {}),
-      ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
+      ...(status === "CONFIRMED"        ? { acceptedAt: new Date() } : {}),
+      ...(status === "PREPARING"        ? { readyAt: new Date() } : {}),
+      ...(status === "OUT_FOR_DELIVERY" ? { pickedUpAt: new Date() } : {}),
+      ...(status === "DELIVERED"        ? { deliveredAt: new Date() } : {}),
     },
     include: {
       restaurant: true,
@@ -630,7 +633,7 @@ export const acceptOrderOffer = async (orderId, agentId, io) => {
   // unilaterally the moment assignDeliveryAgent ran, before the rider had
   // agreed to anything.
   io.to(`order-${orderId}`).emit("agent:assigned", {
-    agent: { id: order.agent.id, name: order.agent.name, phone: order.agent.phone, rating: 4.5 },
+    agent: { id: order.agent.id, name: order.agent.name, phone: order.agent.phone },
     estimatedDelivery: estimatedDelivery.toISOString(),
   });
   io.to(`shop-${order.restaurantId}`).emit("agent:assigned", {
