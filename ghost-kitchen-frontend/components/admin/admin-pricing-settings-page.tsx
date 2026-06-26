@@ -21,6 +21,9 @@ interface PlatformSettings {
   loyaltyEarnRate: number; // points earned per ₹1 of itemTotal
   loyaltyPointValuePaise: number; // ₹ value of 1 point, in paise
   loyaltyRedemptionCapPct: number; // max % of order value points can cover
+  riderBasePay: number; // paise — flat pay per delivery
+  riderPerKmPay: number; // paise per km
+  riderMinPayout: number; // paise — minimum guaranteed payout
 }
 
 async function fetchPricingSettings(): Promise<PlatformSettings> {
@@ -224,6 +227,32 @@ export function AdminPricingSettingsPage() {
         <p className={`mt-3 text-sm font-semibold ${splitValid ? "text-green-600" : "text-red-600"}`}>
           Sum: {splitSum.toFixed(2)}% {splitValid ? "✓" : "— must equal 100%"}
         </p>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-6">
+        <h2 className="text-sm font-bold uppercase tracking-wide text-[#6B7280]">Rider payouts</h2>
+        <p className="mt-1 text-xs text-[#6B7280]">
+          Rider payout is independent of what the customer pays for delivery. Formula:
+          max(min payout, base pay + per-km × distance). Admin absorbs any shortfall when
+          rider pay exceeds the delivery fee pool.
+        </p>
+        <div className="mt-2">
+          <FieldRow label="Base pay per delivery" hint="Flat payout for every completed delivery, before distance bonus">
+            <NumInput value={toRupees(local.riderBasePay)} onChange={(v) => set("riderBasePay", toPaise(v))} suffix="₹" />
+          </FieldRow>
+          <FieldRow label="Per-km pay" hint="Additional payout per km of delivery distance">
+            <NumInput value={toRupees(local.riderPerKmPay)} onChange={(v) => set("riderPerKmPay", toPaise(v))} suffix="₹/km" step={0.5} />
+          </FieldRow>
+          <FieldRow label="Minimum payout" hint="Guaranteed minimum regardless of base + distance formula">
+            <NumInput value={toRupees(local.riderMinPayout)} onChange={(v) => set("riderMinPayout", toPaise(v))} suffix="₹" />
+          </FieldRow>
+        </div>
+        {local.riderBasePay != null && (
+          <p className="mt-3 text-xs text-[#6B7280]">
+            Example: 3 km delivery → max(₹{toRupees(local.riderMinPayout)}, ₹{toRupees(local.riderBasePay)} + ₹{toRupees(local.riderPerKmPay)}/km × 3 km)
+            = <strong>₹{Math.max(toRupees(local.riderMinPayout), toRupees(local.riderBasePay) + toRupees(local.riderPerKmPay) * 3)}</strong>
+          </p>
+        )}
       </section>
 
       <section className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-6">

@@ -79,7 +79,7 @@ export function emitRiderLocationUpdate({ riderId, latitude, longitude, heading 
     });
     // Relay to customer tracking page (only the coordinates — not admin-only data)
     if (activeOrderId) {
-      io.to(`order-${activeOrderId}`).emit("agent:location", { lat: latitude, lng: longitude });
+      io.to(`order-${activeOrderId}`).emit("agent:location", { lat: latitude, lng: longitude, heading, speed });
     }
   });
 }

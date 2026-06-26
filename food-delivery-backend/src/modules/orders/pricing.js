@@ -90,15 +90,23 @@ export function computeOrderPricing({ itemTotal, distanceKm, settings }) {
     platformFee +
     gstOnPlatformFee;
 
-  // The split pool — deliveryFee + platformFee only, no GST, no packaging.
+  // Revenue pool — deliveryFee + platformFee only, no GST, no packaging.
   const splitPool = deliveryFee + platformFee;
   const restaurantShare = round(splitPool * (settings.splitRestaurantPct / 100));
-  const riderShare = round(splitPool * (settings.splitRiderPct / 100));
-  // Admin gets the remainder rather than its own rounded share, so the three
-  // payouts always sum to exactly splitPool even after paisa-level rounding
-  // (three independent Math.round calls on a 100%-split can otherwise be off
-  // by ±1 paise from the pool they're supposed to add up to).
-  const adminShare = splitPool - restaurantShare - riderShare;
+
+  // Rider payout is independent of the split pool — it's a guaranteed
+  // distance-based rate set by the admin, not derived from what the customer
+  // pays for delivery. This prevents riders from earning ₹0 when free delivery
+  // is enabled or when the delivery fee is low.
+  const riderBasePay = settings.riderBasePay ?? 2500;
+  const riderPerKmPay = settings.riderPerKmPay ?? 500;
+  const riderMinPayout = settings.riderMinPayout ?? 2000;
+  const riderDistancePay = round(riderBasePay + riderPerKmPay * (Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : 0));
+  const riderShare = Math.max(riderMinPayout, riderDistancePay);
+  // Admin absorbs the difference between rider pay and their share of the pool.
+  // Math.max(0) prevents negative admin revenue in edge cases (very high rider
+  // pay on a long ride with a small delivery fee).
+  const adminShare = Math.max(0, splitPool - restaurantShare - riderShare);
 
   // Delivery fee breakdown — for transparent UI display
   const baseDistanceKm = settings.deliveryBaseDistanceKm ?? 0;

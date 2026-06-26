@@ -160,6 +160,8 @@ export interface TimelineStage {
 export interface AgentLocation {
   lat: number;
   lng: number;
+  heading?: number | null;
+  speed?: number | null;
 }
 
 export interface TrackedOrder extends Order {

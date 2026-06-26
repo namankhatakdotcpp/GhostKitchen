@@ -240,45 +240,35 @@ describe("createOrder", () => {
       deliveryBaseFee: 1000, deliveryPerKmFee: 200,
       platformFeeMode: "FLAT", platformFeeValue: 500,
       splitRestaurantPct: 20, splitRiderPct: 50, splitAdminPct: 30,
+      riderBasePay: 2000, riderPerKmPay: 300, riderMinPayout: 500,
     });
     await createOrder(payload, "u-1");
     const order1Snapshot = capturedCreateData.pricingSnapshot;
     const order1RiderPayout = capturedCreateData.riderPayout;
-    const order1AdminRevenue = capturedCreateData.adminRevenue;
 
-    // Admin changes the split "tomorrow" — order 2 created under the new settings.
+    // Admin changes riderBasePay "tomorrow" — order 2 created under the new settings.
     getPlatformSettingsCached.mockResolvedValue({
       deliveryBaseFee: 1000, deliveryPerKmFee: 200,
       platformFeeMode: "FLAT", platformFeeValue: 500,
-      splitRestaurantPct: 50, splitRiderPct: 20, splitAdminPct: 30,
+      splitRestaurantPct: 20, splitRiderPct: 50, splitAdminPct: 30,
+      riderBasePay: 5000, riderPerKmPay: 300, riderMinPayout: 500,
     });
     await createOrder(payload, "u-1");
     const order2Snapshot = capturedCreateData.pricingSnapshot;
     const order2RiderPayout = capturedCreateData.riderPayout;
 
-    // The two orders' stored payouts genuinely differ (proving the split is
-    // really applied at creation time, not some cached/frozen constant)...
+    // The two orders' stored payouts genuinely differ (proving the settings
+    // are really applied at creation time, not some cached/frozen constant)...
     expect(order1RiderPayout).not.toBe(order2RiderPayout);
-    expect(order1RiderPayout).toBeGreaterThan(order2RiderPayout); // 50% > 20% of the same pool
+    expect(order2RiderPayout).toBeGreaterThan(order1RiderPayout); // higher riderBasePay → higher payout
     // ...and each order's own snapshot reflects exactly the settings that
     // were live when IT was created, not whatever is live now.
-    expect(order1Snapshot.splitRiderPct).toBe(50);
-    expect(order2Snapshot.splitRiderPct).toBe(20);
-    // Since nothing ever re-reads PlatformSettings to recompute an existing
-    // order, order 1's already-returned riderPayout/adminRevenue are exactly
-    // what got persisted — there is no code path that would later overwrite
-    // them when settings change again.
-    expect(order1AdminRevenue).toBe(order2AdminRevenueUnchangedSanity(order1Snapshot));
-
-    function order2AdminRevenueUnchangedSanity(snapshot) {
-      // Recompute order 1's expected adminRevenue directly from its own
-      // frozen snapshot, independent of whatever getPlatformSettingsCached
-      // returns now — this is what "immutable" means here.
-      const splitPool = 1000 + 500; // deliveryFee (base only, no distance) + platformFee
-      const restaurantShare = Math.round(splitPool * (snapshot.splitRestaurantPct / 100));
-      const riderShare = Math.round(splitPool * (snapshot.splitRiderPct / 100));
-      return splitPool - restaurantShare - riderShare;
-    }
+    expect(order1Snapshot.riderBasePay).toBe(2000);
+    expect(order2Snapshot.riderBasePay).toBe(5000);
+    // order 1's riderPayout = max(500, 2000 + 300×0) = 2000 (no distance on mock)
+    expect(order1RiderPayout).toBe(2000);
+    // order 2's riderPayout = max(500, 5000 + 300×0) = 5000
+    expect(order2RiderPayout).toBe(5000);
   });
 });
 

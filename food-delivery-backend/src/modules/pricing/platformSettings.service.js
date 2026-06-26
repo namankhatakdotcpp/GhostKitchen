@@ -66,5 +66,8 @@ export function snapshotSettings(settings) {
     splitRestaurantPct: settings.splitRestaurantPct,
     splitRiderPct: settings.splitRiderPct,
     splitAdminPct: settings.splitAdminPct,
+    riderBasePay: settings.riderBasePay,
+    riderPerKmPay: settings.riderPerKmPay,
+    riderMinPayout: settings.riderMinPayout,
   };
 }

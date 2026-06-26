@@ -591,7 +591,11 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                       }
                       rider={
                         typeof order.agentLocation?.lat === "number" && typeof order.agentLocation?.lng === "number"
-                          ? { lat: order.agentLocation.lat, lng: order.agentLocation.lng }
+                          ? {
+                              lat: order.agentLocation.lat,
+                              lng: order.agentLocation.lng,
+                              heading: order.agentLocation.heading ?? null,
+                            }
                           : null
                       }
                       riderEnRoute={order.status === "OUT_FOR_DELIVERY"}

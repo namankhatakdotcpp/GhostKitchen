@@ -56,6 +56,16 @@ export const createReview = async (req, res, next) => {
     logger.info(`Review created for order ${orderId} by user ${userId}`);
     res.json({ success: true, review });
   } catch (error) {
+    // Log the full error so root cause is always auditable in server logs —
+    // the original 500 was undiagnosable without this trace.
+    logger.error("Review creation failed", {
+      orderId: req.body?.orderId,
+      userId: req.user?.userId,
+      errorCode: error.code,        // Prisma error code if applicable
+      errorMeta: error.meta,        // Prisma meta (e.g. which constraint failed)
+      errorMessage: error.message,
+      stack: error.stack,
+    });
     next(error);
   }
 };

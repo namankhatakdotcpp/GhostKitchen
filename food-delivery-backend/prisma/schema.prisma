@@ -445,6 +445,11 @@ model PlatformSettings {
   // Max % of an order's value that points redemption can cover, so points
   // alone can never zero out an order.
   loyaltyRedemptionCapPct Float    @default(20)
+  // ── Rider payout — independent of delivery fee so admin can set a fair
+  // guaranteed rate without it being coupled to what the customer pays.
+  riderBasePay     Int     @default(2500)  // ₹25 base payout per delivery, paise
+  riderPerKmPay    Int     @default(500)   // ₹5/km, paise
+  riderMinPayout   Int     @default(2000)  // ₹20 minimum guaranteed payout, paise
   updatedAt               DateTime @updatedAt
 }
 

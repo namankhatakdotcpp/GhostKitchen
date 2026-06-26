@@ -1,10 +1,10 @@
 /**
  * Order pricing/commission formula — src/modules/orders/pricing.js.
  *
- * Worked example used throughout (also in the PR summary, so it can be
- * checked independently against the spec):
+ * Worked example used throughout:
  *   itemTotal = ₹500 (50000 paise), distance = 5km
  *   settings  = base ₹10, per-km ₹2, platform fee flat ₹5, split 20/50/30
+ *              rider: base ₹20, per-km ₹3, min ₹15
  *
  *   restaurantPackaging = 2.5% of 50000       = 1250
  *   gstOnItemTotal       = 2.5% of 50000       = 1250
@@ -16,8 +16,14 @@
  *
  *   splitPool = deliveryFee + platformFee = 2500
  *   restaurantShare (20%) = 500  -> restaurantPayout = 1250 (packaging) + 500 = 1750
- *   riderShare (50%)      = 1250 -> riderPayout = 1250
- *   adminShare (remainder)= 750  -> adminRevenue = 750
+ *   riderPayout = max(riderMinPayout, riderBasePay + riderPerKmPay × km)
+ *              = max(1500, 2000 + 300×5) = max(1500, 3500) = 3500
+ *   adminRevenue = max(0, splitPool - restaurantShare - riderPayout)
+ *               = max(0, 2500 - 500 - 3500) = 0
+ *
+ * NOTE: riderPayout is now independent of the split percentages — it is a
+ * guaranteed distance-based rate. The split percentages still govern
+ * restaurantShare, but adminRevenue absorbs any shortfall from rider pay.
  */
 import { describe, it, expect } from "vitest";
 import { computeOrderPricing, computeDeliveryFee, computePlatformFee } from "../modules/orders/pricing.js";
@@ -30,6 +36,10 @@ const DEFAULT_SETTINGS = {
   splitRestaurantPct: 20,
   splitRiderPct: 50,
   splitAdminPct: 30,
+  // Explicit rider payout settings — test should not rely on inline defaults
+  riderBasePay: 2000,   // ₹20 base
+  riderPerKmPay: 300,   // ₹3/km
+  riderMinPayout: 1500, // ₹15 minimum
 };
 
 describe("computeOrderPricing — worked example", () => {
@@ -63,21 +73,25 @@ describe("computeOrderPricing — worked example", () => {
     expect(result.customerTotal).toBe(55125);
   });
 
-  it("applies the 3-way split to (deliveryFee + platformFee) only", () => {
+  it("restaurant payout = packaging + restaurant's split share of the fee pool", () => {
     expect(result.restaurantPayout).toBe(1750); // 1250 packaging + 500 (20% of 2500)
-    expect(result.riderPayout).toBe(1250); // 50% of 2500
-    expect(result.adminRevenue).toBe(750); // remainder of 2500
   });
 
-  it("split payouts sum exactly to the fees-only pool (no paisa drift)", () => {
-    const splitPool = result.deliveryFee + result.platformFee;
-    const restaurantSplitShare = result.restaurantPayout - result.restaurantPackaging;
-    expect(restaurantSplitShare + result.riderPayout + result.adminRevenue).toBe(splitPool);
+  it("rider payout uses independent distance-based formula, not the split percentage", () => {
+    // riderBasePay(2000) + riderPerKmPay(300) × 5km = 3500; above riderMinPayout(1500)
+    expect(result.riderPayout).toBe(3500);
+  });
+
+  it("admin revenue is the remainder of the pool after restaurant and rider shares, clamped to 0", () => {
+    // splitPool(2500) - restaurantShare(500) - riderPayout(3500) = -1500 → clamped to 0
+    expect(result.adminRevenue).toBe(0);
+  });
+
+  it("admin revenue is never negative", () => {
+    expect(result.adminRevenue).toBeGreaterThanOrEqual(0);
   });
 
   it("does not let GST or restaurant packaging leak into the split", () => {
-    // restaurantPayout minus packaging should equal exactly the 20% split share —
-    // none of gstOnItemTotal/gstOnDeliveryFee/gstOnPlatformFee should appear anywhere here.
     const splitPool = result.deliveryFee + result.platformFee;
     expect(result.restaurantPayout - result.restaurantPackaging).toBe(Math.round(splitPool * 0.2));
   });
@@ -132,7 +146,7 @@ describe("computeOrderPricing — PERCENT platform fee mode", () => {
 });
 
 describe("computeOrderPricing — uneven split percentages (rounding)", () => {
-  it("the three payout shares still sum exactly to the fees-only pool", () => {
+  it("admin revenue is never negative even with uneven splits and high rider pay", () => {
     const result = computeOrderPricing({
       itemTotal: 33333,
       distanceKm: 7,
@@ -143,9 +157,25 @@ describe("computeOrderPricing — uneven split percentages (rounding)", () => {
         splitAdminPct: 33.34,
       },
     });
-    const splitPool = result.deliveryFee + result.platformFee;
-    const restaurantSplitShare = result.restaurantPayout - result.restaurantPackaging;
-    expect(restaurantSplitShare + result.riderPayout + result.adminRevenue).toBe(splitPool);
+    expect(result.adminRevenue).toBeGreaterThanOrEqual(0);
+  });
+
+  it("rider payout uses the independent formula regardless of split percentages", () => {
+    const result = computeOrderPricing({
+      itemTotal: 33333,
+      distanceKm: 1,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        splitRestaurantPct: 33.33,
+        splitRiderPct: 33.33,
+        splitAdminPct: 33.34,
+        riderBasePay: 1000, // ₹10 base
+        riderPerKmPay: 200, // ₹2/km
+        riderMinPayout: 500, // ₹5 min
+      },
+    });
+    // distancePay = 1000 + 200×1 = 1200; above minPayout 500
+    expect(result.riderPayout).toBe(1200);
   });
 });
 

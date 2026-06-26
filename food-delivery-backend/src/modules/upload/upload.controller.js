@@ -44,7 +44,14 @@ export const uploadImage = async (req, res) => {
     const folder = req.query.folder || "ghostkitchen";
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder, resource_type: "image", format: "webp", quality: "auto" },
+        {
+          folder,
+          resource_type: "image",
+          format: "webp",
+          quality: "auto",
+          // Cap at 1200px wide — enough for all UI sizes, reduces storage+bandwidth
+          transformation: [{ width: 1200, crop: "limit" }],
+        },
         (err, result) => (err ? reject(err) : resolve(result)),
       );
       stream.end(buffer);
@@ -55,5 +62,34 @@ export const uploadImage = async (req, res) => {
   } catch (err) {
     logger.error("Cloudinary upload failed", { error: err.message });
     res.status(500).json({ error: "Image upload failed. Please try again." });
+  }
+};
+
+/**
+ * DELETE /api/upload/image
+ * Body: { publicId: string }
+ * Deletes the image from Cloudinary. Called when the user replaces an existing
+ * uploaded image so orphaned assets don't accumulate in storage.
+ */
+export const deleteImage = async (req, res) => {
+  if (!isCloudinaryConfigured()) {
+    return res.status(503).json({ error: "Image upload is not configured on this server." });
+  }
+
+  const { publicId } = req.body;
+  if (!publicId || typeof publicId !== "string") {
+    return res.status(400).json({ error: "publicId is required." });
+  }
+
+  try {
+    const result = await cloudinary.uploader.destroy(publicId);
+    if (result.result !== "ok" && result.result !== "not found") {
+      return res.status(500).json({ error: "Failed to delete image." });
+    }
+    logger.info("Image deleted from Cloudinary", { publicId });
+    res.json({ success: true });
+  } catch (err) {
+    logger.error("Cloudinary delete failed", { error: err.message, publicId });
+    res.status(500).json({ error: "Image deletion failed." });
   }
 };
