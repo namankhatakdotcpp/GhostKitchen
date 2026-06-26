@@ -123,14 +123,14 @@ router.get("/earnings", async (req, res, next) => {
         status: "DELIVERED",
         deliveredAt: { gte: startDate },
       },
-      select: { id: true, deliveryFee: true, deliveredAt: true, restaurantId: true },
+      select: { id: true, deliveryFee: true, riderPayout: true, deliveredAt: true, restaurantId: true },
       orderBy: { deliveredAt: "desc" },
     });
 
     // All earnings figures returned in RUPEES (display-only endpoint).
-    // deliveryFee is stored in paise, so the 10% share is fee/10/100.
-    const BASE_PAY = 40; // ₹40 per delivery
-    const payoutFor = (o) => BASE_PAY + Math.round(Number(o.deliveryFee) * 0.1) / 100;
+    // riderPayout is stored in paise — use it directly if present (new orders),
+    // otherwise fall back to 0 (very old orders before the payout column was added).
+    const payoutFor = (o) => (typeof o.riderPayout === "number" ? Math.round(o.riderPayout / 100) : 0);
     const total = Math.round(orders.reduce((sum, o) => sum + payoutFor(o), 0));
     const deliveries = orders.length;
     const avgPerDelivery = deliveries > 0 ? Math.round(total / deliveries) : 0;
@@ -173,7 +173,7 @@ router.get("/earnings", async (req, res, next) => {
         id: `pay-${i + 1}`,
         orderId: o.id,
         date: o.deliveredAt,
-        basePay: BASE_PAY,
+        basePay: payoutFor(o), // actual rider payout in ₹, not a hardcoded base
         tip: 0,
         total: Math.round(payoutFor(o)),
       })),

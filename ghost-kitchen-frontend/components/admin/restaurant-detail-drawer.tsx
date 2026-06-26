@@ -17,6 +17,7 @@ import toast from "react-hot-toast";
 
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import ImageUpload from "@/components/ui/ImageUpload";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -150,8 +151,8 @@ function MenuItemModal({
               <input required className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Starters" />
             </div>
             <div className="col-span-2">
-              <label className="mb-1 block text-xs font-semibold text-text-muted">Image URL</label>
-              <input className={inputCls} value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} placeholder="https://..." />
+              <label className="mb-1 block text-xs font-semibold text-text-muted">Item Image</label>
+              <ImageUpload value={form.imageUrl} onChange={(url) => set("imageUrl", url)} folder="ghostkitchen/menu" />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-text-muted">Sort Order</label>

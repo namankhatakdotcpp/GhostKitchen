@@ -159,19 +159,29 @@ function patchTimeline(
   );
 }
 
-function buildTimeline(status: OrderStatus): TimelineStage[] {
-  const stages: Array<{ status: OrderStatus; label: string; subText: string; icon: string }> = [
-    { status: "PLACED",           label: "Order Placed",       subText: "Your order has been received",                   icon: "📋" },
-    { status: "CONFIRMED",        label: "Confirmed",           subText: "Restaurant accepted — cooking has started",      icon: "✅" },
-    { status: "PREPARING",        label: "Preparing & Packing", subText: "Your food is being cooked and packed fresh",     icon: "👨‍🍳" },
-    { status: "OUT_FOR_DELIVERY", label: "Out for Delivery",    subText: "Rider picked up — navigating to your location", icon: "🛵" },
-    { status: "DELIVERED",        label: "Delivered",           subText: "Enjoy your meal!",                               icon: "🎉" },
+function buildTimeline(
+  status: OrderStatus,
+  timestamps: {
+    placedAt?: string | null;
+    acceptedAt?: string | null;
+    readyAt?: string | null;
+    pickedUpAt?: string | null;
+    deliveredAt?: string | null;
+  } = {},
+): TimelineStage[] {
+  const stages: Array<{ status: OrderStatus; label: string; subText: string; icon: string; ts: string | null }> = [
+    { status: "PLACED",           label: "Order Placed",       subText: "Your order has been received",                   icon: "📋", ts: timestamps.placedAt ?? null },
+    { status: "CONFIRMED",        label: "Confirmed",           subText: "Restaurant accepted — cooking has started",      icon: "✅", ts: timestamps.acceptedAt ?? null },
+    { status: "PREPARING",        label: "Preparing & Packing", subText: "Your food is being cooked and packed fresh",     icon: "👨‍🍳", ts: timestamps.readyAt ?? null },
+    { status: "OUT_FOR_DELIVERY", label: "Out for Delivery",    subText: "Rider picked up — navigating to your location", icon: "🛵", ts: timestamps.pickedUpAt ?? null },
+    { status: "DELIVERED",        label: "Delivered",           subText: "Enjoy your meal!",                               icon: "🎉", ts: timestamps.deliveredAt ?? null },
   ];
   const currentIdx = STATUS_ORDER.indexOf(status);
-  const now = new Date().toISOString();
   return stages.map((stage, i) => ({
     ...stage,
-    timestamp: i <= currentIdx ? now : null,
+    // Use real DB timestamp when available; fall back to current time only for
+    // stages that are confirmed complete but lack a specific timestamp column.
+    timestamp: i <= currentIdx ? (stage.ts ?? new Date().toISOString()) : null,
   }));
 }
 
@@ -193,7 +203,13 @@ async function fetchTrackedOrder(orderId: string) {
   const order = raw?.order ?? raw;
   return {
     ...order,
-    timeline: buildTimeline((order?.status as OrderStatus) ?? "PLACED"),
+    timeline: buildTimeline((order?.status as OrderStatus) ?? "PLACED", {
+      placedAt: order?.placedAt ?? order?.createdAt ?? null,
+      acceptedAt: order?.acceptedAt ?? null,
+      readyAt: order?.readyAt ?? null,
+      pickedUpAt: order?.pickedUpAt ?? null,
+      deliveredAt: order?.deliveredAt ?? null,
+    }),
     restaurantTypeEmoji: getRestaurantEmoji(order?.restaurant?.cuisines),
     deliveryAgent: order?.agent ?? order?.deliveryAgent ?? null,
   };

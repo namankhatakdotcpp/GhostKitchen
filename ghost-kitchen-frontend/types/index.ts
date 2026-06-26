@@ -104,6 +104,12 @@ export interface Order {
     deliveryBaseDistanceKm: number;
     deliveryPerKmFee: number;
   } | null;
+  // Lifecycle timestamps from the DB — used for accurate per-stage times in
+  // the tracking timeline instead of showing the current time for all stages.
+  placedAt?: string | null;
+  acceptedAt?: string | null;
+  readyAt?: string | null;
+  pickedUpAt?: string | null;
 }
 
 export interface FeaturedBanner {

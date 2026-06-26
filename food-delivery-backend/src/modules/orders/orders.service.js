@@ -65,6 +65,13 @@ function serializeOrder(order) {
     riderPayout: numOrNull(order.riderPayout),
     adminRevenue: numOrNull(order.adminRevenue),
     estimatedDelivery: order.estimatedDelivery?.toISOString() ?? null,
+    // Lifecycle timestamps — used by the customer tracking timeline to show
+    // accurate per-stage times instead of the current time.
+    placedAt: order.placedAt?.toISOString() ?? null,
+    acceptedAt: order.acceptedAt?.toISOString() ?? null,
+    readyAt: order.readyAt?.toISOString() ?? null,
+    pickedUpAt: order.pickedUpAt?.toISOString() ?? null,
+    deliveredAt: order.deliveredAt?.toISOString() ?? null,
   };
 }
 
