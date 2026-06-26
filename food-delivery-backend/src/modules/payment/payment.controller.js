@@ -7,6 +7,7 @@ import { env } from "../../config/env.js";
 import cashfree from "../../config/cashfree.js";
 import { v4 as uuid } from "uuid";
 import { calculateOrderTotal } from "../orders/orders.service.js";
+import { previewRedemption } from "../wallet/wallet.service.js";
 
 /**
  * Payment Controller - HTTP Handlers
@@ -211,7 +212,7 @@ export const verifyPayment = async (req, res, next) => {
  */
 export const createPaymentOrder = async (req, res, next) => {
   try {
-    const { restaurantId, items, deliveryAddress, couponCode } = req.body;
+    const { restaurantId, items, deliveryAddress, couponCode, pointsToRedeem: rawPoints } = req.body;
     const customerId = req.user.userId;
 
     if (!restaurantId || !items?.length || !deliveryAddress) {
@@ -232,11 +233,22 @@ export const createPaymentOrder = async (req, res, next) => {
     });
     const { orderItems, subtotal, deliveryFee, discount, total } = pricing;
 
+    // Loyalty points — cap against wallet balance and the admin redemption limit
+    const requestedPoints = Number.isFinite(rawPoints) && rawPoints > 0 ? Math.floor(rawPoints) : 0;
+    let pointsRedeemed = 0;
+    let loyaltyDiscount = 0;
+    if (requestedPoints > 0) {
+      const preview = await previewRedemption({ userId: customerId, requestedPoints, orderTotalPaise: total });
+      pointsRedeemed = preview.points;
+      loyaltyDiscount = preview.discountPaise;
+    }
+    const chargeTotal = Math.max(100, total - loyaltyDiscount); // Cashfree minimum ₹1
+
     const cfOrderId = `GK-${uuid().slice(0, 8).toUpperCase()}`;
 
     const request = {
       order_id: cfOrderId,
-      order_amount: (total / 100).toFixed(2),
+      order_amount: (chargeTotal / 100).toFixed(2),
       order_currency: "INR",
       customer_details: {
         customer_id: customer.id,
@@ -272,22 +284,23 @@ export const createPaymentOrder = async (req, res, next) => {
         cfOrderId,
         customerId,
         restaurantId,
-        amount: total,
+        amount: chargeTotal,
         status: "PENDING",
         // Full priced snapshot — order creation after payment must use exactly
         // these amounts, never a recalculation against a menu that may have changed.
         itemsSnapshot: JSON.stringify(pricing),
         deliveryAddress: JSON.stringify(deliveryAddress),
         couponCode: couponCode || null,
+        pointsToRedeem: pointsRedeemed,
       },
     });
 
     return res.json({
       cfOrderId,
       paymentSessionId,
-      orderAmount: total / 100,
+      orderAmount: chargeTotal / 100,
       deliveryFee,
-      pricing,
+      pricing: { ...pricing, loyaltyDiscount, pointsRedeemed, chargeTotal },
     });
   } catch (error) {
     if (

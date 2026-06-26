@@ -4,6 +4,7 @@ import AppError from "../../utils/AppError.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../utils/logger.js";
 import { calculateOrderTotal } from "../orders/orders.service.js";
+import { claimPointsInTx } from "../wallet/wallet.service.js";
 import { emitOrderNew } from "../../socket/socket.server.js";
 import { createNotification } from "../notification/notification.service.js";
 
@@ -49,36 +50,52 @@ export const createOrderFromPayment = async (payment) => {
     if (cfg?.autoConfirmOrders) initialStatus = "CONFIRMED";
   } catch { /* default to PLACED */ }
 
+  const pointsToRedeem = Number.isFinite(payment.pointsToRedeem) ? payment.pointsToRedeem : 0;
+
   let order;
   try {
-    order = await prisma.order.create({
-      data: {
-        customerId: payment.customerId,
-        restaurantId: payment.restaurantId,
-        status: initialStatus,
-        items: orderItems,
-        subtotal,
-        deliveryFee,
-        discount,
-        total,
-        deliveryAddress: JSON.parse(payment.deliveryAddress),
-        cfOrderId: payment.cfOrderId,
-        // Pre-pricing-system payments (old itemsSnapshot shape) have none of
-        // these — null is correct for them, not 0, since 0 would falsely
-        // claim "we computed this and it was zero".
-        itemTotal: pricingFields.itemTotal ?? null,
-        restaurantPackaging: pricingFields.restaurantPackaging ?? null,
-        gstOnItemTotal: pricingFields.gstOnItemTotal ?? null,
-        gstOnDeliveryFee: pricingFields.gstOnDeliveryFee ?? null,
-        platformFee: pricingFields.platformFee ?? null,
-        gstOnPlatformFee: pricingFields.gstOnPlatformFee ?? null,
-        distanceKm: pricingFields.distanceKm ?? null,
-        restaurantPayout: pricingFields.restaurantPayout ?? null,
-        riderPayout: pricingFields.riderPayout ?? null,
-        adminRevenue: pricingFields.adminRevenue ?? null,
-        pricingSnapshot: pricingFields.pricingSnapshot ?? null,
-      },
-      include: { restaurant: true },
+    order = await prisma.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          customerId: payment.customerId,
+          restaurantId: payment.restaurantId,
+          status: initialStatus,
+          items: orderItems,
+          subtotal,
+          deliveryFee,
+          discount,
+          total,
+          deliveryAddress: JSON.parse(payment.deliveryAddress),
+          cfOrderId: payment.cfOrderId,
+          // Pre-pricing-system payments (old itemsSnapshot shape) have none of
+          // these — null is correct for them, not 0, since 0 would falsely
+          // claim "we computed this and it was zero".
+          itemTotal: pricingFields.itemTotal ?? null,
+          restaurantPackaging: pricingFields.restaurantPackaging ?? null,
+          gstOnItemTotal: pricingFields.gstOnItemTotal ?? null,
+          gstOnDeliveryFee: pricingFields.gstOnDeliveryFee ?? null,
+          platformFee: pricingFields.platformFee ?? null,
+          gstOnPlatformFee: pricingFields.gstOnPlatformFee ?? null,
+          distanceKm: pricingFields.distanceKm ?? null,
+          restaurantPayout: pricingFields.restaurantPayout ?? null,
+          riderPayout: pricingFields.riderPayout ?? null,
+          adminRevenue: pricingFields.adminRevenue ?? null,
+          pricingSnapshot: pricingFields.pricingSnapshot ?? null,
+        },
+        include: { restaurant: true },
+      });
+
+      // Atomically debit loyalty points — same guard as COD path:
+      // claimPointsInTx uses updateMany(balance >= points) so concurrent
+      // orders can never double-spend the same wallet balance.
+      if (pointsToRedeem > 0) {
+        await claimPointsInTx(tx, payment.customerId, pointsToRedeem, {
+          orderId: created.id,
+          description: `Points redeemed for online order #${created.id.slice(-6).toUpperCase()}`,
+        });
+      }
+
+      return created;
     });
   } catch (err) {
     if (err.code === "P2002") {

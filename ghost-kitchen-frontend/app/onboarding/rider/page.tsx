@@ -46,6 +46,7 @@ export default function RiderOnboarding() {
         vehicleType,
         vehicleNumber: vehicleNumber.toUpperCase(),
         city,
+        profilePhotoUrl: profilePhotoUrl || undefined,
       });
       const { user: serverUser } = res.data;
       const updatedUser = serverUser ?? { ...(user ?? {}), roles: ["CUSTOMER", "DELIVERY"], secondRole: "DELIVERY", activeRole: "DELIVERY" };

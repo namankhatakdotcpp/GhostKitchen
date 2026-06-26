@@ -32,7 +32,9 @@ const mockPrisma = {
   coupon: { findUnique: vi.fn(), updateMany: vi.fn() },
   payment: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   paymentWebhook: { findUnique: vi.fn(), create: vi.fn() },
-  $transaction: vi.fn(),
+  wallet: { upsert: vi.fn(), updateMany: vi.fn() },
+  // Default: run the callback with mockPrisma as the tx (tests override for webhook tests)
+  $transaction: vi.fn().mockImplementation(async (fn) => fn(mockPrisma)),
 };
 
 vi.mock("../config/prisma.js", () => ({
@@ -50,11 +52,18 @@ vi.mock("../modules/orders/orders.service.js", () => ({
 vi.mock("../modules/config/config.service.js", () => ({
   getSiteConfigCached: vi.fn().mockResolvedValue({ autoConfirmOrders: false }),
 }));
+vi.mock("../modules/wallet/wallet.service.js", () => ({
+  claimPointsInTx: vi.fn().mockResolvedValue(undefined),
+}));
 
 const { calculateOrderTotal } = await import("../modules/orders/orders.service.js");
 const { createOrderFromPayment, createPaymentSession, handlePaymentWebhook, verifyPaymentStatus } = await import("../modules/payment/payment.service.js");
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Re-apply default $transaction implementation after clearAllMocks wipes it
+  mockPrisma.$transaction.mockImplementation(async (fn) => fn(mockPrisma));
+});
 
 // ── createOrderFromPayment ────────────────────────────────────────────────────
 describe("createOrderFromPayment", () => {

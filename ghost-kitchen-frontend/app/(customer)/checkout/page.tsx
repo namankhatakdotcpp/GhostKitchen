@@ -112,7 +112,7 @@ function CheckoutPageContent() {
   // (server caps at both balance and the admin redemption %, so the UI must
   // never just multiply pointsInput × pointValue itself).
   useEffect(() => {
-    if (paymentMethod !== 'COD' || pointsInput <= 0 || !pricing) {
+    if (pointsInput <= 0 || !pricing) {
       setPointsPreview(null)
       return
     }
@@ -233,6 +233,7 @@ function CheckoutPageContent() {
       items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
       deliveryAddress,
       couponCode: couponCode || undefined,
+      pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
     })
 
     if (data.pricing) setPricing(data.pricing)

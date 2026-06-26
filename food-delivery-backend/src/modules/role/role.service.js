@@ -306,9 +306,8 @@ export async function registerRider(userId, riderData) {
       roles: { set: Array.from(new Set([...(user.roles || []), "CUSTOMER", "DELIVERY"])) },
       vehicleType: riderData.vehicleType || "BIKE",
       vehicleNumber: riderData.vehicleNumber || null,
-      // riderData.city was already being submitted by the onboarding form
-      // but silently dropped — there was no column to store it in.
       city: riderData.city || null,
+      imageUrl: riderData.profilePhotoUrl || null,
       isAvailable: false,
     },
     select: USER_ROLE_SELECT,
