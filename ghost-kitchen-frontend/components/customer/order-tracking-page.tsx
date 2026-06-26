@@ -656,12 +656,36 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                             ₹{(((order.subtotal ?? (order.total - order.deliveryFee))) / 100).toFixed(0)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span>Delivery fee</span>
-                          <span className="font-semibold text-text-primary">
-                            ₹{(order.deliveryFee / 100).toFixed(0)}
-                          </span>
-                        </div>
+                        {(() => {
+                          const snap = order.pricingSnapshot;
+                          const km = order.distanceKm ?? 0;
+                          const baseKm = snap?.deliveryBaseDistanceKm ?? 0;
+                          const extraKm = Math.max(0, km - baseKm);
+                          const hasBreakdown = snap && extraKm > 0 && order.deliveryFee;
+                          return hasBreakdown ? (
+                            <>
+                              <div className="flex items-center justify-between text-xs text-text-muted pl-2">
+                                <span>↳ Base ({baseKm} km)</span>
+                                <span>₹{(snap.deliveryBaseFee / 100).toFixed(0)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-xs text-text-muted pl-2">
+                                <span>↳ Extra ({extraKm.toFixed(1)} km × ₹{(snap.deliveryPerKmFee / 100).toFixed(0)}/km)</span>
+                                <span>₹{(Math.round(extraKm * snap.deliveryPerKmFee) / 100).toFixed(0)}</span>
+                              </div>
+                              <div className="flex items-center justify-between font-semibold">
+                                <span>Delivery total ({km.toFixed(1)} km)</span>
+                                <span className="text-text-primary">₹{(order.deliveryFee / 100).toFixed(0)}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <span>Delivery fee{order.distanceKm ? ` (${order.distanceKm.toFixed(1)} km)` : ""}</span>
+                              <span className="font-semibold text-text-primary">
+                                {order.deliveryFee === 0 ? "FREE" : `₹${((order.deliveryFee ?? 0) / 100).toFixed(0)}`}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         <div className="flex items-center justify-between">
                           <span>Discount</span>
                           <span className="font-semibold text-success">

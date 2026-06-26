@@ -138,8 +138,11 @@ export function RestaurantMenuPage({
     (sum, item) => sum + item.menuItem.price * item.quantity,
     0,
   );
-  const deliveryFee = restaurant?.address?.deliveryFee || 0;
-  const total = subtotal + deliveryFee;
+  // The actual delivery fee is distance-based and calculated at checkout.
+  // Show the restaurant's indicative fee if set, otherwise show a placeholder.
+  const deliveryFeeHint = restaurant?.address?.deliveryFee ?? null;
+  const deliveryFee = deliveryFeeHint || 0;
+  const total = subtotal; // don't add estimated fee to the pre-checkout total
 
   const filteredMenu = useMemo(
     () =>
@@ -474,13 +477,13 @@ export function RestaurantMenuPage({
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Delivery fee</span>
-                      <span className="font-semibold text-text-primary">
-                        ₹{(deliveryFee / 100).toFixed(0)}
+                      <span className="font-semibold text-text-secondary text-xs italic">
+                        {deliveryFeeHint ? `~₹${(deliveryFeeHint / 100).toFixed(0)}` : "Calculated at checkout"}
                       </span>
                     </div>
                     <div className="flex items-center justify-between border-t border-border pt-3 text-base">
-                      <span className="font-semibold text-text-primary">Total</span>
-                      <span className="font-bold text-text-primary">₹{(total / 100).toFixed(0)}</span>
+                      <span className="font-semibold text-text-primary">Subtotal</span>
+                      <span className="font-bold text-text-primary">₹{(subtotal / 100).toFixed(0)}</span>
                     </div>
                   </div>
                   <Link href="/checkout">
@@ -513,7 +516,7 @@ export function RestaurantMenuPage({
                       {totalQuantity} items in cart
                     </p>
                     <p className="mt-1 text-xs text-text-secondary">
-                      Subtotal ₹{(subtotal / 100).toFixed(0)} + delivery ₹{(deliveryFee / 100).toFixed(0)}
+                      Subtotal ₹{(subtotal / 100).toFixed(0)} · delivery at checkout
                     </p>
                   </div>
                   <div className="text-right">

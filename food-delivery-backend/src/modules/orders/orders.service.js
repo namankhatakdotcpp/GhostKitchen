@@ -586,7 +586,9 @@ export const assignDeliveryAgent = async (orderId, io) => {
     pickupLat: restaurantLat,
     pickupLng: restaurantLng,
     items: order.items,
-    estimatedEarnings: Math.round(40 + (selectedAgent.distance ?? 0) * 5), // ₹40 base + ₹5/km
+    // Use the order's stored riderPayout (computed at order-creation time from
+    // PlatformSettings); fall back to 0 rather than a hardcoded ₹40 guess.
+    estimatedEarnings: typeof order.riderPayout === "number" ? Math.round(order.riderPayout / 100) : 0,
   });
 
   return selectedAgent;
@@ -726,6 +728,7 @@ export const calculateOrderTotal = async ({ restaurantId, items, couponCode, del
     orderItems,
     subtotal,
     deliveryFee: pricing.deliveryFee,
+    deliveryFeeBreakdown: pricing.deliveryFeeBreakdown,
     discount,
     total,
     couponId,

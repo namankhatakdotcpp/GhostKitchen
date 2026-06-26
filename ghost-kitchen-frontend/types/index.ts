@@ -98,6 +98,12 @@ export interface Order {
   estimatedDelivery?: string;
   deliveredAt?: string | null;
   user?: User;
+  distanceKm?: number | null;
+  pricingSnapshot?: {
+    deliveryBaseFee: number;
+    deliveryBaseDistanceKm: number;
+    deliveryPerKmFee: number;
+  } | null;
 }
 
 export interface FeaturedBanner {
