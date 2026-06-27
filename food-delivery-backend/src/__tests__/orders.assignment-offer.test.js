@@ -16,7 +16,7 @@ vi.mock("../config/prisma.js", () => ({
   prisma: {
     order: { findUnique: vi.fn(), updateMany: vi.fn(), update: vi.fn(), groupBy: vi.fn().mockResolvedValue([]) },
     restaurant: { findUnique: vi.fn() },
-    user: { findMany: vi.fn(), update: vi.fn() },
+    user: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     riderLocation: { findMany: vi.fn().mockResolvedValue([]) },
     $transaction: vi.fn((ops) => Promise.all(ops)),
   },
@@ -78,9 +78,10 @@ describe("assignDeliveryAgent — offer step", () => {
     expect(updateCall.data).not.toHaveProperty("agentId");
     expect(updateCall.data.agentOfferedAt).toBeInstanceOf(Date);
 
-    // Rider marked unavailable so they can't be double-offered.
-    expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { id: "agent-1" },
+    // Rider marked unavailable atomically — updateMany with isAvailable:true
+    // guard prevents a concurrent dispatcher from double-offering the same rider.
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: { id: "agent-1", isAvailable: true },
       data: { isAvailable: false },
     });
 

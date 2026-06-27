@@ -38,9 +38,20 @@ export const createReview = async (req, res, next) => {
       return res.status(400).json({ error: "You have already reviewed this order" });
     }
 
-    const review = await prisma.review.create({
-      data: { orderId, rating: ratingNum, comment: comment || null },
-    });
+    let review;
+    try {
+      review = await prisma.review.create({
+        data: { orderId, rating: ratingNum, comment: comment || null },
+      });
+    } catch (createErr) {
+      // Two concurrent submissions slipped past the findUnique guard above.
+      // The unique constraint on orderId catches the loser — return 409 rather
+      // than a 500 so the client knows not to retry.
+      if (createErr.code === "P2002") {
+        return res.status(409).json({ error: "You have already reviewed this order" });
+      }
+      throw createErr;
+    }
     resolvedReviewId = review.id;
 
     // Recalculate restaurant rating

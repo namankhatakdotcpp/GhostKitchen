@@ -617,17 +617,42 @@ export const assignDeliveryAgent = async (orderId, io) => {
   // agentId is only ever written by the accept endpoint once the rider
   // really accepts. Mark the rider unavailable while their offer is live so
   // they can't be double-offered a second order in the same window.
-  const [updatedOrder] = await prisma.$transaction([
+  //
+  // Dispatch-race guard: two concurrent assignDeliveryAgent calls could both
+  // read this rider as isAvailable:true before either writes. Using updateMany
+  // with `isAvailable: true` in the WHERE makes the flip atomic — only one
+  // caller will get count:1; the other gets count:0 and we abort without
+  // double-offering the rider.
+  const [updatedOrder, { count: claimed }] = await prisma.$transaction([
     prisma.order.update({
       where: { id: orderId },
       data: { pendingAgentId: selectedAgent.id, agentOfferedAt: new Date() },
       include: { restaurant: true, agent: true },
     }),
-    prisma.user.update({
-      where: { id: selectedAgent.id },
+    prisma.user.updateMany({
+      where: { id: selectedAgent.id, isAvailable: true },
       data: { isAvailable: false },
     }),
   ]);
+
+  if (claimed === 0) {
+    // Another dispatcher grabbed this rider between our read and write.
+    // Roll back the pendingAgentId we just wrote and skip — the next
+    // auto-assignment pass will find a different available rider.
+    logger.warn("Dispatch race: rider taken between read and write, aborting offer", {
+      orderId, agentId: selectedAgent.id,
+    });
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { pendingAgentId: null, agentOfferedAt: null },
+    });
+    io.to("admin").emit("order:no-agent", {
+      orderId,
+      restaurantName: order.restaurant.name,
+      reason: "dispatch_race",
+    });
+    return null;
+  }
 
   logger.info("Agent offered order", { orderId, agentId: selectedAgent.id });
 
