@@ -98,8 +98,12 @@ export default function ImageUpload({
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            // Delete old uploaded image before replacing
-            if (uploadedPublicId.current) deleteFromCloudinary(uploadedPublicId.current);
+            // Track the previously uploaded (not yet DB-saved) publicId so we
+            // can clean it up when the user explicitly removes the image.
+            // We do NOT delete it here — the parent's DB save hasn't happened
+            // yet, so deleting the old asset now could leave the DB pointing
+            // at a Cloudinary asset that no longer exists if the save fails.
+            // Orphaned session-uploads are cleaned up on explicit Remove only.
             uploadedPublicId.current = data.publicId ?? null;
             setSupportsUpload(true);
             onChange(data.url);

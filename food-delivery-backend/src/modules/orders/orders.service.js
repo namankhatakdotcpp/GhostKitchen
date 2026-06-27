@@ -292,6 +292,10 @@ export const createOrder = async (payload, customerId) => {
   return serializeOrder(order);
 };
 
+// Intentionally narrow signature: only status, agent assignment, and ETA are
+// mutable after creation. Monetary fields (riderPayout, restaurantPayout,
+// adminRevenue, subtotal, deliveryFee, discount, total) are set once at
+// order-creation time and never recalculated or overwritten here.
 export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDelivery }) => {
   const order = await prisma.order.update({
     where: { id: orderId },

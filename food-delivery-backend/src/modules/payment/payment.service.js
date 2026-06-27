@@ -14,8 +14,6 @@ import { createNotification } from "../notification/notification.service.js";
  * the unique constraint on Order.cfOrderId guarantees a single order.
  */
 export const createOrderFromPayment = async (payment) => {
-  const existing = await prisma.order.findFirst({ where: { cfOrderId: payment.cfOrderId } });
-  if (existing) return existing;
 
   // Preferred: the priced snapshot captured at payment-creation time, so menu
   // edits between payment and verification can never change what was charged.
@@ -54,8 +52,17 @@ export const createOrderFromPayment = async (payment) => {
 
   let order;
   try {
-    order = await prisma.$transaction(async (tx) => {
-      const created = await tx.order.create({
+    order = await prisma.$transaction(
+      async (tx) => {
+        // Check idempotency INSIDE the serializable transaction. Two concurrent
+        // callers (webhook + /payments/verify) both reading null here will have
+        // one serialization-abort and retry — cleaner than letting both proceed
+        // to the unique-constraint and producing a noisy P2002. Points deduction
+        // is inside this same transaction so it atomically rolls back if the
+        // order creation fails or is a duplicate.
+        const alreadyCreated = await tx.order.findFirst({ where: { cfOrderId: payment.cfOrderId } });
+        if (alreadyCreated) return alreadyCreated;
+        const created = await tx.order.create({
         data: {
           customerId: payment.customerId,
           restaurantId: payment.restaurantId,
@@ -83,23 +90,25 @@ export const createOrderFromPayment = async (payment) => {
           pricingSnapshot: pricingFields.pricingSnapshot ?? null,
         },
         include: { restaurant: true },
-      });
-
-      // Atomically debit loyalty points — same guard as COD path:
-      // claimPointsInTx uses updateMany(balance >= points) so concurrent
-      // orders can never double-spend the same wallet balance.
-      if (pointsToRedeem > 0) {
-        await claimPointsInTx(tx, payment.customerId, pointsToRedeem, {
-          orderId: created.id,
-          description: `Points redeemed for online order #${created.id.slice(-6).toUpperCase()}`,
         });
-      }
 
-      return created;
-    });
+        // Atomically debit loyalty points inside this same transaction so a
+        // failed order.create rolls back the wallet deduction automatically.
+        if (pointsToRedeem > 0) {
+          await claimPointsInTx(tx, payment.customerId, pointsToRedeem, {
+            orderId: created.id,
+            description: `Points redeemed for online order #${created.id.slice(-6).toUpperCase()}`,
+          });
+        }
+
+        return created;
+      },
+      { isolationLevel: "Serializable" }
+    );
   } catch (err) {
-    if (err.code === "P2002") {
-      // Concurrent webhook + verify both tried to create — return the winner's order
+    if (err.code === "P2002" || err.message?.includes("could not serialize")) {
+      // P2002: unique constraint race (fallback if serializable retry fails)
+      // Serialization failure: Postgres aborted the losing concurrent tx
       return prisma.order.findFirst({ where: { cfOrderId: payment.cfOrderId } });
     }
     throw err;
