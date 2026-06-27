@@ -61,6 +61,8 @@ describe("assignDeliveryAgent — offer step", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prisma.$transaction.mockImplementation((ops) => Promise.all(ops));
+    // Re-apply default after clearAllMocks: rider is successfully claimed
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("writes pendingAgentId/agentOfferedAt, not agentId, and emits order:offer", async () => {
@@ -92,6 +94,30 @@ describe("assignDeliveryAgent — offer step", () => {
       expect.objectContaining({ orderId: "ord-1", expiresInSeconds: 30 }),
     );
     expect(io._emit).not.toHaveBeenCalledWith("order:assigned", expect.anything());
+  });
+
+  it("aborts and emits order:no-agent when a concurrent dispatcher already claimed the rider (count:0)", async () => {
+    prisma.order.findUnique.mockResolvedValue(baseOrder);
+    prisma.user.findMany.mockResolvedValue([baseAgent]);
+    // order.update succeeds but user.updateMany returns count:0 — rider already taken
+    prisma.order.update.mockResolvedValue({ ...baseOrder, pendingAgentId: baseAgent.id });
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+
+    const io = makeIo();
+    const selected = await assignDeliveryAgent("ord-1", io);
+
+    expect(selected).toBeNull();
+    // Must roll back the pendingAgentId we wrote
+    const rollbackCall = prisma.order.update.mock.calls.find(
+      ([args]) => args?.data?.pendingAgentId === null,
+    );
+    expect(rollbackCall).toBeDefined();
+    // Must NOT emit order:offer — the rider was never really claimed
+    expect(io._emit).not.toHaveBeenCalledWith("order:offer", expect.anything());
+    expect(io._emit).toHaveBeenCalledWith(
+      "order:no-agent",
+      expect.objectContaining({ orderId: "ord-1", reason: "dispatch_race" }),
+    );
   });
 
   // Regression for Bug B: a restaurant with no lat/lng used to skip the

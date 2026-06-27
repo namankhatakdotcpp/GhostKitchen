@@ -151,6 +151,20 @@ describe("createOrderFromPayment", () => {
     expect(result.id).toBe("ord-race");
   });
 
+  it("handles Postgres serialization failure by returning existing order", async () => {
+    // Serializable isolation causes Postgres to abort one of two concurrent
+    // transactions with "could not serialize access due to concurrent update".
+    // The catch block must treat this identically to P2002.
+    // When $transaction rejects outright (before callback runs), the catch
+    // block's findFirst is the first — and only — findFirst call.
+    mockPrisma.order.findFirst.mockResolvedValueOnce({ id: "ord-serial", cfOrderId: "cf-order-1" });
+    const serializeErr = new Error("could not serialize access due to concurrent update");
+    mockPrisma.$transaction.mockRejectedValueOnce(serializeErr);
+
+    const result = await createOrderFromPayment(basePayment);
+    expect(result.id).toBe("ord-serial");
+  });
+
   it("does not increment coupon when coupon not found", async () => {
     mockPrisma.order.findFirst.mockResolvedValue(null);
     const paymentWithCoupon = { ...basePayment, couponCode: "GHOST" };

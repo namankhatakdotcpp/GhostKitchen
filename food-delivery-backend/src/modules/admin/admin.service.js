@@ -121,12 +121,12 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
   startDate.setDate(startDate.getDate() - (Number(days) - 1));
   startDate.setHours(0, 0, 0, 0);
 
-  const [allOrders, topRestaurantsRaw] = await Promise.all([
+  const [allOrders, topRestaurantsRaw, totalRiderCount, totalRestaurantCount] = await Promise.all([
     prisma.order.findMany({
       where: { createdAt: { gte: startDate } },
       select: {
         id: true, status: true, total: true, createdAt: true,
-        restaurantId: true,
+        restaurantId: true, customerId: true, agentId: true,
         restaurant: { select: { name: true } },
         // Delivery metrics
         riderPayout: true,
@@ -138,6 +138,7 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
         acceptedAt: true,
         pickedUpAt: true,
         deliveredAt: true,
+        estimatedDelivery: true,
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -149,6 +150,8 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
       orderBy: { _sum: { total: "desc" } },
       take: 5,
     }),
+    prisma.user.count({ where: { roles: { has: "DELIVERY" }, isBlocked: false } }),
+    prisma.restaurant.count({ where: { isActive: true } }),
   ]);
 
   // Build per-day buckets
@@ -226,6 +229,37 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
     .map((o) => (new Date(o.deliveredAt).getTime() - new Date(o.placedAt).getTime()) / 60000);
   const avgDeliveryTimeMin = timings.length > 0 ? Math.round(timings.reduce((s, t) => s + t, 0) / timings.length) : null;
 
+  // Average order value (paise)
+  const avgOrderValue = deliveredOrders > 0 ? Math.round(totalRevenue / deliveredOrders) : 0;
+
+  // Repeat customer %: customers who placed >1 order in the window
+  const customerOrderCounts = new Map();
+  for (const o of allOrders) {
+    customerOrderCounts.set(o.customerId, (customerOrderCounts.get(o.customerId) ?? 0) + 1);
+  }
+  const uniqueCustomers = customerOrderCounts.size;
+  const repeatCustomers = [...customerOrderCounts.values()].filter((c) => c > 1).length;
+  const repeatCustomerPct = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
+
+  // On-time delivery %: delivered before estimatedDelivery (requires both timestamps)
+  const onTimeList = deliveredList.filter((o) => o.deliveredAt && o.estimatedDelivery);
+  const onTimeCount = onTimeList.filter(
+    (o) => new Date(o.deliveredAt).getTime() <= new Date(o.estimatedDelivery).getTime(),
+  ).length;
+  const onTimePct = onTimeList.length > 0 ? Math.round((onTimeCount / onTimeList.length) * 100) : null;
+
+  // Rider utilization %: riders who completed ≥1 delivery in window / total active riders
+  const activeRiderIds = new Set(deliveredList.map((o) => o.agentId).filter(Boolean));
+  const riderUtilizationPct = totalRiderCount > 0
+    ? Math.round((activeRiderIds.size / totalRiderCount) * 100)
+    : null;
+
+  // Restaurant utilization %: restaurants with ≥1 delivered order / total active restaurants
+  const activeRestaurantIds = new Set(deliveredList.map((o) => o.restaurantId));
+  const restaurantUtilizationPct = totalRestaurantCount > 0
+    ? Math.round((activeRestaurantIds.size / totalRestaurantCount) * 100)
+    : null;
+
   return {
     trend,
     statusBreakdown,
@@ -243,6 +277,11 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
       avgPrepTimeMin,
       avgAssignmentTimeMin,
       avgDeliveryTimeMin,
+      avgOrderValue,
+      repeatCustomerPct,
+      onTimePct,
+      riderUtilizationPct,
+      restaurantUtilizationPct,
     },
   };
 };
