@@ -33,6 +33,7 @@ export default function AdminAnalyticsPage() {
     totalRiderPayouts: 0, totalRestaurantPayouts: 0, totalAdminRevenue: 0, totalDeliveryFees: 0,
     avgRiderPayout: 0, avgRestaurantPayout: 0, avgDistanceKm: 0,
     cancellationPct: 0, avgPrepTimeMin: null, avgAssignmentTimeMin: null, avgDeliveryTimeMin: null,
+    avgOrderValue: 0, repeatCustomerPct: 0, onTimePct: null, riderUtilizationPct: null, restaurantUtilizationPct: null,
   };
 
   const maxRevenue = Math.max(...trend.map((d) => d.revenue), 1);
@@ -183,6 +184,11 @@ export default function AdminAnalyticsPage() {
             { label: "Avg prep time", value: delivery.avgPrepTimeMin != null ? `${delivery.avgPrepTimeMin} min` : "—", sub: "restaurant accept → pickup" },
             { label: "Avg assignment time", value: delivery.avgAssignmentTimeMin != null ? `${delivery.avgAssignmentTimeMin} min` : "—", sub: "placed → rider accepts" },
             { label: "Avg delivery time", value: delivery.avgDeliveryTimeMin != null ? `${delivery.avgDeliveryTimeMin} min` : "—", sub: "placed → delivered" },
+            { label: "Avg order value", value: `₹${toRupees(delivery.avgOrderValue ?? 0).toLocaleString("en-IN")}`, sub: "per delivered order" },
+            { label: "Repeat customers", value: `${delivery.repeatCustomerPct ?? 0}%`, sub: "placed >1 order this period" },
+            { label: "On-time delivery", value: `${delivery.onTimePct ?? 0}%`, sub: "delivered ≤ ETA" },
+            { label: "Rider utilization", value: `${delivery.riderUtilizationPct ?? 0}%`, sub: "active riders / total riders" },
+            { label: "Restaurant utilization", value: `${delivery.restaurantUtilizationPct ?? 0}%`, sub: "active restaurants / total" },
           ].map((m) => (
             <div key={m.label} className="rounded-[14px] border border-border p-4">
               <p className="text-xs text-text-muted">{m.label}</p>
