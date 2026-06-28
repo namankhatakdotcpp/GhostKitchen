@@ -41,7 +41,7 @@ export const createReview = async (req, res, next) => {
     let review;
     try {
       review = await prisma.review.create({
-        data: { orderId, rating: ratingNum, comment: comment || null },
+        data: { orderId, customerId: userId, restaurantId: order.restaurantId, rating: ratingNum, comment: comment || null },
       });
     } catch (createErr) {
       // Two concurrent submissions slipped past the findUnique guard above.

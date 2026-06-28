@@ -96,6 +96,7 @@ model User {
   resolvedIncidents Incident[]         @relation("IncidentResolver")
   wallet            Wallet?            @relation("UserWallet")
   pushSubscriptions PushSubscription[]
+  reviews           Review[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -187,6 +188,7 @@ model Restaurant {
   menuItems      MenuItem[]
   orders         Order[]
   favorites      Favorite[]
+  reviews        Review[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -297,14 +299,20 @@ model Order {
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  orderId   String   @unique
-  rating    Int
-  comment   String?
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id           String     @id @default(uuid())
+  orderId      String     @unique
+  customerId   String
+  restaurantId String
+  rating       Int
+  comment      String?
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer     User       @relation(fields: [customerId], references: [id])
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  createdAt    DateTime   @default(now())
 
   @@index([orderId])
+  @@index([customerId])
+  @@index([restaurantId])
 }
 
 model Coupon {
