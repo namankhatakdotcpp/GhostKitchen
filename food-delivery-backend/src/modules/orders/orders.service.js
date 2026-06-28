@@ -555,14 +555,14 @@ export const assignDeliveryAgent = async (orderId, io) => {
     }),
     prisma.riderLocation.findMany({
       where: { riderId: { in: agentIds } },
-      select: { riderId: true, updatedAt: true },
+      select: { riderId: true, lastSeenAt: true },
     }),
   ]);
 
   const offeredMap = new Map(offeredCounts.map((r) => [r.pendingAgentId, r._count.id]));
   const acceptedMap = new Map(acceptedCounts.map((r) => [r.agentId, r._count.id]));
   const lastDeliveryMap = new Map(lastDeliveries.map((r) => [r.agentId, r._max.deliveredAt]));
-  const locationMap = new Map(riderLocations.map((r) => [r.riderId, r.updatedAt]));
+  const locationMap = new Map(riderLocations.map((r) => [r.riderId, r.lastSeenAt]));
 
   const now = Date.now();
   const maxDistKm = Math.max(...inRangeRaw.map((a) => a.distance ?? 0), 1);
