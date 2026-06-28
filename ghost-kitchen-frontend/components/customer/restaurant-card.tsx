@@ -85,13 +85,13 @@ export function RestaurantCard({
       transition={{ delay: index * 0.05, duration: 0.28, ease: "easeOut" }}
     >
       <Link
-        className="group block overflow-hidden rounded-[20px] border border-border bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(28,28,28,0.08)]"
+        className={`group block overflow-hidden rounded-[20px] border border-border bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(28,28,28,0.08)] ${!isOpen ? "grayscale opacity-75" : ""}`}
         href={`/restaurant/${id}`}
       >
         <div className="relative h-[180px] w-full overflow-hidden rounded-t-[20px]">
           <Image
             alt={name}
-            className={`object-cover transition duration-300 group-hover:scale-[1.03] ${!isOpen ? "brightness-50" : ""}`}
+            className="object-cover transition duration-300 group-hover:scale-[1.03]"
             fill
             onError={() => setImgSrc(FALLBACK)}
             sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 360px"

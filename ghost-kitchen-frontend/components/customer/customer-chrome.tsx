@@ -1,13 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 import { CustomerBottomNav } from "@/components/customer/customer-bottom-nav";
 import { CustomerNavbar } from "@/components/customer/customer-navbar";
 import { LocationModal } from "@/components/customer/location-modal";
 import { RoleBanner } from "@/components/customer/RoleBanner";
+import { SplashScreen } from "@/components/ui/SplashScreen";
 import { useAuthStore } from "@/store/authStore";
 import { useConfigStore } from "@/store/configStore";
 import { useRouter } from "next/navigation";
@@ -28,6 +29,12 @@ export function CustomerChrome({ children }: CustomerChromeProps) {
   const { isAuthenticated, getCurrentUser, user, hasHydrated } = useAuthStore();
   const { config, loaded } = useConfigStore();
   const refreshed = useRef(false);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (sessionStorage.getItem("gk-splash-shown")) return false;
+    sessionStorage.setItem("gk-splash-shown", "1");
+    return true;
+  });
 
   useEffect(() => {
     // Wait for Zustand to rehydrate from localStorage before checking auth —
@@ -51,6 +58,7 @@ export function CustomerChrome({ children }: CustomerChromeProps) {
 
   return (
     <>
+      {showSplash && <SplashScreen onDone={() => setShowSplash(false)} />}
       {!useImmersivePageChrome ? <CustomerNavbar /> : null}
       {!useImmersivePageChrome ? <RoleBanner /> : null}
       {!useImmersivePageChrome ? <LocationModal /> : null}
