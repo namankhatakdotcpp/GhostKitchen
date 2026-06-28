@@ -50,7 +50,7 @@ export default function ImageUpload({
     const token = getToken();
     if (!token) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/upload/image`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? ""}/upload/image`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ publicId }),
@@ -81,7 +81,7 @@ export default function ImageUpload({
     // Use XHR instead of fetch so we get granular upload progress events
     await new Promise<void>((resolve) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/upload/image?folder=${folder}`);
+      xhr.open("POST", `${process.env.NEXT_PUBLIC_API_URL ?? ""}/upload/image?folder=${folder}`);
       if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
       xhr.upload.onprogress = (e) => {
