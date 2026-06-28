@@ -37,10 +37,10 @@ export default function ImageUpload({
 
   const getToken = (): string | null => {
     try {
-      const raw = localStorage.getItem("auth-storage");
+      const raw = localStorage.getItem("gk-auth");
       if (!raw) return null;
       const parsed = JSON.parse(raw);
-      return parsed?.state?.token ?? null;
+      return parsed?.state?.accessToken ?? null;
     } catch {
       return null;
     }
