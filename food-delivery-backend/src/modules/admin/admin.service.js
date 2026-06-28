@@ -151,7 +151,7 @@ export const getAnalytics = async ({ days = 7 } = {}) => {
       take: 5,
     }),
     prisma.user.count({ where: { roles: { has: "DELIVERY" }, isBlocked: false } }),
-    prisma.restaurant.count({ where: { isActive: true } }),
+    prisma.restaurant.count({ where: { isApproved: true } }),
   ]);
 
   // Build per-day buckets
