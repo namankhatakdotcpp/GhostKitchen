@@ -130,7 +130,7 @@ export function DeliveredCelebration({ order }: DeliveredCelebrationProps) {
         </motion.div>
 
         {/* Review prompt — optional, never blocks the page */}
-        {stage !== "submitted" ? (
+        {stage !== "submitted" && stage !== "skipped" ? (
           <motion.section
             animate={{ opacity: 1, y: 0 }}
             className="mt-8 w-full max-w-md rounded-[28px] border border-border bg-white p-6 shadow-[0_20px_40px_rgba(28,28,28,0.05)]"

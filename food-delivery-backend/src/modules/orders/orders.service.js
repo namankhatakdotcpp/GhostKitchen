@@ -314,6 +314,37 @@ export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDel
     },
   });
 
+  // COD settlement: when a COD order is delivered, record the financial split
+  // so admin can reconcile rider cash handover and restaurant bank transfer.
+  // cfOrderId is null for COD orders (online orders always have one).
+  if (status === "DELIVERED" && !order.cfOrderId && order.agentId) {
+    const total = Math.round(order.total ?? 0);
+    const riderPayout = Math.round(order.riderPayout ?? 0);
+    const restaurantPayable = Math.round(order.restaurantPayout ?? 0);
+    const gstCollected = Math.round(
+      (order.gstOnItemTotal ?? 0) +
+      (order.gstOnDeliveryFee ?? 0) +
+      (order.gstOnPlatformFee ?? 0)
+    );
+    const adminNet = Math.round(order.adminRevenue ?? 0);
+
+    await prisma.cODSettlement.upsert({
+      where: { orderId },
+      create: {
+        orderId,
+        riderId: order.agentId,
+        restaurantId: order.restaurantId,
+        customerTotal: total,
+        riderPayout,
+        riderCODDue: total - riderPayout,
+        restaurantPayable,
+        adminNet,
+        gstCollected,
+      },
+      update: {},
+    });
+  }
+
   return serializeOrder(order);
 };
 

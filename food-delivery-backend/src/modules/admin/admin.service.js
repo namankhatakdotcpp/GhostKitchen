@@ -922,3 +922,147 @@ export const getLiveMapData = async () => {
     }),
   };
 };
+
+// ── COD Settlement ────────────────────────────────────────────────────────────
+
+/**
+ * Aggregated COD dues per rider — how much cash each rider still owes the
+ * platform from delivered COD orders they haven't settled yet.
+ */
+export const getCODRiderDues = async () => {
+  const rows = await prisma.cODSettlement.findMany({
+    where: { riderSettledAt: null },
+    include: {
+      rider: { select: { id: true, name: true, phone: true } },
+      order: { select: { id: true, placedAt: true, total: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Group by rider
+  const byRider = new Map();
+  for (const row of rows) {
+    const key = row.riderId;
+    if (!byRider.has(key)) {
+      byRider.set(key, {
+        rider: row.rider,
+        totalDue: 0,
+        orderCount: 0,
+        settlements: [],
+      });
+    }
+    const entry = byRider.get(key);
+    entry.totalDue += row.riderCODDue;
+    entry.orderCount += 1;
+    entry.settlements.push({
+      id: row.id,
+      orderId: row.orderId,
+      orderTotal: row.customerTotal,
+      riderPayout: row.riderPayout,
+      riderCODDue: row.riderCODDue,
+      createdAt: row.createdAt,
+    });
+  }
+
+  return Array.from(byRider.values());
+};
+
+/**
+ * Aggregated restaurant payables — how much the platform still owes each
+ * restaurant from COD orders that haven't been bank-transferred yet.
+ */
+export const getCODRestaurantPayables = async () => {
+  const rows = await prisma.cODSettlement.findMany({
+    where: { restaurantPaidAt: null },
+    include: {
+      restaurant: { select: { id: true, name: true } },
+      order: { select: { id: true, placedAt: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const byRestaurant = new Map();
+  for (const row of rows) {
+    const key = row.restaurantId;
+    if (!byRestaurant.has(key)) {
+      byRestaurant.set(key, {
+        restaurant: row.restaurant,
+        totalPayable: 0,
+        orderCount: 0,
+        settlements: [],
+      });
+    }
+    const entry = byRestaurant.get(key);
+    entry.totalPayable += row.restaurantPayable;
+    entry.orderCount += 1;
+    entry.settlements.push({
+      id: row.id,
+      orderId: row.orderId,
+      restaurantPayable: row.restaurantPayable,
+      gstCollected: row.gstCollected,
+      adminNet: row.adminNet,
+      createdAt: row.createdAt,
+    });
+  }
+
+  return Array.from(byRestaurant.values());
+};
+
+/**
+ * Mark all unsettled COD dues for a specific rider as settled (rider handed
+ * over cash to admin). Returns count of settlements updated.
+ */
+export const settleCODRider = async (riderId, adminId) => {
+  const result = await prisma.cODSettlement.updateMany({
+    where: { riderId, riderSettledAt: null },
+    data: { riderSettledAt: new Date(), riderSettledBy: adminId },
+  });
+  return result.count;
+};
+
+/**
+ * Mark all pending restaurant payables for a specific restaurant as paid
+ * (admin has transferred the funds). Returns count of settlements updated.
+ */
+export const settleCODRestaurant = async (restaurantId, adminId) => {
+  const result = await prisma.cODSettlement.updateMany({
+    where: { restaurantId, restaurantPaidAt: null },
+    data: { restaurantPaidAt: new Date(), restaurantPaidBy: adminId },
+  });
+  return result.count;
+};
+
+/**
+ * Platform-wide COD summary: total outstanding from riders, total owed to
+ * restaurants, and total admin net from all-time settled COD orders.
+ */
+export const getCODSummary = async () => {
+  const [pending, allTime] = await Promise.all([
+    prisma.cODSettlement.aggregate({
+      where: { riderSettledAt: null },
+      _sum: { riderCODDue: true, restaurantPayable: true, adminNet: true, gstCollected: true },
+      _count: { id: true },
+    }),
+    prisma.cODSettlement.aggregate({
+      _sum: { riderCODDue: true, restaurantPayable: true, adminNet: true, gstCollected: true, customerTotal: true },
+      _count: { id: true },
+    }),
+  ]);
+
+  return {
+    pending: {
+      orderCount: pending._count.id,
+      totalRiderDue: pending._sum.riderCODDue ?? 0,
+      totalRestaurantPayable: pending._sum.restaurantPayable ?? 0,
+      totalAdminNet: pending._sum.adminNet ?? 0,
+      totalGST: pending._sum.gstCollected ?? 0,
+    },
+    allTime: {
+      orderCount: allTime._count.id,
+      totalCashCollected: allTime._sum.customerTotal ?? 0,
+      totalRestaurantPaid: allTime._sum.restaurantPayable ?? 0,
+      totalAdminEarned: allTime._sum.adminNet ?? 0,
+      totalGSTCollected: allTime._sum.gstCollected ?? 0,
+    },
+  };
+};

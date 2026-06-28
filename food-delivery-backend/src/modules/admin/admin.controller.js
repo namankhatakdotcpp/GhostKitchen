@@ -509,3 +509,46 @@ export const getLiveMap = async (req, res, next) => {
     res.json(data);
   } catch (error) { next(error); }
 };
+
+// ── COD Settlement controllers ────────────────────────────────────────────────
+
+export const getCODSummary = async (req, res, next) => {
+  try {
+    const summary = await adminService.getCODSummary();
+    res.json(summary);
+  } catch (error) { next(error); }
+};
+
+export const getCODRiderDues = async (req, res, next) => {
+  try {
+    const dues = await adminService.getCODRiderDues();
+    res.json({ dues });
+  } catch (error) { next(error); }
+};
+
+export const getCODRestaurantPayables = async (req, res, next) => {
+  try {
+    const payables = await adminService.getCODRestaurantPayables();
+    res.json({ payables });
+  } catch (error) { next(error); }
+};
+
+export const settleCODRider = async (req, res, next) => {
+  try {
+    const { riderId } = req.params;
+    const adminId = req.user.userId;
+    const count = await adminService.settleCODRider(riderId, adminId);
+    await auditLog({ userId: adminId, action: "COD_RIDER_SETTLED", entityType: "User", entityId: riderId, req });
+    res.json({ settled: count });
+  } catch (error) { next(error); }
+};
+
+export const settleCODRestaurant = async (req, res, next) => {
+  try {
+    const { restaurantId } = req.params;
+    const adminId = req.user.userId;
+    const count = await adminService.settleCODRestaurant(restaurantId, adminId);
+    await auditLog({ userId: adminId, action: "COD_RESTAURANT_SETTLED", entityType: "Restaurant", entityId: restaurantId, req });
+    res.json({ settled: count });
+  } catch (error) { next(error); }
+};

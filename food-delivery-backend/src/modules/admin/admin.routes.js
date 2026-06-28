@@ -51,6 +51,11 @@ import {
   getDeliveryAgents,
   toggleAgentSuspend,
   getLiveMap,
+  getCODSummary,
+  getCODRiderDues,
+  getCODRestaurantPayables,
+  settleCODRider,
+  settleCODRestaurant,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -149,5 +154,12 @@ router.patch("/restaurants/:id/approve", approveRestaurant);
 router.get("/analytics", getAnalytics);
 router.get("/delivery-agents", getDeliveryAgents);
 router.patch("/delivery-agents/:id/suspend", toggleAgentSuspend);
+
+// COD Settlement
+router.get("/cod/summary", getCODSummary);
+router.get("/cod/rider-dues", getCODRiderDues);
+router.get("/cod/restaurant-payables", getCODRestaurantPayables);
+router.post("/cod/settle-rider/:riderId", settleCODRider);
+router.post("/cod/settle-restaurant/:restaurantId", settleCODRestaurant);
 
 export default router;

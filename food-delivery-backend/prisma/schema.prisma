@@ -97,6 +97,7 @@ model User {
   wallet            Wallet?            @relation("UserWallet")
   pushSubscriptions PushSubscription[]
   reviews           Review[]
+  codSettlements    CODSettlement[]    @relation("RiderCODSettlements")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -185,10 +186,11 @@ model Restaurant {
   isApproved     Boolean    @default(true)
   deliveryRadius Float      @default(5)
   owner          User       @relation("RestaurantOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  menuItems      MenuItem[]
-  orders         Order[]
-  favorites      Favorite[]
-  reviews        Review[]
+  menuItems       MenuItem[]
+  orders          Order[]
+  favorites       Favorite[]
+  reviews         Review[]
+  codSettlements  CODSettlement[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -282,10 +284,11 @@ model Order {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
-  agent      User?      @relation("AgentOrders", fields: [agentId], references: [id])
-  review     Review?
+  customer       User             @relation("CustomerOrders", fields: [customerId], references: [id])
+  restaurant     Restaurant       @relation(fields: [restaurantId], references: [id])
+  agent          User?            @relation("AgentOrders", fields: [agentId], references: [id])
+  review         Review?
+  codSettlement  CODSettlement?
 
   @@index([customerId])
   @@index([restaurantId])
@@ -313,6 +316,44 @@ model Review {
   @@index([orderId])
   @@index([customerId])
   @@index([restaurantId])
+}
+
+// One row per delivered COD order — the financial settlement record.
+// Tracks what the rider owes the platform (riderCODDue), what the platform
+// owes the restaurant (restaurantPayable), and platform net earnings.
+// Both settlement sides are tracked independently with nullable *SettledAt
+// timestamps so admin can reconcile them on their own schedule.
+model CODSettlement {
+  id              String    @id @default(cuid())
+  orderId         String    @unique
+  riderId         String
+  restaurantId    String
+
+  // All amounts in paise (₹1 = 100 paise), matching the rest of the codebase.
+  customerTotal      Int // total cash the customer paid the rider
+  riderPayout        Int // rider's guaranteed earning — they KEEP this
+  riderCODDue        Int // customerTotal - riderPayout — rider must hand to platform
+  restaurantPayable  Int // platform owes restaurant (restaurantPayout)
+  adminNet           Int // platform net after paying restaurant and rider
+  gstCollected       Int // sum of all GST lines — platform holds this for remittance
+
+  // Rider settlement: admin marks once the rider hands over cash
+  riderSettledAt  DateTime?
+  riderSettledBy  String?   // admin userId who marked it settled
+
+  // Restaurant payout: admin marks once restaurant has been bank-transferred
+  restaurantPaidAt  DateTime?
+  restaurantPaidBy  String?   // admin userId who marked it paid
+
+  createdAt DateTime @default(now())
+
+  order      Order      @relation(fields: [orderId], references: [id])
+  rider      User       @relation("RiderCODSettlements", fields: [riderId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@index([riderId, riderSettledAt])
+  @@index([restaurantId, restaurantPaidAt])
+  @@index([createdAt])
 }
 
 model Coupon {
