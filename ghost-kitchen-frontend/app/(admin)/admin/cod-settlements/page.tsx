@@ -396,7 +396,7 @@ export default function CODSettlementsPage() {
           </div>
           <div className="rounded-[14px] border border-border p-4">
             <p className="font-semibold text-text-primary">3. Platform pays restaurant</p>
-            <p className="mt-1">Platform bank-transfers the restaurant's share. Platform retains admin revenue and holds GST for quarterly remittance.</p>
+            <p className="mt-1">Platform bank-transfers the restaurant&apos;s share. Platform retains admin revenue and holds GST for quarterly remittance.</p>
           </div>
         </div>
       </div>

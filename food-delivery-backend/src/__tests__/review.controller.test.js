@@ -127,7 +127,7 @@ describe("createReview", () => {
     await reviewController.createReview(req, res, vi.fn());
 
     expect(prisma.review.create).toHaveBeenCalledWith({
-      data: { orderId: "order-1", rating: 5, comment: "Great!" },
+      data: { orderId: "order-1", customerId: "user-1", restaurantId: "rest-1", rating: 5, comment: "Great!" },
     });
     expect(prisma.restaurant.update).toHaveBeenCalledWith({
       where: { id: "rest-1" },
@@ -149,7 +149,7 @@ describe("createReview", () => {
     await reviewController.createReview(req, res, vi.fn());
 
     expect(prisma.review.create).toHaveBeenCalledWith({
-      data: { orderId: "order-1", rating: 4, comment: null },
+      data: { orderId: "order-1", customerId: "user-1", restaurantId: "rest-1", rating: 4, comment: null },
     });
   });
 });
