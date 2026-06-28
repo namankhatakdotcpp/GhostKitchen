@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Home,
   MapPinned,
+  Wallet,
   X,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/delivery/home", label: "Home", icon: Home },
   { href: "/delivery/active", label: "Active", icon: MapPinned },
   { href: "/delivery/earnings", label: "Earnings", icon: Banknote },
+  { href: "/delivery/cod-dues", label: "COD Dues", icon: Wallet },
 ];
 
 type DeliveryShellProps = {

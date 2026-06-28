@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
-import { BarChart3, ChevronDown, Settings, ShoppingBag, Store, UtensilsCrossed } from "lucide-react";
+import { BarChart3, ChevronDown, HandCoins, Settings, ShoppingBag, Store, UtensilsCrossed } from "lucide-react";
 
 import NotificationBell from "@/components/ui/NotificationBell";
 import RoleSwitcher from "@/components/ui/role-switcher";
@@ -17,6 +17,7 @@ const navItems = [
   { href: "/shop/orders", label: "Orders", icon: ShoppingBag },
   { href: "/shop/menu", label: "Menu", icon: UtensilsCrossed },
   { href: "/shop/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/shop/cod-dues", label: "COD Dues", icon: HandCoins },
   { href: "/shop/settings", label: "Settings", icon: Settings },
 ];
 

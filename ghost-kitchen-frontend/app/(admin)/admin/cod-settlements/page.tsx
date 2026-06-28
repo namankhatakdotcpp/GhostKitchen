@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { toRupees } from "@/lib/utils";
-import { Wallet, Store, AlertCircle, CheckCircle, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import toast from "react-hot-toast";
+import { Wallet, Store, AlertCircle, Bell, CheckCircle, Clock, ChevronDown, ChevronUp, Send } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,16 @@ function RiderDuesTab() {
 
   const settle = useMutation({
     mutationFn: (riderId: string) => api.post(`/admin/cod/settle-rider/${riderId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cod-rider-dues"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cod-rider-dues"] });
+      toast.success("Marked as settled");
+    },
+  });
+
+  const requestPayment = useMutation({
+    mutationFn: (riderId: string) => api.post(`/admin/cod/request-rider-payment/${riderId}`),
+    onSuccess: () => toast.success("Payment request sent to rider"),
+    onError: () => toast.error("Failed to send request"),
   });
 
   if (isLoading) return <div className="h-48 animate-pulse rounded-xl bg-gray-100" />;
@@ -120,9 +130,19 @@ function RiderDuesTab() {
               <p className="text-xl font-bold text-red-600">₹{r(entry.totalDue)}</p>
             </div>
             <button
-              className="ml-2 inline-flex h-10 items-center gap-1.5 rounded-full bg-brand px-4 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50"
+              className="ml-2 inline-flex h-10 items-center gap-1.5 rounded-full border border-brand px-3 text-xs font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-50"
+              disabled={requestPayment.isPending}
+              onClick={() => requestPayment.mutate(entry.rider.id)}
+              title="Send push notification asking rider to pay"
+            >
+              <Bell className="h-3.5 w-3.5" />
+              Request
+            </button>
+            <button
+              className="ml-1 inline-flex h-10 items-center gap-1.5 rounded-full bg-brand px-3 text-xs font-semibold text-white transition hover:bg-brand/90 disabled:opacity-50"
               disabled={settle.isPending}
               onClick={() => settle.mutate(entry.rider.id)}
+              title="Mark as manually collected (cash in hand)"
             >
               <CheckCircle className="h-3.5 w-3.5" />
               Mark settled
@@ -181,8 +201,12 @@ function RestaurantPayablesTab() {
   });
 
   const settle = useMutation({
-    mutationFn: (restaurantId: string) => api.post(`/admin/cod/settle-restaurant/${restaurantId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cod-restaurant-payables"] }),
+    mutationFn: (restaurantId: string) => api.post(`/admin/cod/pay-restaurant/${restaurantId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cod-restaurant-payables"] });
+      toast.success("Restaurant marked as paid and notified");
+    },
+    onError: () => toast.error("Failed to mark as paid"),
   });
 
   if (isLoading) return <div className="h-48 animate-pulse rounded-xl bg-gray-100" />;

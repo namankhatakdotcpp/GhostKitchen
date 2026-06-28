@@ -6,6 +6,12 @@ import AppError from "../../utils/AppError.js";
 import { logger } from "../../utils/logger.js";
 import { updateRiderLocation, checkInRider, checkOutRider } from "./delivery.service.js";
 import { acceptOrderOffer, rejectOrderOffer } from "../orders/orders.service.js";
+import {
+  getRiderCODDues,
+  getRiderCODPaymentHistory,
+  initiateRiderCODPayment,
+  verifyRiderCODPayment,
+} from "./cod.service.js";
 
 const router = express.Router();
 
@@ -178,6 +184,54 @@ router.get("/earnings", async (req, res, next) => {
         total: Math.round(payoutFor(o)),
       })),
     });
+  } catch (e) { next(e); }
+});
+
+// ── COD Settlement ───────────────────────────────────────────────────────────
+
+// GET /api/delivery/cod/dues
+router.get("/cod/dues", async (req, res, next) => {
+  try {
+    const dues = await getRiderCODDues(req.user.userId);
+    res.json(dues);
+  } catch (e) { next(e); }
+});
+
+// GET /api/delivery/cod/payment-history
+router.get("/cod/payment-history", async (req, res, next) => {
+  try {
+    const history = await getRiderCODPaymentHistory(req.user.userId);
+    res.json({ payments: history });
+  } catch (e) { next(e); }
+});
+
+// POST /api/delivery/cod/initiate-payment
+// Creates a Cashfree session for the rider to pay their total pending dues.
+router.post("/cod/initiate-payment", async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, email: true, phone: true, name: true },
+    });
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const session = await initiateRiderCODPayment(req.user.userId, user);
+    res.json(session);
+  } catch (e) {
+    if (e.message === "No pending COD dues to pay") {
+      return res.status(400).json({ message: e.message });
+    }
+    next(e);
+  }
+});
+
+// POST /api/delivery/cod/verify-payment
+// Rider calls this after returning from Cashfree payment page.
+router.post("/cod/verify-payment", async (req, res, next) => {
+  try {
+    const { cfOrderId } = req.body;
+    if (!cfOrderId) return res.status(400).json({ message: "cfOrderId is required" });
+    const result = await verifyRiderCODPayment(cfOrderId);
+    res.json(result);
   } catch (e) { next(e); }
 });
 

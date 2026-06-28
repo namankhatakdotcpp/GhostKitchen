@@ -1,5 +1,6 @@
 import express from "express";
 import { authenticate, authorize, optionalAuthenticate } from "../../middlewares/auth.middleware.js";
+import { getRestaurantCODDues } from "../delivery/cod.service.js";
 import {
   listCities,
   listRestaurants,
@@ -49,5 +50,15 @@ router.post("/:id/menu", authenticate, authorize(["RESTAURANT", "ADMIN"]), addNe
 router.put("/:id/menu/:itemId", authenticate, authorize(["RESTAURANT", "ADMIN"]), updateExistingMenuItem);
 router.patch("/:id/menu/:itemId/toggle", authenticate, authorize(["RESTAURANT", "ADMIN"]), toggleMenuItemStatus);
 router.delete("/:id/menu/:itemId", authenticate, authorize(["RESTAURANT", "ADMIN"]), deleteExistingMenuItem);
+
+// GET /api/restaurants/mine/cod-dues — what the platform owes this restaurant
+router.get("/mine/cod-dues", authenticate, authorize(["RESTAURANT", "ADMIN"]), async (req, res, next) => {
+  try {
+    const restaurantId = req.user.restaurantId;
+    if (!restaurantId) return res.status(400).json({ message: "No restaurant associated with your account" });
+    const dues = await getRestaurantCODDues(restaurantId);
+    res.json(dues);
+  } catch (e) { next(e); }
+});
 
 export default router;

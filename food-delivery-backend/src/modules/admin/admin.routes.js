@@ -56,6 +56,8 @@ import {
   getCODRestaurantPayables,
   settleCODRider,
   settleCODRestaurant,
+  requestRiderCODSettlement,
+  notifyRestaurantCODPaid,
 } from "./admin.controller.js";
 
 const router = express.Router();
@@ -161,5 +163,7 @@ router.get("/cod/rider-dues", getCODRiderDues);
 router.get("/cod/restaurant-payables", getCODRestaurantPayables);
 router.post("/cod/settle-rider/:riderId", settleCODRider);
 router.post("/cod/settle-restaurant/:restaurantId", settleCODRestaurant);
+router.post("/cod/request-rider-payment/:riderId", requestRiderCODSettlement);
+router.post("/cod/pay-restaurant/:restaurantId", notifyRestaurantCODPaid);
 
 export default router;

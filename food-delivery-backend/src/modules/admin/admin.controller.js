@@ -552,3 +552,21 @@ export const settleCODRestaurant = async (req, res, next) => {
     res.json({ settled: count });
   } catch (error) { next(error); }
 };
+
+export const requestRiderCODSettlement = async (req, res, next) => {
+  try {
+    const { riderId } = req.params;
+    const result = await adminService.requestRiderCODSettlement(riderId);
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};
+
+export const notifyRestaurantCODPaid = async (req, res, next) => {
+  try {
+    const { restaurantId } = req.params;
+    const adminId = req.user.userId;
+    const result = await adminService.notifyRestaurantCODPaid(restaurantId, adminId);
+    await auditLog({ userId: adminId, action: "COD_RESTAURANT_PAID", entityType: "Restaurant", entityId: restaurantId, req });
+    res.json({ success: true, ...result });
+  } catch (error) { next(error); }
+};

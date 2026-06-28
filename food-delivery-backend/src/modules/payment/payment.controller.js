@@ -146,8 +146,22 @@ export const webhook = async (req, res, next) => {
       });
     }
 
-    // 3️⃣ PROCESS WEBHOOK
-    const success = await paymentService.handlePaymentWebhook(webhookData);
+    // 3️⃣ PROCESS WEBHOOK — route COD settlement payments separately
+    const data = webhookData.data ?? webhookData;
+    const cfOrderId = data.order?.order_id ?? data.order_id;
+    let success;
+    if (cfOrderId?.startsWith("codsettl-")) {
+      const { handleRiderCODPaymentSuccess } = await import("../delivery/cod.service.js");
+      const paymentStatus = data.payment?.payment_status ?? webhookData.payment?.payment_status;
+      if (paymentStatus === "SUCCESS") {
+        const cfPaymentId = data.payment?.cf_payment_id ?? webhookData.cf_payment_id;
+        const amount = data.order?.order_amount ?? data.order_amount;
+        await handleRiderCODPaymentSuccess(cfOrderId, cfPaymentId, amount);
+      }
+      success = true;
+    } else {
+      success = await paymentService.handlePaymentWebhook(webhookData);
+    }
 
     // Always return 200 success (webhook was received and processed)
     return res.status(200).json({

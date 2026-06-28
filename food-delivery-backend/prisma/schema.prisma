@@ -98,6 +98,7 @@ model User {
   pushSubscriptions PushSubscription[]
   reviews           Review[]
   codSettlements    CODSettlement[]    @relation("RiderCODSettlements")
+  riderCODPayments  RiderCODPayment[]  @relation("RiderCODPayments")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -399,6 +400,21 @@ model PaymentWebhook {
   createdAt DateTime @default(now())
 
   @@index([eventId])
+}
+
+model RiderCODPayment {
+  id           String    @id @default(cuid())
+  riderId      String
+  cfOrderId    String    @unique
+  cfPaymentId  String?
+  amountPaise  Int
+  status       String    @default("PENDING")
+  settledCount Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  rider        User      @relation("RiderCODPayments", fields: [riderId], references: [id])
+
+  @@index([riderId, status])
 }
 
 model Refund {

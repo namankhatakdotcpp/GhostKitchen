@@ -4,6 +4,8 @@ import AppError from "../../utils/AppError.js";
 import { emitOrderStatusUpdated } from "../../socket/socket.server.js";
 import { computeETA } from "../../utils/eta.js";
 import { getRiderStatus } from "../../utils/riderStatus.js";
+import { sendPushToUser } from "../push/push.service.js";
+import { createNotification } from "../notification/notification.service.js";
 
 // Order statuses that represent an in-flight delivery a rider is actively working.
 const ACTIVE_DELIVERY_STATUSES = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
@@ -1065,4 +1067,85 @@ export const getCODSummary = async () => {
       totalGSTCollected: allTime._sum.gstCollected ?? 0,
     },
   };
+};
+
+/**
+ * Send a push + in-app notification to a rider asking them to pay their COD dues.
+ */
+export const requestRiderCODSettlement = async (riderId) => {
+  const [rider, dues] = await Promise.all([
+    prisma.user.findUnique({ where: { id: riderId }, select: { id: true, name: true } }),
+    prisma.cODSettlement.aggregate({
+      where: { riderId, riderSettledAt: null },
+      _sum: { riderCODDue: true },
+      _count: { id: true },
+    }),
+  ]);
+  if (!rider) throw new AppError("Rider not found", 404);
+
+  const totalDue = dues._sum.riderCODDue ?? 0;
+  const orderCount = dues._count.id;
+  if (totalDue <= 0) throw new AppError("No pending dues for this rider", 400);
+
+  const rupees = Math.round(totalDue / 100);
+  const body = `You have ₹${rupees} in COD dues from ${orderCount} order${orderCount !== 1 ? "s" : ""}. Please pay via the app.`;
+
+  await createNotification({
+    userId: riderId,
+    title: "⚠️ COD Settlement Due",
+    body,
+    type: "COD_SETTLEMENT",
+    entityId: riderId,
+  });
+  sendPushToUser(riderId, {
+    title: "⚠️ COD Settlement Due",
+    body,
+    url: "/delivery/cod-dues",
+  }).catch(() => {});
+
+  return { riderId, totalDuePaise: totalDue, orderCount };
+};
+
+/**
+ * Send a push + in-app notification to a restaurant owner that platform has
+ * released their COD payable.
+ */
+export const notifyRestaurantCODPaid = async (restaurantId, adminId) => {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { id: true, name: true, ownerId: true },
+  });
+  if (!restaurant) throw new AppError("Restaurant not found", 404);
+
+  const dues = await prisma.cODSettlement.aggregate({
+    where: { restaurantId, restaurantPaidAt: null },
+    _sum: { restaurantPayable: true },
+  });
+  const totalPaise = dues._sum.restaurantPayable ?? 0;
+  if (totalPaise <= 0) throw new AppError("No pending payable for this restaurant", 400);
+
+  const rupees = Math.round(totalPaise / 100);
+
+  // Mark as paid
+  await prisma.cODSettlement.updateMany({
+    where: { restaurantId, restaurantPaidAt: null },
+    data: { restaurantPaidAt: new Date(), restaurantPaidBy: adminId },
+  });
+
+  // Notify the restaurant owner
+  const body = `₹${rupees} has been transferred to your account for COD orders.`;
+  await createNotification({
+    userId: restaurant.ownerId,
+    title: "✅ COD Payment Released",
+    body,
+    type: "COD_SETTLEMENT",
+    entityId: restaurantId,
+  });
+  sendPushToUser(restaurant.ownerId, {
+    title: "✅ COD Payment Released",
+    body,
+    url: "/shop/cod-dues",
+  }).catch(() => {});
+
+  return { restaurantId, totalPaisePaid: totalPaise };
 };
