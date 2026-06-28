@@ -343,6 +343,8 @@ export async function updateMyRestaurant(userId, restaurantId, data) {
   if (data.isOpen !== undefined) updateData.isOpen = data.isOpen;
   if (data.lat !== undefined) updateData.lat = data.lat;
   if (data.lng !== undefined) updateData.lng = data.lng;
+  if (data.openingTime !== undefined) updateData.openingTime = data.openingTime || null;
+  if (data.closingTime !== undefined) updateData.closingTime = data.closingTime || null;
 
   if (data.city || data.addressLine || data.deliveryFee || data.deliveryTime || data.minOrder) {
     const current = restaurant.address || {};

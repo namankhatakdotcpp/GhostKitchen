@@ -419,12 +419,14 @@ function serializeRestaurant(r) {
     id: r.id, name: r.name, slug: r.slug, imageUrl: r.imageUrl,
     cuisines: r.cuisines, rating: r.rating, reviewCount: r.reviewCount,
     isOpen: r.isOpen, statusNote: r.statusNote, address: r.address,
+    openingTime: r.openingTime ?? null, closingTime: r.closingTime ?? null,
   };
 }
 
 const RESTAURANT_SELECT = {
   id: true, name: true, slug: true, imageUrl: true, cuisines: true,
   rating: true, reviewCount: true, isOpen: true, statusNote: true, address: true,
+  openingTime: true, closingTime: true,
 };
 
 // GET /restaurants/recommendations — personalised for the authenticated user

@@ -70,7 +70,7 @@ export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
   if (!order) throw new AppError("Order not found", 404);
 
   const terminalStatuses = ["DELIVERED", "CANCELLED"];
-  const etaStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+  const etaStatuses = ["CONFIRMED", "OUT_FOR_DELIVERY"];
   const estimatedDelivery = etaStatuses.includes(status) && !terminalStatuses.includes(order.status)
     ? computeETA(order.restaurant, order.agent, status, order.deliveryAddress)
     : order.estimatedDelivery;

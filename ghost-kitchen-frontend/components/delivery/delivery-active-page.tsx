@@ -11,27 +11,23 @@ import { useDeliveryStore } from "@/store/deliveryStore";
 import { useUserStore } from "@/store/userStore";
 import { useRiderPosition } from "@/hooks/useRiderLocationTracking";
 
-// Open a Google Maps directions URL. Falls back gracefully if no API key.
-function mapsLink(originLat?: number, originLng?: number, destLat?: number, destLng?: number, destAddress?: string) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
-  if (apiKey && destLat && destLng && originLat && originLng) {
-    return `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${originLat},${originLng}&destination=${destLat},${destLng}&mode=driving`;
-  }
-  // Fallback deep link
+function osmEmbedUrl(lat: number, lng: number): string {
+  const delta = 0.008;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - delta},${lat - delta},${lng + delta},${lat + delta}&layer=mapnik&marker=${lat},${lng}`;
+}
+
+function mapsOpenUrl(destLat?: number, destLng?: number, destAddress?: string) {
   const dest = destLat && destLng ? `${destLat},${destLng}` : encodeURIComponent(destAddress ?? "");
   return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
 }
 
-function MapCard({ title, address, destLat, destLng, originLat, originLng }: {
+function MapCard({ title, address, destLat, destLng }: {
   title: string; address: string;
   destLat?: number; destLng?: number;
   originLat?: number; originLng?: number;
 }) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
-  const embedUrl = apiKey && destLat && destLng && originLat && originLng
-    ? `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${originLat},${originLng}&destination=${destLat},${destLng}&mode=driving`
-    : null;
-  const openUrl = mapsLink(originLat, originLng, destLat, destLng, address);
+  const embedUrl = destLat && destLng ? osmEmbedUrl(destLat, destLng) : null;
+  const openUrl = mapsOpenUrl(destLat, destLng, address);
 
   return (
     <div className="rounded-[24px] border border-border bg-white p-5 shadow-[0_18px_30px_rgba(28,28,28,0.05)]">
@@ -39,13 +35,13 @@ function MapCard({ title, address, destLat, destLng, originLat, originLng }: {
       <p className="mt-3 text-xl font-bold text-text-primary">{address}</p>
       {embedUrl ? (
         <div className="mt-4 h-48 overflow-hidden rounded-[18px] border border-border">
-          <iframe src={embedUrl} className="h-full w-full" style={{ border: 0 }} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+          <iframe src={embedUrl} className="h-full w-full" style={{ border: 0 }} loading="lazy" />
         </div>
       ) : (
         <div className="mt-4 flex h-48 items-center justify-center rounded-[18px] border border-dashed border-border bg-[#FAFAFA]">
           <div className="text-center">
             <MapPin className="mx-auto h-6 w-6 text-brand" />
-            <p className="mt-2 text-sm text-text-secondary">Map preview not available</p>
+            <p className="mt-2 text-sm text-text-secondary">No coordinates — open in Maps</p>
           </div>
         </div>
       )}

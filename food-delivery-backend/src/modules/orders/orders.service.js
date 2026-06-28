@@ -126,11 +126,25 @@ export const createOrder = async (payload, customerId) => {
   // 0. Verify restaurant exists and is accepting orders
   const restaurant = await prisma.restaurant.findUnique({
     where: { id: payload.restaurantId },
-    select: { isOpen: true, suspended: true, isApproved: true, city: true, address: true, lat: true, lng: true },
+    select: { isOpen: true, suspended: true, isApproved: true, city: true, address: true, lat: true, lng: true, openingTime: true, closingTime: true },
   });
   if (!restaurant) throw new Error("Restaurant not found");
   if (restaurant.suspended || !restaurant.isApproved) throw new Error("Restaurant not found");
   if (!restaurant.isOpen) throw new Error("Restaurant is not accepting orders right now");
+  if (restaurant.openingTime && restaurant.closingTime) {
+    const now = new Date();
+    const [oh, om] = restaurant.openingTime.split(":").map(Number);
+    const [ch, cm] = restaurant.closingTime.split(":").map(Number);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const openMins = oh * 60 + om;
+    const closeMins = ch * 60 + cm;
+    const isWithinHours = closeMins > openMins
+      ? nowMins >= openMins && nowMins < closeMins
+      : nowMins >= openMins || nowMins < closeMins; // overnight window
+    if (!isWithinHours) {
+      throw new Error(`Restaurant is currently closed. Opens at ${restaurant.openingTime}`);
+    }
+  }
   assertDeliveryCityMatches(restaurant, payload.deliveryAddress);
 
   // 1. Extract menuItemIds from request

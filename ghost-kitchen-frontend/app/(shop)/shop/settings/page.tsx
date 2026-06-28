@@ -16,6 +16,8 @@ interface RestaurantSettings {
   imageUrl: string;
   isOpen: boolean;
   statusNote: string | null;
+  openingTime: string | null;
+  closingTime: string | null;
   deliveryRadius: number;
   address: {
     line1?: string;
@@ -55,6 +57,8 @@ export default function ShopSettingsPage() {
   const [deliveryFee, setDeliveryFee] = useState(30);
   const [minOrder, setMinOrder] = useState(99);
   const [deliveryTime, setDeliveryTime] = useState(30);
+  const [openingTime, setOpeningTime] = useState("");
+  const [closingTime, setClosingTime] = useState("");
 
   useEffect(() => {
     api.get("/restaurants/mine")
@@ -72,6 +76,8 @@ export default function ShopSettingsPage() {
         setDeliveryFee(toRupees(addr.deliveryFee ?? 3000));
         setMinOrder(toRupees(addr.minOrder ?? 9900));
         setDeliveryTime(addr.deliveryTime ?? 30);
+        setOpeningTime(rest.openingTime ?? "");
+        setClosingTime(rest.closingTime ?? "");
       })
       .catch(() => toast.error("Could not load restaurant settings"))
       .finally(() => setLoading(false));
@@ -92,6 +98,8 @@ export default function ShopSettingsPage() {
         deliveryFee: toPaise(deliveryFee),
         minOrder: toPaise(minOrder),
         deliveryTime,
+        openingTime: openingTime || null,
+        closingTime: closingTime || null,
       });
       toast.success("Settings saved!");
     } catch (err: any) {
@@ -201,6 +209,26 @@ export default function ShopSettingsPage() {
         <div>
           <label className="block text-sm font-semibold mb-1">Delivery radius: {deliveryRadius} km</label>
           <input type="range" min={1} max={20} value={deliveryRadius} onChange={e => setDeliveryRadius(+e.target.value)} className="w-full accent-[#FF5200]" />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold mb-1">Operating hours <span className="font-normal text-xs text-[#93959F]">(leave blank to stay open 24/7)</span></label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-[#686B78] mb-1">Opens at</label>
+              <input type="time" value={openingTime} onChange={e => setOpeningTime(e.target.value)}
+                className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-[#686B78] mb-1">Closes at</label>
+              <input type="time" value={closingTime} onChange={e => setClosingTime(e.target.value)}
+                className="w-full rounded-xl border border-[#E8E8E8] px-4 py-2.5 text-sm focus:border-[#FF5200] focus:outline-none" />
+            </div>
+          </div>
+          {openingTime && closingTime && (
+            <p className="mt-1.5 text-xs text-[#686B78]">
+              Orders blocked outside {openingTime}–{closingTime}. Overnight window supported (e.g. 22:00–02:00).
+            </p>
+          )}
         </div>
       </section>
 

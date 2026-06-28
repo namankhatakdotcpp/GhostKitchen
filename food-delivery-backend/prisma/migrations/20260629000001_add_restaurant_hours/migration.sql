@@ -1,0 +1,3 @@
+ALTER TABLE "Restaurant"
+  ADD COLUMN IF NOT EXISTS "openingTime" TEXT,
+  ADD COLUMN IF NOT EXISTS "closingTime" TEXT;

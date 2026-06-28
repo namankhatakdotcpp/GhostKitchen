@@ -182,6 +182,8 @@ model Restaurant {
   lng            Float?
   isOpen         Boolean    @default(true)
   statusNote     String?
+  openingTime    String?
+  closingTime    String?
   suspended      Boolean    @default(false)
   isApproved     Boolean    @default(true)
   deliveryRadius Float      @default(5)

@@ -252,7 +252,7 @@ export const updateOrderStatusHTTP = async (req, res) => {
     }
 
     // Compute ETA for non-terminal status transitions
-    const etaStatuses = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
+    const etaStatuses = ["CONFIRMED", "OUT_FOR_DELIVERY"];
     let estimatedDelivery = currentOrder.estimatedDelivery ?? null;
     if (etaStatuses.includes(newStatus)) {
       const restaurant = await prisma.restaurant.findUnique({

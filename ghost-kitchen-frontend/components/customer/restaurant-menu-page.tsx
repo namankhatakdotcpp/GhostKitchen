@@ -300,6 +300,12 @@ export function RestaurantMenuPage({
               <p className="text-[12px] font-semibold text-yellow-700">{restaurant.statusNote}</p>
             </div>
           )}
+          {restaurant?.openingTime && restaurant?.closingTime && (
+            <div className="mt-2 flex items-center gap-1.5 text-[12px] text-text-secondary">
+              <span>🕐</span>
+              <span>Open {restaurant.openingTime} – {restaurant.closingTime}</span>
+            </div>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px] text-text-secondary">
             <span className="inline-flex items-center gap-1 font-semibold text-text-primary">
               <StarIcon />

@@ -12,7 +12,7 @@ function haversine(lat1, lng1, lat2, lng2) {
 }
 
 const DEFAULT_PREP_MINS = 20;
-const DEFAULT_DELIVERY_MINS = 15;
+const DEFAULT_DELIVERY_MINS = 30;
 const AVG_SPEED_KMH = 25;
 
 /**
@@ -27,11 +27,12 @@ const AVG_SPEED_KMH = 25;
 export function computeETA(restaurant, agent, status, deliveryAddress) {
   const now = Date.now();
   const addr = restaurant?.address ?? {};
-  const prepMins = Number(addr.prepTime ?? addr.deliveryTime ?? DEFAULT_PREP_MINS);
+  // prepTime = kitchen prep window; deliveryTime = rider transit window (from address settings)
+  const prepMins = Number(addr.prepTime ?? DEFAULT_PREP_MINS);
+  const deliveryMins = Number(addr.deliveryTime ?? DEFAULT_DELIVERY_MINS);
 
-  if (status === "CONFIRMED" || status === "PREPARING") {
-    // ETA = now + prep time + default delivery window
-    return new Date(now + (prepMins + DEFAULT_DELIVERY_MINS) * 60_000);
+  if (status === "CONFIRMED") {
+    return new Date(now + (prepMins + deliveryMins) * 60_000);
   }
 
   if (status === "OUT_FOR_DELIVERY" && agent) {

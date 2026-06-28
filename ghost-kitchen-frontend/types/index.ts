@@ -33,6 +33,9 @@ export interface Restaurant {
   imageUrl: string;
   isVeg: boolean;
   isOpen: boolean;
+  statusNote?: string | null;
+  openingTime?: string | null;
+  closingTime?: string | null;
   address: Address;
 }
 
