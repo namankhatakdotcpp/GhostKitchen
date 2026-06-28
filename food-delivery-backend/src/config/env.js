@@ -55,8 +55,9 @@ export const env = {
   EMAIL_FROM: process.env.EMAIL_FROM || "GhostKitchen <noreply@ghostkitchen.in>",
   LOG_LEVEL: process.env.LOG_LEVEL || "info",
   // Cloudinary (optional) — image uploads for menu items and restaurant photos.
-  // Without these, the /api/upload/image endpoint returns 503 and the UI falls
-  // back to URL input. Safe to leave unset in dev/test environments.
+  // Accepts either CLOUDINARY_URL (cloudinary://key:secret@cloud_name) or the
+  // three individual vars. Without any of these the upload endpoint returns 503.
+  CLOUDINARY_URL: process.env.CLOUDINARY_URL || null,
   CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || null,
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || null,
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || null,

@@ -4,16 +4,22 @@ import { env } from "../../config/env.js";
 
 // Cloudinary is optional — if credentials are missing, the upload endpoint
 // returns a 503 so callers know to fall back gracefully (e.g. keep URL input).
+// Supports CLOUDINARY_URL (cloudinary://key:secret@cloud_name) or the three
+// individual vars — whichever is present on the host.
 function isCloudinaryConfigured() {
-  return !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
+  return !!(env.CLOUDINARY_URL || (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET));
 }
 
 if (isCloudinaryConfigured()) {
-  cloudinary.config({
-    cloud_name: env.CLOUDINARY_CLOUD_NAME,
-    api_key: env.CLOUDINARY_API_KEY,
-    api_secret: env.CLOUDINARY_API_SECRET,
-  });
+  if (env.CLOUDINARY_URL) {
+    cloudinary.config({ cloudinary_url: env.CLOUDINARY_URL });
+  } else {
+    cloudinary.config({
+      cloud_name: env.CLOUDINARY_CLOUD_NAME,
+      api_key: env.CLOUDINARY_API_KEY,
+      api_secret: env.CLOUDINARY_API_SECRET,
+    });
+  }
 }
 
 /**

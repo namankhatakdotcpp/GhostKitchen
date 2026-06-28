@@ -11,7 +11,7 @@ const LOCK_TTL_SEC = 3500; // slightly under the 1-hour schedule
 const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000; // only delete assets older than 24h
 
 function isCloudinaryConfigured() {
-  return !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET);
+  return !!(env.CLOUDINARY_URL || (env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET));
 }
 
 /**
@@ -57,11 +57,15 @@ async function listCloudinaryResources(prefix) {
 export const runCloudinaryCleanup = async () => {
   if (!isCloudinaryConfigured()) return;
 
-  cloudinary.config({
-    cloud_name: env.CLOUDINARY_CLOUD_NAME,
-    api_key: env.CLOUDINARY_API_KEY,
-    api_secret: env.CLOUDINARY_API_SECRET,
-  });
+  if (env.CLOUDINARY_URL) {
+    cloudinary.config({ cloudinary_url: env.CLOUDINARY_URL });
+  } else {
+    cloudinary.config({
+      cloud_name: env.CLOUDINARY_CLOUD_NAME,
+      api_key: env.CLOUDINARY_API_KEY,
+      api_secret: env.CLOUDINARY_API_SECRET,
+    });
+  }
 
   const liveUrls = await collectLiveUrls();
   const cutoff = Date.now() - ORPHAN_AGE_MS;
