@@ -64,6 +64,7 @@ function serializeOrder(order) {
     restaurantPayout: numOrNull(order.restaurantPayout),
     riderPayout: numOrNull(order.riderPayout),
     adminRevenue: numOrNull(order.adminRevenue),
+    donationAmountPaise: Number(order.donationAmountPaise ?? 0),
     estimatedDelivery: order.estimatedDelivery?.toISOString() ?? null,
     // Lifecycle timestamps — used by the customer tracking timeline to show
     // accurate per-stage times instead of the current time.
@@ -269,6 +270,16 @@ export const createOrder = async (payload, customerId) => {
     }
     const finalTotal = Math.max(afterCoupon - pointsDiscount - giftCardDiscount, 0);
 
+    // Donation — pass-through amount; never enters the pricing split.
+    // Only the three preset paise values are accepted; anything else is silently
+    // dropped to 0 so a malicious payload cannot inflate the stored total with
+    // an arbitrary number while bypassing the payout calculations above.
+    const ALLOWED_DONATION_PAISE = [200, 500, 1000];
+    const donationAmountPaise = ALLOWED_DONATION_PAISE.includes(Number(payload.donationAmountPaise))
+      ? Number(payload.donationAmountPaise)
+      : 0;
+    const orderTotal = finalTotal + donationAmountPaise;
+
     // Create order with server-calculated values only
     const created = await tx.order.create({
       data: {
@@ -281,7 +292,8 @@ export const createOrder = async (payload, customerId) => {
         subtotal,
         deliveryFee: pricing.deliveryFee,
         discount: discount + pointsDiscount + giftCardDiscount,
-        total: finalTotal,
+        total: orderTotal,
+        donationAmountPaise,
         deliveryAddress: payload.deliveryAddress,
         itemTotal: pricing.itemTotal,
         restaurantPackaging: pricing.restaurantPackaging,

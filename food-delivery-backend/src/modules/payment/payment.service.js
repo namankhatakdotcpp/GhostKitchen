@@ -87,6 +87,7 @@ export const createOrderFromPayment = async (payment) => {
           restaurantPayout: pricingFields.restaurantPayout ?? null,
           riderPayout: pricingFields.riderPayout ?? null,
           adminRevenue: pricingFields.adminRevenue ?? null,
+          donationAmountPaise: pricingFields.donationAmountPaise ?? 0,
           pricingSnapshot: pricingFields.pricingSnapshot ?? null,
         },
         include: { restaurant: true },

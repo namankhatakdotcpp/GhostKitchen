@@ -226,7 +226,9 @@ export const verifyPayment = async (req, res, next) => {
  */
 export const createPaymentOrder = async (req, res, next) => {
   try {
-    const { restaurantId, items, deliveryAddress, couponCode, pointsToRedeem: rawPoints } = req.body;
+    const { restaurantId, items, deliveryAddress, couponCode, pointsToRedeem: rawPoints, donationAmountPaise: rawDonation } = req.body;
+    const ALLOWED_DONATION_PAISE = [200, 500, 1000];
+    const donationAmountPaise = ALLOWED_DONATION_PAISE.includes(Number(rawDonation)) ? Number(rawDonation) : 0;
     const customerId = req.user.userId;
 
     if (!restaurantId || !items?.length || !deliveryAddress) {
@@ -256,7 +258,11 @@ export const createPaymentOrder = async (req, res, next) => {
       pointsRedeemed = preview.points;
       loyaltyDiscount = preview.discountPaise;
     }
-    const chargeTotal = Math.max(100, total - loyaltyDiscount); // Cashfree minimum ₹1
+    // Donation is added on top of finalTotal, after all discounts. It is a
+    // pass-through amount: never enters computeOrderPricing(), never touches
+    // restaurantPayout / riderPayout / adminRevenue (which are computed from
+    // splitPool = deliveryFee + platformFee only, inside pricing.js).
+    const chargeTotal = Math.max(100, total - loyaltyDiscount) + donationAmountPaise;
 
     const cfOrderId = `GK-${uuid().slice(0, 8).toUpperCase()}`;
 
@@ -302,7 +308,7 @@ export const createPaymentOrder = async (req, res, next) => {
         status: "PENDING",
         // Full priced snapshot — order creation after payment must use exactly
         // these amounts, never a recalculation against a menu that may have changed.
-        itemsSnapshot: JSON.stringify(pricing),
+        itemsSnapshot: JSON.stringify({ ...pricing, donationAmountPaise }),
         deliveryAddress: JSON.stringify(deliveryAddress),
         couponCode: couponCode || null,
         pointsToRedeem: pointsRedeemed,
@@ -314,7 +320,7 @@ export const createPaymentOrder = async (req, res, next) => {
       paymentSessionId,
       orderAmount: chargeTotal / 100,
       deliveryFee,
-      pricing: { ...pricing, loyaltyDiscount, pointsRedeemed, chargeTotal },
+      pricing: { ...pricing, loyaltyDiscount, pointsRedeemed, chargeTotal, donationAmountPaise },
     });
   } catch (error) {
     if (

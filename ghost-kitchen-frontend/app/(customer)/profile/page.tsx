@@ -5,9 +5,11 @@ import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
 import Link from "next/link";
-import { Gift, HelpCircle, MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone, Bell, BellOff, Users } from "lucide-react";
+import { Gift, Heart, HelpCircle, MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone, Bell, BellOff, Users } from "lucide-react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { WalletCard } from "@/components/customer/WalletCard";
+import { toRupees } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface Address {
@@ -40,6 +42,33 @@ const EMPTY_FORM: AddressFormState = {
   pincode: "",
   isDefault: false,
 };
+
+function DonationStat() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["donation-total"],
+    queryFn: () => api.get("/orders/donation-total").then((r) => r.data),
+    staleTime: 60_000,
+  });
+  const totalPaise: number = data?.totalPaise ?? 0;
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+          <Heart className="h-4 w-4 text-red-500" /> Lifetime donations
+        </h2>
+        <div className="text-right">
+          <p className="text-2xl font-bold text-gray-900 leading-none">
+            {isLoading ? "…" : `₹${toRupees(totalPaise).toFixed(0)}`}
+          </p>
+          <p className="text-xs text-gray-500">contributed</p>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mt-3">
+        {totalPaise === 0 ? "Add a donation at checkout to feed a child in need." : "Thank you for your generosity. 🤝"}
+      </p>
+    </div>
+  );
+}
 
 function ProfilePageContent() {
   const { user } = useAuthStore();
@@ -230,6 +259,9 @@ function ProfilePageContent() {
 
       {/* Wallet / loyalty points */}
       <WalletCard />
+
+      {/* Lifetime donations */}
+      <DonationStat />
 
       {/* Push notifications */}
       {permission !== "unsupported" && (

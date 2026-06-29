@@ -77,6 +77,9 @@ function CheckoutPageContent() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false)
   const [scheduledFor, setScheduledFor] = useState('')
 
+  const [donationEnabled, setDonationEnabled] = useState(false)
+  const [donationAmountPaise, setDonationAmountPaise] = useState(500) // ₹5 default preset, only sent when enabled
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ONLINE')
   // Loyalty points — redemption is wired up for the COD path only this
   // round (online payments go through a separate snapshot-based
@@ -233,7 +236,8 @@ function CheckoutPageContent() {
     ? toRupees(pricing.gstOnItemTotal + pricing.gstOnDeliveryFee + pricing.gstOnPlatformFee)
     : null
   const discountRupees = pricing ? toRupees(pricing.discount) : toRupees(appliedCoupon?.discountAmount ?? 0)
-  const totalRupees = pricing ? toRupees(pricing.total) : null
+  const activeDonationPaise = donationEnabled ? donationAmountPaise : 0
+  const totalRupees = pricing ? toRupees(pricing.total + activeDonationPaise) : null
 
   async function handlePlaceOrderCOD(deliveryAddress: { line1: string; city: string }) {
     const { data } = await api.post('/orders', {
@@ -244,6 +248,7 @@ function CheckoutPageContent() {
       giftCardCode: giftCardCode || undefined,
       pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
       scheduledFor: scheduleEnabled && scheduledFor ? scheduledFor : undefined,
+      donationAmountPaise: donationEnabled ? donationAmountPaise : 0,
     })
     clearCart()
     router.push(`/order/${data.order.id}/track`)
@@ -258,6 +263,7 @@ function CheckoutPageContent() {
       giftCardCode: giftCardCode || undefined,
       pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
       scheduledFor: scheduleEnabled && scheduledFor ? scheduledFor : undefined,
+      donationAmountPaise: donationEnabled ? donationAmountPaise : 0,
     })
 
     if (data.pricing) setPricing(data.pricing)
@@ -391,6 +397,12 @@ function CheckoutPageContent() {
             <div className="flex justify-between text-green-600 font-medium">
               <span>Discount ({appliedCoupon?.code})</span>
               <span>-₹{discountRupees.toFixed(2)}</span>
+            </div>
+          )}
+          {donationEnabled && activeDonationPaise > 0 && (
+            <div className="flex justify-between text-orange-600 font-medium">
+              <span>Donation 🤝</span>
+              <span>+₹{toRupees(activeDonationPaise).toFixed(0)}</span>
             </div>
           )}
           <div className="flex justify-between pt-2 font-bold text-gray-900 border-t border-gray-100 text-base">
@@ -540,6 +552,38 @@ function CheckoutPageContent() {
           </div>
         )}
         {giftCardError && <p className="text-xs text-red-600 mt-1">{giftCardError}</p>}
+      </div>
+
+      {/* Optional donation */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Donate to Feeding India 🤝</p>
+            <p className="text-xs text-gray-500 mt-0.5">Feed a child in need — 100% goes to the cause</p>
+          </div>
+          <button
+            onClick={() => setDonationEnabled(!donationEnabled)}
+            className={`relative h-6 w-11 rounded-full transition ${donationEnabled ? "bg-brand" : "bg-gray-200"}`}
+            type="button"
+            aria-label={donationEnabled ? 'Remove donation' : 'Add donation'}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${donationEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+        {donationEnabled && (
+          <div className="flex gap-2 mt-3">
+            {([200, 500, 1000] as const).map((paise) => (
+              <button
+                key={paise}
+                type="button"
+                onClick={() => setDonationAmountPaise(paise)}
+                className={`flex-1 rounded-lg border py-2 text-sm font-semibold transition ${donationAmountPaise === paise ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+              >
+                ₹{paise / 100}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Schedule for later */}

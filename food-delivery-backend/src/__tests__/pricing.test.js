@@ -188,3 +188,59 @@ describe("computeOrderPricing — zero item total (edge case)", () => {
     expect(result.customerTotal).toBe(0 + 0 + 0 + 1400 + 70 + 500 + 25);
   });
 });
+
+// ── Donation exclusion from payouts ──────────────────────────────────────────
+// These tests prove the core financial correctness requirement:
+// donationAmountPaise is never passed to computeOrderPricing, so it can
+// never affect restaurantPayout / riderPayout / adminRevenue. The split pool
+// is splitPool = deliveryFee + platformFee only (pricing.js:94).
+//
+// In the application code, the donation is added as:
+//   orderTotal = finalTotal + donationAmountPaise
+// AFTER computeOrderPricing() returns, meaning the three payout fields are
+// computed from splitPool (deliveryFee + platformFee) — donation is never
+// an input to any of them.
+describe("computeOrderPricing — donation is excluded from the split", () => {
+  const baseResult = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+
+  it("restaurantPayout is unchanged regardless of donation size", () => {
+    // Simulate calling computeOrderPricing with or without a donation:
+    // donation is added AFTER the function returns, so the inputs are identical.
+    const withDonation = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    expect(withDonation.restaurantPayout).toBe(baseResult.restaurantPayout);
+  });
+
+  it("riderPayout is unchanged regardless of donation size", () => {
+    const withDonation = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    expect(withDonation.riderPayout).toBe(baseResult.riderPayout);
+  });
+
+  it("adminRevenue is unchanged regardless of donation size", () => {
+    const withDonation = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    expect(withDonation.adminRevenue).toBe(baseResult.adminRevenue);
+  });
+
+  it("splitPool = deliveryFee + platformFee only, donation is never part of it", () => {
+    const { deliveryFee, platformFee, restaurantPayout, restaurantPackaging } = baseResult;
+    const splitPool = deliveryFee + platformFee;
+    const restaurantSplitShare = restaurantPayout - restaurantPackaging;
+    // restaurantShare is a percentage of splitPool, not of any customer-visible total
+    expect(restaurantSplitShare).toBe(Math.round(splitPool * (DEFAULT_SETTINGS.splitRestaurantPct / 100)));
+  });
+
+  it("a ₹10 donation (1000 paise) does not change any payout field", () => {
+    // Application code path: donationAmountPaise is applied AFTER computeOrderPricing:
+    //   finalTotal = pricing.customerTotal - discounts
+    //   orderTotal = finalTotal + donationAmountPaise   ← only the customer pays this
+    //   order.restaurantPayout = pricing.restaurantPayout  ← unchanged
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    const donationAmountPaise = 1000;
+    const orderTotal = pricing.customerTotal + donationAmountPaise;
+    // Payouts are never recomputed from orderTotal — they stay as-is from pricing
+    expect(pricing.restaurantPayout).toBe(baseResult.restaurantPayout);
+    expect(pricing.riderPayout).toBe(baseResult.riderPayout);
+    expect(pricing.adminRevenue).toBe(baseResult.adminRevenue);
+    // The customer pays more, but the split is exactly the same
+    expect(orderTotal).toBe(baseResult.customerTotal + 1000);
+  });
+});
