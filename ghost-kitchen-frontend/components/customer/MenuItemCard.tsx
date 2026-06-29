@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
+import { useLangStore } from "@/store/langStore";
 import { AddonModal, type AddonSelection } from "@/components/customer/AddonModal";
 import type { MenuItem } from "@/types";
 
@@ -51,6 +52,7 @@ export function MenuItemCard({
   const router = useRouter();
   const { items, addToCart, updateQuantity } = useCartStore();
   const { isAuthenticated } = useAuthStore();
+  const { t } = useLangStore();
   const [addonOpen, setAddonOpen] = useState(false);
 
   const handleAddToCart = (menuItemId: string) => {
@@ -100,7 +102,7 @@ export function MenuItemCard({
         <FoodTypeIcon isVeg={isVeg} />
         {isBestseller ? (
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand">
-            Bestseller
+            {t("restaurant.bestseller")}
           </div>
         ) : null}
         <h3 className="mt-2 text-[15px] font-medium text-text-primary">{name}</h3>
@@ -109,7 +111,7 @@ export function MenuItemCard({
         </p>
         {customizable ? (
           <p className="mt-2 text-xs font-medium text-text-muted">
-            Customizable
+            {t("restaurant.customizable")}
           </p>
         ) : null}
         <div className="mt-3 text-[15px] font-bold text-text-primary">₹{(price / 100).toFixed(0)}</div>
@@ -167,7 +169,7 @@ export function MenuItemCard({
               transition={{ duration: 0.18, ease: "easeOut" }}
               type="button"
             >
-              ADD
+              {t("restaurant.add")}
             </motion.button>
           )}
         </AnimatePresence>

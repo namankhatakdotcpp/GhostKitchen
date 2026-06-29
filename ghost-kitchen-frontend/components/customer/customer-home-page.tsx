@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/store/userStore";
 import { useAuthStore } from "@/store/authStore";
+import { useLangStore } from "@/store/langStore";
 import type { FilterOption } from "@/types";
 
 function SearchIcon() {
@@ -60,6 +61,7 @@ function PinIcon() {
 export function CustomerHomePage() {
   const { location, setLocation, openLocationModal, clearLocation } = useUserStore();
   const { user } = useAuthStore();
+  const { t } = useLangStore();
   const [category, setCategory] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [bannerInput, setBannerInput] = useState("");
@@ -261,7 +263,7 @@ export function CustomerHomePage() {
             <input
               className="w-full border-0 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search for restaurants or dishes..."
+              placeholder={t("home.search_placeholder")}
               value={searchTerm}
             />
             <button
@@ -376,8 +378,8 @@ export function CustomerHomePage() {
       {user && recentRestaurants.length > 0 && (
         <section className="mt-7">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-text-primary">Order Again</h2>
-            <Link href="/orders" className="text-sm font-semibold text-brand hover:underline">See all</Link>
+            <h2 className="text-xl font-bold text-text-primary">{t("home.order_again")}</h2>
+            <Link href="/orders" className="text-sm font-semibold text-brand hover:underline">{t("home.see_all")}</Link>
           </div>
           <div className="scrollbar-none flex gap-3 overflow-x-auto pb-2">
             {recentRestaurants.map((order: any) => (
@@ -407,8 +409,8 @@ export function CustomerHomePage() {
       {user && favoriteRestaurants.length > 0 && (
         <section className="mt-7">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-text-primary">Your Favorites</h2>
-            <Link href="/favorites" className="text-sm font-semibold text-brand hover:underline">See all</Link>
+            <h2 className="text-xl font-bold text-text-primary">{t("home.your_favorites")}</h2>
+            <Link href="/favorites" className="text-sm font-semibold text-brand hover:underline">{t("home.see_all")}</Link>
           </div>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             {favoriteRestaurants.slice(0, 4).map((r: any, i: number) => (
@@ -438,7 +440,7 @@ export function CustomerHomePage() {
         <section className="mt-7">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-text-primary">Recommended For You</h2>
+              <h2 className="text-xl font-bold text-text-primary">{t("home.recommended")}</h2>
               <p className="mt-0.5 text-xs text-text-muted">Based on your order history</p>
             </div>
           </div>
@@ -469,7 +471,7 @@ export function CustomerHomePage() {
         <section className="mt-7">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-text-primary">Trending Now</h2>
+              <h2 className="text-xl font-bold text-text-primary">{t("home.trending")}</h2>
               <p className="mt-0.5 text-xs text-text-muted">Most ordered this week</p>
             </div>
           </div>
@@ -498,7 +500,7 @@ export function CustomerHomePage() {
       <section className="mt-7">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-[28px] font-bold text-text-primary">All Restaurants</h2>
+            <h2 className="text-[28px] font-bold text-text-primary">{t("home.all_restaurants")}</h2>
             <p className="mt-1 text-sm text-text-secondary">
               Handpicked kitchens around {location?.label ?? "you"}
             </p>

@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
 import { ShoppingCart } from "lucide-react";
+import { useLangStore } from "@/store/langStore";
 
 /**
  * Cart Page Component
@@ -27,6 +28,7 @@ export default function CartPage() {
 
   // Cart operations
   const { items, isLoading: cartLoading, error: cartError } = useCartStore();
+  const { t } = useLangStore();
   const { updateQuantity, removeFromCart, clearCart } = useCartStore();
 
   // Redirect if not logged in
@@ -64,18 +66,18 @@ export default function CartPage() {
     return (
       <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
+          <h1 className="text-3xl font-bold mb-8">{t("cart.page_title")}</h1>
           
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <ShoppingCart className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">Your cart is empty</h2>
-            <p className="text-gray-600 mb-6">Add some delicious items to get started!</p>
-            
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">{t("cart.empty")}</h2>
+            <p className="text-gray-600 mb-6">{t("cart.empty_desc")}</p>
+
             <Link
               href="/restaurants"
               className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-lg transition-colors"
             >
-              Browse Restaurants →
+              {t("cart.browse")} →
             </Link>
           </div>
         </div>

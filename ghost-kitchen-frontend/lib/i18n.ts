@@ -56,6 +56,24 @@ export const messages: Record<LangCode, Record<string, string>> = {
     "common.cancel": "Cancel",
     "common.apply": "Apply",
     "common.remove": "Remove",
+    // Bottom nav
+    "nav.home": "Home",
+    "nav.saved": "Saved",
+    // Home sections
+    "home.order_again": "Order Again",
+    "home.your_favorites": "Your Favorites",
+    "home.see_all": "See all",
+    "home.recommended": "Recommended For You",
+    "home.trending": "Trending Now",
+    "home.all_restaurants": "All Restaurants",
+    // Cart page
+    "cart.page_title": "Your Cart",
+    "cart.browse": "Browse Restaurants",
+    "cart.empty_desc": "Add some delicious items to get started!",
+    // Orders page
+    "orders.page_title": "Your Orders",
+    "orders.browse": "Browse Restaurants",
+    "orders.track_desc": "Track your deliveries",
   },
   hi: {
     // Nav
@@ -111,5 +129,23 @@ export const messages: Record<LangCode, Record<string, string>> = {
     "common.cancel": "रद्द करें",
     "common.apply": "लागू करें",
     "common.remove": "हटाएं",
+    // Bottom nav
+    "nav.home": "होम",
+    "nav.saved": "सहेजा",
+    // Home sections
+    "home.order_again": "फिर से ऑर्डर करें",
+    "home.your_favorites": "आपकी पसंदीदा",
+    "home.see_all": "सब देखें",
+    "home.recommended": "आपके लिए सुझाए गए",
+    "home.trending": "अभी ट्रेंडिंग",
+    "home.all_restaurants": "सभी रेस्तरां",
+    // Cart page
+    "cart.page_title": "आपकी कार्ट",
+    "cart.browse": "रेस्तरां देखें",
+    "cart.empty_desc": "शुरू करने के लिए स्वादिष्ट आइटम जोड़ें!",
+    // Orders page
+    "orders.page_title": "आपके ऑर्डर",
+    "orders.browse": "रेस्तरां देखें",
+    "orders.track_desc": "अपनी डिलीवरी ट्रैक करें",
   },
 };

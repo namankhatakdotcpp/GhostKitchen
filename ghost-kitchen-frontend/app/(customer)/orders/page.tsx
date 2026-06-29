@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import ReviewForm from "@/components/customer/ReviewForm";
 import { useCartStore } from "@/store/cartStore";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { useLangStore } from "@/store/langStore";
 
 interface OrderItemJSON {
   menuItemId: string;
@@ -38,6 +39,7 @@ interface Order {
 function OrdersPageContent() {
   const router = useRouter();
   const { clearCart, addToCart } = useCartStore();
+  const { t } = useLangStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -118,7 +120,7 @@ function OrdersPageContent() {
     return (
       <div className="min-h-screen bg-gray-50 py-8 px-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("orders.page_title")}</h1>
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="bg-white rounded-lg shadow p-4 animate-pulse">
@@ -152,20 +154,18 @@ function OrdersPageContent() {
             Payment History →
           </Link>
         </div>
-        <p className="text-gray-600 mb-8">Track your deliveries</p>
+        <p className="text-gray-600 mb-8">{t("orders.track_desc")}</p>
 
         {orders.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-12 text-center">
             <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">No orders yet</h2>
-            <p className="text-gray-600 mb-6">
-              Start ordering delicious food from your favorite restaurants
-            </p>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">{t("orders.no_orders")}</h2>
+            <p className="text-gray-600 mb-6">{t("orders.start_ordering")}</p>
             <a
               href="/"
               className="inline-block px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium"
             >
-              Browse Restaurants
+              {t("orders.browse")}
             </a>
           </div>
         ) : (

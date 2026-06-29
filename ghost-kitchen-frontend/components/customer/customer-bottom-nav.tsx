@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+import { useLangStore } from "@/store/langStore";
 
-const navItems = [
+const NAV_ICON_HREFS = [
   {
     href: "/",
-    label: "Home",
+    labelKey: "nav.home",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <path
@@ -22,7 +23,7 @@ const navItems = [
   },
   {
     href: "/search",
-    label: "Search",
+    labelKey: "nav.search",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="6" stroke="currentColor" strokeWidth="1.8" />
@@ -32,7 +33,7 @@ const navItems = [
   },
   {
     href: "/orders",
-    label: "Orders",
+    labelKey: "nav.orders",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <path
@@ -47,7 +48,7 @@ const navItems = [
   },
   {
     href: "/favorites",
-    label: "Saved",
+    labelKey: "nav.saved",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <path
@@ -62,7 +63,7 @@ const navItems = [
   },
   {
     href: "/profile",
-    label: "Profile",
+    labelKey: "nav.profile",
     icon: (
       <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
         <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
@@ -79,6 +80,7 @@ const navItems = [
 
 export function CustomerBottomNav() {
   const pathname = usePathname();
+  const { t } = useLangStore();
 
   if (!pathname || pathname.startsWith("/login") || pathname.startsWith("/register")) {
     return null;
@@ -87,7 +89,7 @@ export function CustomerBottomNav() {
   return (
     <nav aria-label="Main navigation" className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white/95 px-4 py-2 backdrop-blur md:hidden">
       <div className="mx-auto flex max-w-[460px] items-center justify-between">
-        {navItems.map((item) => {
+        {NAV_ICON_HREFS.map((item) => {
           const isActive = pathname === item.href;
 
           return (
@@ -103,7 +105,7 @@ export function CustomerBottomNav() {
               key={item.href}
             >
               {item.icon}
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </Link>
           );
         })}
