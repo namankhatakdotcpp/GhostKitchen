@@ -69,6 +69,14 @@ function CheckoutPageContent() {
   const [couponLoading, setCouponLoading] = useState(false)
   const [couponError, setCouponError] = useState('')
 
+  const [giftCardInput, setGiftCardInput] = useState('')
+  const [giftCardCode, setGiftCardCode] = useState('')
+  const [giftCardBalance, setGiftCardBalance] = useState<number | null>(null)
+  const [giftCardError, setGiftCardError] = useState('')
+
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduledFor, setScheduledFor] = useState('')
+
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('ONLINE')
   // Loyalty points — redemption is wired up for the COD path only this
   // round (online payments go through a separate snapshot-based
@@ -201,6 +209,18 @@ function CheckoutPageContent() {
     setCouponError('')
   }
 
+  async function handleApplyGiftCard() {
+    if (!giftCardInput.trim()) { setGiftCardError('Enter a gift card code'); return }
+    setGiftCardError('')
+    try {
+      const { data } = await api.post('/gift-cards/check', { code: giftCardInput.trim() })
+      setGiftCardCode(data.code)
+      setGiftCardBalance(data.remainingValuePaise)
+    } catch (err: any) {
+      setGiftCardError(err?.response?.data?.message ?? 'Invalid gift card')
+    }
+  }
+
   // pricing is the server-calculated breakdown (POST /orders/calculate) —
   // the only source of truth for what the customer will actually be
   // charged. While it's loading (or unavailable, e.g. no address picked
@@ -221,7 +241,9 @@ function CheckoutPageContent() {
       items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
       deliveryAddress,
       couponCode: couponCode || undefined,
+      giftCardCode: giftCardCode || undefined,
       pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
+      scheduledFor: scheduleEnabled && scheduledFor ? scheduledFor : undefined,
     })
     clearCart()
     router.push(`/order/${data.order.id}/track`)
@@ -233,7 +255,9 @@ function CheckoutPageContent() {
       items: items.map(i => ({ menuItemId: i.menuItem.id, quantity: i.quantity })),
       deliveryAddress,
       couponCode: couponCode || undefined,
+      giftCardCode: giftCardCode || undefined,
       pointsToRedeem: pointsInput > 0 ? pointsInput : undefined,
+      scheduledFor: scheduleEnabled && scheduledFor ? scheduledFor : undefined,
     })
 
     if (data.pricing) setPricing(data.pricing)
@@ -491,6 +515,54 @@ function CheckoutPageContent() {
         {couponError && <p className="text-xs text-red-600">{couponError}</p>}
 
         {restaurantId && <AvailableCoupons restaurantId={restaurantId} onSelect={code => { setCouponInput(code); setCouponError('') }} />}
+      </div>
+
+      {/* Gift Card */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <label className="block text-sm font-semibold text-gray-800 mb-3">Gift card</label>
+        {giftCardCode ? (
+          <div className="flex items-center justify-between rounded-lg bg-green-50 border border-green-200 px-3 py-2">
+            <div>
+              <p className="text-sm font-semibold text-green-800">{giftCardCode}</p>
+              <p className="text-xs text-green-700">Balance: ₹{((giftCardBalance ?? 0) / 100).toFixed(0)}</p>
+            </div>
+            <button onClick={() => { setGiftCardCode(''); setGiftCardBalance(null); setGiftCardInput('') }} className="text-xs text-green-700 font-semibold hover:underline" type="button">Remove</button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              value={giftCardInput}
+              onChange={e => { setGiftCardInput(e.target.value.toUpperCase()); setGiftCardError('') }}
+              placeholder="XXXX-XXXX-XXXX"
+              className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            <button onClick={handleApplyGiftCard} className="text-sm font-semibold text-brand border border-brand rounded-lg px-4 hover:bg-brand-light transition" type="button">Apply</button>
+          </div>
+        )}
+        {giftCardError && <p className="text-xs text-red-600 mt-1">{giftCardError}</p>}
+      </div>
+
+      {/* Schedule for later */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-semibold text-gray-800">Schedule for later</label>
+          <button
+            onClick={() => setScheduleEnabled(!scheduleEnabled)}
+            className={`relative h-6 w-11 rounded-full transition ${scheduleEnabled ? "bg-brand" : "bg-gray-200"}`}
+            type="button"
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${scheduleEnabled ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+        {scheduleEnabled && (
+          <input
+            type="datetime-local"
+            value={scheduledFor}
+            min={new Date(Date.now() + 30 * 60_000).toISOString().slice(0, 16)}
+            onChange={e => setScheduledFor(e.target.value)}
+            className="mt-3 w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          />
+        )}
       </div>
 
       {/* Loyalty points redemption — COD only for now (see note on pointsInput above) */}

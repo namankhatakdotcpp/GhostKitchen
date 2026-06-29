@@ -82,6 +82,7 @@ model User {
   currentLat  Float?
   currentLng  Float?
 
+  referralCode      String?            @unique
   restaurants       Restaurant[]       @relation("RestaurantOwner")
   customerOrders    Order[]            @relation("CustomerOrders")
   agentOrders       Order[]            @relation("AgentOrders")
@@ -99,6 +100,12 @@ model User {
   reviews           Review[]
   codSettlements    CODSettlement[]    @relation("RiderCODSettlements")
   riderCODPayments  RiderCODPayment[]  @relation("RiderCODPayments")
+  referralsMade     Referral[]         @relation("ReferralsMade")
+  referredBy        Referral?          @relation("ReferredBy")
+  giftCardsPurchased GiftCard[]        @relation("GiftCardPurchased")
+  giftCardsRedeemed  GiftCard[]        @relation("GiftCardRedeemed")
+  supportTickets    SupportTicket[]    @relation("UserTickets")
+  chatMessages      ChatMessage[]      @relation("UserChatMessages")
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -123,6 +130,7 @@ model CartItem {
   userId     String
   menuItemId String
   quantity   Int      @default(1)
+  addons     Json?    // [{groupId, groupName, optionId, optionName, pricePaise}]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -204,21 +212,22 @@ model Restaurant {
 }
 
 model MenuItem {
-  id           String     @id @default(uuid())
+  id           String       @id @default(uuid())
   restaurantId String
   name         String
   description  String
-  price        Decimal    @db.Decimal(10, 2)
+  price        Decimal      @db.Decimal(10, 2)
   category     String
   imageUrl     String
-  isVeg        Boolean    @default(false)
-  isAvailable  Boolean    @default(true)
-  isBestseller Boolean    @default(false)
-  sortOrder    Int        @default(0)
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  cartItems    CartItem[] @relation("MenuItemCart")
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  isVeg        Boolean      @default(false)
+  isAvailable  Boolean      @default(true)
+  isBestseller Boolean      @default(false)
+  sortOrder    Int          @default(0)
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  cartItems    CartItem[]   @relation("MenuItemCart")
+  addonGroups  AddonGroup[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@index([restaurantId])
   @@index([restaurantId, category])
@@ -287,11 +296,15 @@ model Order {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
+  scheduledFor   DateTime?
+
   customer       User             @relation("CustomerOrders", fields: [customerId], references: [id])
   restaurant     Restaurant       @relation(fields: [restaurantId], references: [id])
   agent          User?            @relation("AgentOrders", fields: [agentId], references: [id])
   review         Review?
   codSettlement  CODSettlement?
+  chatMessages   ChatMessage[]
+  supportTickets SupportTicket[]
 
   @@index([customerId])
   @@index([restaurantId])
@@ -648,4 +661,97 @@ model IncidentEvent {
   createdAt  DateTime @default(now())
 
   @@index([incidentId, createdAt])
+}
+
+// ── Add-on Groups & Options (Order Customization) ──────────────────────────
+model AddonGroup {
+  id          String        @id @default(cuid())
+  menuItemId  String
+  name        String        // e.g. "Size", "Extras", "Sauce"
+  required    Boolean       @default(false)
+  multiSelect Boolean       @default(false)
+  maxSelect   Int?          // null = unlimited (only applies when multiSelect=true)
+  sortOrder   Int           @default(0)
+  menuItem    MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  options     AddonOption[]
+
+  @@index([menuItemId])
+}
+
+model AddonOption {
+  id           String     @id @default(cuid())
+  addonGroupId String
+  name         String     // e.g. "Large", "Extra Cheese"
+  pricePaise   Int        @default(0)
+  isDefault    Boolean    @default(false)
+  sortOrder    Int        @default(0)
+  addonGroup   AddonGroup @relation(fields: [addonGroupId], references: [id], onDelete: Cascade)
+
+  @@index([addonGroupId])
+}
+
+// ── Gift Cards ─────────────────────────────────────────────────────────────
+model GiftCard {
+  id                  String    @id @default(cuid())
+  code                String    @unique
+  originalValuePaise  Int
+  remainingValuePaise Int
+  purchasedByUserId   String?
+  redeemedByUserId    String?
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  purchasedBy         User?     @relation("GiftCardPurchased", fields: [purchasedByUserId], references: [id])
+  redeemedBy          User?     @relation("GiftCardRedeemed", fields: [redeemedByUserId], references: [id])
+
+  @@index([code])
+}
+
+// ── Referral Program ───────────────────────────────────────────────────────
+model Referral {
+  id          String    @id @default(cuid())
+  referrerId  String
+  refereeId   String    @unique
+  rewardPaise Int       @default(5000) // ₹50 credited to both on first order
+  rewardedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  referrer    User      @relation("ReferralsMade", fields: [referrerId], references: [id])
+  referee     User      @relation("ReferredBy", fields: [refereeId], references: [id])
+
+  @@index([referrerId])
+}
+
+// ── Support Tickets ────────────────────────────────────────────────────────
+model SupportTicket {
+  id          String    @id @default(cuid())
+  userId      String
+  orderId     String?
+  subject     String
+  description String
+  status      String    @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED | CLOSED
+  adminReply  String?
+  repliedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation("UserTickets", fields: [userId], references: [id])
+  order       Order?    @relation(fields: [orderId], references: [id])
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ── In-App Chat (customer ↔ rider during active delivery) ─────────────────
+model ChatMessage {
+  id         String    @id @default(cuid())
+  orderId    String
+  senderId   String
+  senderRole String    // CUSTOMER | RIDER
+  message    String
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender     User      @relation("UserChatMessages", fields: [senderId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([senderId])
 }

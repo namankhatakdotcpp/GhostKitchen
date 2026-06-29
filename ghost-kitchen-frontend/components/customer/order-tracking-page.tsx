@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DeliveredCelebration } from "@/components/customer/delivered-celebration";
+import { ChatButton } from "@/components/customer/ChatDrawer";
 import { api } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import type {
@@ -593,13 +594,16 @@ export function OrderTrackingPage({ orderId }: OrderTrackingPageProps) {
                       </p>
                     </div>
                   </div>
-                  <a
-                    className="inline-flex h-11 items-center gap-2 rounded-pill border border-brand bg-white px-4 text-sm font-semibold text-brand"
-                    href={`tel:${order.deliveryAgent.phone}`}
-                  >
-                    <CallIcon />
-                    Call
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a
+                      className="inline-flex h-11 items-center gap-2 rounded-pill border border-brand bg-white px-4 text-sm font-semibold text-brand"
+                      href={`tel:${order.deliveryAgent.phone}`}
+                    >
+                      <CallIcon />
+                      Call
+                    </a>
+                    <ChatButton orderId={order.id} />
+                  </div>
                 </div>
                 <div className="mt-5 rounded-[22px] border border-border bg-surface p-2">
                   <p className="px-3 pt-2 text-sm font-semibold text-text-primary">Live location</p>

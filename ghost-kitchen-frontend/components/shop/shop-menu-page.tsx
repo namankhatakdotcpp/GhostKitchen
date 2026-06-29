@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Star, Trash2, X } from "lucide-react";
+import { Plus, Settings2, Star, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { z } from "zod";
 
@@ -55,13 +55,14 @@ function AvailabilitySwitch({ checked, onChange }: { checked: boolean; onChange:
 }
 
 function MenuItemCard({
-  item, onEdit, onDelete, onToggleAvailable, onToggleBestseller,
+  item, onEdit, onDelete, onToggleAvailable, onToggleBestseller, onManageAddons,
 }: {
   item: MenuItem;
   onEdit: (item: MenuItem) => void;
   onDelete: (id: string) => void;
   onToggleAvailable: (id: string) => void;
   onToggleBestseller: (id: string) => void;
+  onManageAddons: (item: MenuItem) => void;
 }) {
   const price = toRupees(Number(item.price));
   return (
@@ -92,6 +93,10 @@ function MenuItemCard({
               <button type="button" onClick={() => onEdit(item)}
                 className="rounded-full bg-[#F5F5F5] p-1.5 text-text-secondary transition hover:bg-brand-light hover:text-brand">
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 16 16"><path d="M11.5 2.5l2 2L5 13 2 14l1-3 8.5-8.5z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <button type="button" onClick={() => onManageAddons(item)} title="Manage add-ons"
+                className="rounded-full bg-[#F5F5F5] p-1.5 text-text-secondary transition hover:bg-blue-50 hover:text-blue-600">
+                <Settings2 className="h-3.5 w-3.5" />
               </button>
               <button type="button" onClick={() => onDelete(item.id)}
                 className="rounded-full bg-red-50 p-1.5 text-red-500 transition hover:bg-red-100">
@@ -240,6 +245,122 @@ function ItemSheet({
   );
 }
 
+// ─── Addon Manager ───────────────────────────────────────────
+type AddonOption = { id: string; name: string; pricePaise: number; isDefault: boolean; sortOrder: number };
+type AddonGroup = { id: string; name: string; required: boolean; multiSelect: boolean; maxSelect: number | null; options: AddonOption[] };
+
+function AddonManagerPanel({ menuItemId, onClose }: { menuItemId: string; onClose: () => void }) {
+  const [groups, setGroups] = useState<AddonGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupRequired, setNewGroupRequired] = useState(false);
+  const [newGroupMulti, setNewGroupMulti] = useState(false);
+
+  const loadGroups = () => {
+    api.get(`/menu-items/${menuItemId}/addons`)
+      .then((r) => setGroups(r.data.groups ?? []))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { loadGroups(); }, [menuItemId]);
+
+  async function addGroup() {
+    if (!newGroupName.trim()) return;
+    await api.post(`/role/menu-items/${menuItemId}/addons/groups`, { name: newGroupName, required: newGroupRequired, multiSelect: newGroupMulti });
+    setNewGroupName(""); setNewGroupRequired(false); setNewGroupMulti(false);
+    loadGroups();
+  }
+
+  async function deleteGroup(id: string) {
+    await api.delete(`/role/addons/groups/${id}`);
+    loadGroups();
+  }
+
+  async function addOption(groupId: string, name: string, pricePaise: number) {
+    await api.post(`/role/addons/groups/${groupId}/options`, { name, pricePaise });
+    loadGroups();
+  }
+
+  async function deleteOption(optionId: string) {
+    await api.delete(`/role/addons/options/${optionId}`);
+    loadGroups();
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <div>
+          <p className="font-bold text-text-primary">Add-on Groups</p>
+          <p className="text-xs text-text-secondary">Let customers customize this item</p>
+        </div>
+        <button onClick={onClose} className="rounded-full p-2 hover:bg-surface" type="button"><X className="h-5 w-5 text-text-secondary" /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+        {loading ? (
+          <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-16 animate-pulse rounded-2xl bg-gray-100" />)}</div>
+        ) : groups.map((g) => (
+          <AddonGroupCard key={g.id} group={g} onDeleteGroup={deleteGroup} onAddOption={addOption} onDeleteOption={deleteOption} />
+        ))}
+
+        {/* New group form */}
+        <div className="rounded-2xl border border-dashed border-blue-300 bg-blue-50 p-4 space-y-3">
+          <p className="text-sm font-semibold text-blue-800">Add group</p>
+          <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder='e.g. "Size", "Extras"'
+            className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20" />
+          <div className="flex gap-4 text-sm text-[#686B78]">
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={newGroupRequired} onChange={e => setNewGroupRequired(e.target.checked)} /><span>Required</span></label>
+            <label className="flex items-center gap-1.5"><input type="checkbox" checked={newGroupMulti} onChange={e => setNewGroupMulti(e.target.checked)} /><span>Multi-select</span></label>
+          </div>
+          <button onClick={addGroup} className="w-full rounded-xl bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 transition" type="button">Add group</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddonGroupCard({ group, onDeleteGroup, onAddOption, onDeleteOption }: {
+  group: AddonGroup;
+  onDeleteGroup: (id: string) => void;
+  onAddOption: (groupId: string, name: string, pricePaise: number) => void;
+  onDeleteOption: (id: string) => void;
+}) {
+  const [optName, setOptName] = useState("");
+  const [optPrice, setOptPrice] = useState(0);
+
+  return (
+    <div className="rounded-2xl border border-border bg-white p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-bold text-text-primary">{group.name}</p>
+          <p className="text-xs text-text-muted">{group.required ? "Required" : "Optional"} · {group.multiSelect ? "Multi-select" : "Single"}</p>
+        </div>
+        <button onClick={() => onDeleteGroup(group.id)} className="text-red-400 hover:text-red-600 p-1" type="button"><Trash2 className="h-4 w-4" /></button>
+      </div>
+      <div className="space-y-1.5">
+        {group.options.map((opt) => (
+          <div key={opt.id} className="flex items-center justify-between rounded-xl bg-surface px-3 py-2">
+            <span className="text-sm text-text-primary">{opt.name}</span>
+            <div className="flex items-center gap-3">
+              {opt.pricePaise > 0 && <span className="text-xs text-brand">+₹{opt.pricePaise / 100}</span>}
+              <button onClick={() => onDeleteOption(opt.id)} className="text-red-400 hover:text-red-600" type="button"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input value={optName} onChange={e => setOptName(e.target.value)} placeholder="Option name"
+          className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20" />
+        <input value={optPrice || ""} onChange={e => setOptPrice(Number(e.target.value) || 0)} placeholder="₹0"
+          type="number" min={0}
+          className="w-20 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/20" />
+        <button onClick={() => { if (optName.trim()) { onAddOption(group.id, optName.trim(), optPrice * 100); setOptName(""); setOptPrice(0); } }}
+          className="rounded-xl bg-brand px-3 text-white hover:bg-brand/90 transition" type="button">
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export function ShopMenuPage() {
   const queryClient = useQueryClient();
@@ -248,6 +369,7 @@ export function ShopMenuPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [addonItemId, setAddonItemId] = useState<string | null>(null);
 
   // Fetch my restaurant
   const restaurantQuery = useQuery({
@@ -418,6 +540,7 @@ export function ShopMenuPage() {
                   onDelete={(id) => setDeleteConfirmId(id)}
                   onToggleAvailable={handleToggleAvailable}
                   onToggleBestseller={handleToggleBestseller}
+                  onManageAddons={(i) => setAddonItemId(i.id)}
                 />
               ))}
             </div>
@@ -434,6 +557,18 @@ export function ShopMenuPage() {
         onClose={() => { setSheetOpen(false); setEditingItem(null); }}
         onSaved={handleSaved}
       />
+
+      {/* Addon Manager Panel */}
+      <AnimatePresence>
+        {addonItemId && (
+          <>
+            <motion.div className="fixed inset-0 z-40 bg-black/40" onClick={() => setAddonItemId(null)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+            <motion.div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-white shadow-2xl" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ ease: "easeOut", duration: 0.22 }}>
+              <AddonManagerPanel menuItemId={addonItemId} onClose={() => setAddonItemId(null)} />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Delete confirm */}
       <AnimatePresence>

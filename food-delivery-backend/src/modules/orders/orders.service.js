@@ -260,7 +260,14 @@ export const createOrder = async (payload, customerId) => {
       pointsRedeemed = Math.min(payload.pointsToRedeem, wallet.balance, maxByCapPoints);
       pointsDiscount = pointsRedeemed * loyaltySettings.loyaltyPointValuePaise;
     }
-    const finalTotal = Math.max(afterCoupon - pointsDiscount, 0);
+    // Gift card discount
+    let giftCardDiscount = 0;
+    if (payload.giftCardCode) {
+      const { redeemGiftCard } = await import("../giftcard/giftcard.service.js");
+      const result = await redeemGiftCard(payload.giftCardCode, afterCoupon - pointsDiscount, customerId);
+      giftCardDiscount = result.discountPaise;
+    }
+    const finalTotal = Math.max(afterCoupon - pointsDiscount - giftCardDiscount, 0);
 
     // Create order with server-calculated values only
     const created = await tx.order.create({
@@ -269,10 +276,11 @@ export const createOrder = async (payload, customerId) => {
         restaurantId: payload.restaurantId,
         agentId: null,
         status: initialStatus,
+        scheduledFor: payload.scheduledFor ? new Date(payload.scheduledFor) : null,
         items: itemsToStore,
         subtotal,
         deliveryFee: pricing.deliveryFee,
-        discount: discount + pointsDiscount,
+        discount: discount + pointsDiscount + giftCardDiscount,
         total: finalTotal,
         deliveryAddress: payload.deliveryAddress,
         itemTotal: pricing.itemTotal,

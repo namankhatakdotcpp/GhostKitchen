@@ -81,6 +81,16 @@ export async function previewRedemption({ userId, requestedPoints, orderTotalPai
 // usedCount claim in orders.service.js. Must be called from inside the same
 // transaction that creates the order, so a failed order creation can't leave
 // points debited with nothing to show for it.
+// Credit points directly (referral rewards, admin grants, etc.)
+export async function creditWallet(userId, points, description = "Credit") {
+  if (!points || points <= 0) return;
+  const wallet = await getOrCreateWallet(userId);
+  await prisma.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: points } } });
+  await prisma.walletTransaction.create({
+    data: { walletId: wallet.id, type: "EARNED", points, description },
+  });
+}
+
 export async function claimPointsInTx(tx, userId, points, { orderId, description } = {}) {
   if (!points || points <= 0) return;
 

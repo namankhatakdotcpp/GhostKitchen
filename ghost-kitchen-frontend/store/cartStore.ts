@@ -40,7 +40,7 @@ type CartState = {
 
   // Actions
   fetchCart: () => Promise<void>;
-  addToCart: (menuItemId: string, quantity?: number) => Promise<void>;
+  addToCart: (menuItemId: string, quantity?: number, addons?: object[]) => Promise<void>;
   removeFromCart: (cartItemId: string) => Promise<void>;
   updateQuantity: (cartItemId: string, quantity: number) => Promise<void>;
   clearCart: () => Promise<void>;
@@ -75,10 +75,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   /**
    * Add item to cart (or increase quantity if already exists)
    */
-  addToCart: async (menuItemId: string, quantity = 1) => {
+  addToCart: async (menuItemId: string, quantity = 1, addons?: object[]) => {
     set({ isLoading: true, error: null });
     try {
-      await api.post("/cart/add", { menuItemId, quantity });
+      await api.post("/cart/add", { menuItemId, quantity, ...(addons ? { addons } : {}) });
       // Fetch updated cart
       await get().fetchCart();
     } catch (error: any) {

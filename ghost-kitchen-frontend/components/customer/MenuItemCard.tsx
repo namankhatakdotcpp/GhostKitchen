@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 
 import { useCartStore } from "@/store/cartStore";
 import { useAuthStore } from "@/store/authStore";
+import { AddonModal, type AddonSelection } from "@/components/customer/AddonModal";
 import type { MenuItem } from "@/types";
 
 export interface MenuItemCardProps {
@@ -49,14 +51,23 @@ export function MenuItemCard({
   const router = useRouter();
   const { items, addToCart, updateQuantity } = useCartStore();
   const { isAuthenticated } = useAuthStore();
+  const [addonOpen, setAddonOpen] = useState(false);
 
   const handleAddToCart = (menuItemId: string) => {
     if (!isAuthenticated) {
       router.push(`/login?returnUrl=${encodeURIComponent(window.location.pathname)}`);
       return;
     }
+    if (customizable) {
+      setAddonOpen(true);
+      return;
+    }
     addToCart(menuItemId);
   };
+
+  function handleAddonConfirm(selections: AddonSelection[]) {
+    addToCart(id, 1, selections.length ? selections : undefined);
+  }
 
   const currentItem = items.find((item) => item.menuItem.id === id);
   const quantity = currentItem?.quantity ?? 0;
@@ -75,6 +86,15 @@ export function MenuItemCard({
   };
 
   return (
+    <>
+    <AddonModal
+      itemId={id}
+      itemName={name}
+      basePrice={price}
+      open={addonOpen}
+      onClose={() => setAddonOpen(false)}
+      onConfirm={handleAddonConfirm}
+    />
     <div className="flex gap-4 border-b border-border bg-white py-4">
       <div className="min-w-0 flex-1">
         <FoodTypeIcon isVeg={isVeg} />
@@ -153,5 +173,6 @@ export function MenuItemCard({
         </AnimatePresence>
       </div>
     </div>
+    </>
   );
 }

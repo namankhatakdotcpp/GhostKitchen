@@ -12,6 +12,24 @@ import RoleSwitcher from "@/components/ui/role-switcher";
 import { useCartStore } from "@/store/cartStore";
 import { useUserStore } from "@/store/userStore";
 import { useAuthStore } from "@/store/authStore";
+import { useLangStore } from "@/store/langStore";
+import { LANGUAGES, type LangCode } from "@/lib/i18n";
+
+function LangSwitcher() {
+  const { lang, setLang } = useLangStore();
+  return (
+    <select
+      value={lang}
+      onChange={(e) => setLang(e.target.value as LangCode)}
+      className="hidden md:block h-9 rounded-pill border border-border bg-white px-2.5 text-[12px] font-semibold text-text-secondary focus:outline-none focus:ring-2 focus:ring-brand/20 cursor-pointer"
+      aria-label="Select language"
+    >
+      {(Object.keys(LANGUAGES) as LangCode[]).map((code) => (
+        <option key={code} value={code}>{LANGUAGES[code]}</option>
+      ))}
+    </select>
+  );
+}
 
 function PinIcon() {
   return (
@@ -117,6 +135,7 @@ export function CustomerNavbar() {
         </button>
 
         <div className="flex items-center gap-2 md:gap-3">
+          <LangSwitcher />
           <RoleSwitcher />
           <NotificationBell />
           <Link

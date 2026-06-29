@@ -22,7 +22,7 @@ import AppError from "../../utils/AppError.js";
  * If item already in cart, increase quantity
  * Otherwise create new cart item
  */
-export const addToCart = async (userId, menuItemId, quantity = 1) => {
+export const addToCart = async (userId, menuItemId, quantity = 1, addons = null) => {
   if (quantity < 1) {
     throw new AppError("Quantity must be at least 1", 400);
   }
@@ -45,17 +45,15 @@ export const addToCart = async (userId, menuItemId, quantity = 1) => {
   });
 
   if (existing) {
-    // Update quantity if already exists
     return await prisma.cartItem.update({
       where: { id: existing.id },
-      data: { quantity: existing.quantity + quantity },
+      data: { quantity: existing.quantity + quantity, ...(addons !== null ? { addons } : {}) },
       include: { menuItem: true },
     });
   }
 
-  // Create new cart item
   return await prisma.cartItem.create({
-    data: { userId, menuItemId, quantity },
+    data: { userId, menuItemId, quantity, ...(addons !== null ? { addons } : {}) },
     include: { menuItem: true },
   });
 };

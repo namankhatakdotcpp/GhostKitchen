@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import toast from "react-hot-toast";
-import { MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone, Bell, BellOff } from "lucide-react";
+import Link from "next/link";
+import { Gift, HelpCircle, MapPin, Plus, Trash2, Home, Briefcase, CheckCircle, Edit2, X, Phone, Bell, BellOff, Users } from "lucide-react";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { WalletCard } from "@/components/customer/WalletCard";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -430,18 +431,32 @@ function ProfilePageContent() {
         )}
       </div>
 
-      {/* Help & Support */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-800 mb-4">Help &amp; Support</h2>
-        {process.env.NEXT_PUBLIC_SUPPORT_PHONE ? (
-          <a
-            href={`tel:${process.env.NEXT_PUBLIC_SUPPORT_PHONE}`}
-            className="flex items-center justify-center gap-2 w-full py-3 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 transition"
-          >
-            <Phone className="h-4 w-4" /> Call Customer Care
+      {/* Quick links */}
+      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+        {[
+          { href: "/referral", icon: Users, label: "Refer & Earn", desc: "Earn ₹50 for every friend you invite" },
+          { href: "/help", icon: HelpCircle, label: "Help & Support", desc: "FAQ, contact us, track tickets" },
+        ].map(({ href, icon: Icon, label, desc }) => (
+          <Link key={href} href={href} className="flex items-center gap-4 px-4 py-4 hover:bg-surface transition">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50">
+              <Icon className="h-5 w-5 text-brand" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">{label}</p>
+              <p className="text-xs text-gray-500">{desc}</p>
+            </div>
+          </Link>
+        ))}
+        {process.env.NEXT_PUBLIC_SUPPORT_PHONE && (
+          <a href={`tel:${process.env.NEXT_PUBLIC_SUPPORT_PHONE}`} className="flex items-center gap-4 px-4 py-4 hover:bg-surface transition">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50">
+              <Phone className="h-5 w-5 text-brand" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Call Customer Care</p>
+              <p className="text-xs text-gray-500">{process.env.NEXT_PUBLIC_SUPPORT_PHONE}</p>
+            </div>
           </a>
-        ) : (
-          <p className="text-sm text-gray-400">Customer care number not configured.</p>
         )}
       </div>
     </div>

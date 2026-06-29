@@ -14,7 +14,7 @@ import { logger } from "../../utils/logger.js";
  */
 export const add = async (req, res, next) => {
   try {
-    const { menuItemId, quantity } = req.body;
+    const { menuItemId, quantity, addons } = req.body;
 
     // Validate input
     if (!menuItemId) {
@@ -27,7 +27,8 @@ export const add = async (req, res, next) => {
     const result = await cartService.addToCart(
       req.user.userId,
       menuItemId,
-      quantity || 1
+      quantity || 1,
+      Array.isArray(addons) ? addons : null,
     );
 
     res.status(200).json({

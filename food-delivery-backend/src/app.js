@@ -23,6 +23,11 @@ import execRoutes from "./modules/exec/exec.routes.js";
 import walletRoutes from "./modules/wallet/wallet.routes.js";
 import pushRoutes from "./modules/push/push.routes.js";
 import uploadRoutes from "./modules/upload/upload.routes.js";
+import addonsRoutes from "./modules/addons/addons.routes.js";
+import giftcardRoutes from "./modules/giftcard/giftcard.routes.js";
+import referralRoutes from "./modules/referral/referral.routes.js";
+import supportRoutes from "./modules/support/support.routes.js";
+import chatRoutes from "./modules/chat/chat.routes.js";
 import { seedDatabase } from "../prisma/seed.js";
 import { globalErrorHandler } from "./middlewares/errorHandler.js";
 import { requestTracingMiddleware } from "./middlewares/requestTracing.middleware.js";
@@ -393,6 +398,11 @@ app.use("/api/user", userRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/push", pushRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api", addonsRoutes);
+app.use("/api", giftcardRoutes);
+app.use("/api", referralRoutes);
+app.use("/api", supportRoutes);
+app.use("/api", chatRoutes);
 
 // ── 15. 404───────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));

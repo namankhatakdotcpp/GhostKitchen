@@ -15,6 +15,7 @@ import { sendOrderPlacedEmail, sendOrderStatusEmail } from "../../services/email
 import { computeETA } from "../../utils/eta.js";
 import { logger } from "../../utils/logger.js";
 import { awardPointsForOrder } from "../wallet/wallet.service.js";
+import { processReferralReward } from "../referral/referral.service.js";
 import { sendPushToUser } from "../push/push.service.js";
 
 export const getOrders = async (req, res) => {
@@ -334,6 +335,9 @@ export const updateOrderStatusHTTP = async (req, res) => {
         // delivery confirmation itself.
         awardPointsForOrder(updatedOrder).catch((err) =>
           logger.error("Loyalty points award failed", { orderId, error: err.message }),
+        );
+        processReferralReward(customerId).catch((err) =>
+          logger.error("Referral reward failed", { orderId, error: err.message }),
         );
       }
     }
