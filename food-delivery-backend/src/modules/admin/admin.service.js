@@ -83,11 +83,25 @@ export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
     ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
   };
 
-  const updatedOrder = await prisma.order.update({
-    where: { id: orderId },
-    data: updateData,
-    include: ORDER_INCLUDE,
-  });
+  // Conditional WHERE: only succeeds if the order is still in the status we
+  // read above. Closes the same race that was fixed in orders.service.js
+  // (commit 4d4b541): an admin force-deliver landing at the same time as a
+  // rider delivery would otherwise win unconditionally, causing the rider
+  // path's fromStatus guard to throw P2025 and skip loyalty/referral awards.
+  let updatedOrder;
+  try {
+    updatedOrder = await prisma.order.update({
+      where: { id: orderId, status: order.status },
+      data: updateData,
+      include: ORDER_INCLUDE,
+    });
+  } catch (err) {
+    if (err.code === "P2025") {
+      // Concurrent writer already advanced the status; return current state.
+      return prisma.order.findUnique({ where: { id: orderId }, include: ORDER_INCLUDE });
+    }
+    throw err;
+  }
 
   emitOrderStatusUpdated({
     orderId,

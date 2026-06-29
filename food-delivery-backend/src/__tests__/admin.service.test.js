@@ -202,6 +202,30 @@ describe("updateOrderStatus", () => {
     await svc.updateOrderStatus("ord-1", "CANCELLED");
     expect(computeETA).not.toHaveBeenCalled();
   });
+
+  it("passes { id, status: order.status } in the WHERE clause to guard against concurrent writers", async () => {
+    prisma.order.findUnique.mockResolvedValue(order({ status: "OUT_FOR_DELIVERY" }));
+    prisma.order.update.mockResolvedValue(order({ status: "DELIVERED" }));
+    await svc.updateOrderStatus("ord-1", "DELIVERED");
+    expect(prisma.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "ord-1", status: "OUT_FOR_DELIVERY" } }),
+    );
+  });
+
+  it("re-fetches and returns the current order when a concurrent writer wins (P2025)", async () => {
+    const p2025 = new Error("Record not found");
+    p2025.code = "P2025";
+    prisma.order.findUnique
+      .mockResolvedValueOnce(order({ status: "OUT_FOR_DELIVERY" }))  // initial read
+      .mockResolvedValueOnce(order({ status: "DELIVERED" }));         // re-fetch after P2025
+    prisma.order.update.mockRejectedValue(p2025);
+
+    const result = await svc.updateOrderStatus("ord-1", "DELIVERED");
+
+    expect(result).toMatchObject({ id: "ord-1", status: "DELIVERED" });
+    // Socket event should NOT be emitted — the concurrent winner already emitted it
+    expect(emitOrderStatusUpdated).not.toHaveBeenCalled();
+  });
 });
 
 describe("cancelOrder", () => {
