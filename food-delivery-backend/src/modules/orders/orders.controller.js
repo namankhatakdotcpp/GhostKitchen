@@ -284,7 +284,18 @@ export const updateOrderStatusHTTP = async (req, res) => {
         status: newStatus,
         agentId: req.user.role === "DELIVERY" ? req.user.userId : undefined,
         estimatedDelivery: estimatedDelivery ?? undefined,
+        fromStatus: currentOrder.status,
       });
+
+      // Race guard: a concurrent writer (e.g. webhook + manual confirm
+      // arriving within milliseconds) already set this status. Return the
+      // order's current state — from the caller's perspective the desired
+      // state is already achieved — and skip all side effects; the winning
+      // writer already fired them.
+      if (updatedOrder === null) {
+        const current = await getOrderById(orderId);
+        return res.json({ message: "Order status updated successfully", order: current });
+      }
 
       // Assign a delivery agent on CONFIRMED, and retry on every later
       // transition (PREPARING, OUT_FOR_DELIVERY) if still unassigned — e.g. no

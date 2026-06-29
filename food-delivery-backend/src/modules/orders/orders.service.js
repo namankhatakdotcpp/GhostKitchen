@@ -330,23 +330,39 @@ export const createOrder = async (payload, customerId) => {
 // mutable after creation. Monetary fields (riderPayout, restaurantPayout,
 // adminRevenue, subtotal, deliveryFee, discount, total) are set once at
 // order-creation time and never recalculated or overwritten here.
-export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDelivery }) => {
-  const order = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status,
-      ...(agentId ? { agentId } : {}),
-      ...(estimatedDelivery ? { estimatedDelivery } : {}),
-      ...(status === "CONFIRMED"        ? { acceptedAt: new Date() } : {}),
-      ...(status === "PREPARING"        ? { readyAt: new Date() } : {}),
-      ...(status === "OUT_FOR_DELIVERY" ? { pickedUpAt: new Date() } : {}),
-      ...(status === "DELIVERED"        ? { deliveredAt: new Date() } : {}),
-    },
-    include: {
-      restaurant: true,
-      agent: true,
-    },
-  });
+// fromStatus, when provided, adds a conditional WHERE { status: fromStatus }
+// to the DB write — the same atomic-conditional pattern used in the dispatch
+// race guard (commit 975b46a). If a concurrent writer already advanced the
+// order past fromStatus, Prisma throws P2025 and we return null so the
+// caller knows to skip side effects (loyalty points, referral reward, COD
+// settlement). Without this guard, two concurrent DELIVERED writes would
+// both succeed and both fire awardPointsForOrder + processReferralReward.
+export const updateOrderStatus = async ({ orderId, status, agentId, estimatedDelivery, fromStatus }) => {
+  let order;
+  try {
+    order = await prisma.order.update({
+      where: fromStatus ? { id: orderId, status: fromStatus } : { id: orderId },
+      data: {
+        status,
+        ...(agentId ? { agentId } : {}),
+        ...(estimatedDelivery ? { estimatedDelivery } : {}),
+        ...(status === "CONFIRMED"        ? { acceptedAt: new Date() } : {}),
+        ...(status === "PREPARING"        ? { readyAt: new Date() } : {}),
+        ...(status === "OUT_FOR_DELIVERY" ? { pickedUpAt: new Date() } : {}),
+        ...(status === "DELIVERED"        ? { deliveredAt: new Date() } : {}),
+      },
+      include: {
+        restaurant: true,
+        agent: true,
+      },
+    });
+  } catch (err) {
+    // P2025: no row matched { id: orderId, status: fromStatus } — a concurrent
+    // writer already advanced the order. Return null so the caller skips all
+    // side effects; the winning writer already fired them.
+    if (err.code === "P2025") return null;
+    throw err;
+  }
 
   // COD settlement: when a COD order is delivered, record the financial split
   // so admin can reconcile rider cash handover and restaurant bank transfer.

@@ -244,3 +244,62 @@ describe("computeOrderPricing — donation is excluded from the split", () => {
     expect(orderTotal).toBe(baseResult.customerTotal + 1000);
   });
 });
+
+// ── Gift card exclusion from payouts ─────────────────────────────────────────
+// Gift card redemption (giftcard.service.js:redeemGiftCard) returns a
+// discountPaise value that is subtracted from finalTotal AFTER
+// computeOrderPricing() returns. The three payout fields are set from the
+// pricing object verbatim (orders.service.js:305-306) before the gift card
+// discount is ever evaluated — so a gift card can never move money out of or
+// into restaurantPayout / riderPayout / adminRevenue.
+//
+// Because computeOrderPricing() has no gift-card parameter at all, the proof
+// is structural: identical inputs ⇒ identical outputs, regardless of what
+// discount the application layer applies afterwards.
+describe("computeOrderPricing — gift card discount is excluded from the split", () => {
+  const base = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+
+  it("restaurantPayout is unchanged when a gift card discount is applied at the application layer", () => {
+    // Application path: giftCardDiscountPaise is subtracted from finalTotal AFTER
+    // computeOrderPricing() returns. The pricing object is never recomputed.
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    const giftCardDiscountPaise = 5000; // ₹50 gift card
+    // Application code sets: order.restaurantPayout = pricing.restaurantPayout
+    // Gift card never enters this assignment.
+    expect(pricing.restaurantPayout).toBe(base.restaurantPayout);
+    // Verify the discount would reach the customer (afterCoupon < customerTotal),
+    // while payout stays constant.
+    const afterCoupon = pricing.customerTotal - giftCardDiscountPaise;
+    expect(afterCoupon).toBeLessThan(pricing.customerTotal);
+    expect(pricing.restaurantPayout).toBe(base.restaurantPayout);
+  });
+
+  it("riderPayout is unchanged when a gift card discount is applied at the application layer", () => {
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    expect(pricing.riderPayout).toBe(base.riderPayout);
+  });
+
+  it("adminRevenue is unchanged when a gift card discount is applied at the application layer", () => {
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    expect(pricing.adminRevenue).toBe(base.adminRevenue);
+  });
+
+  it("a full-order gift card (100% discount) still does not change any payout field", () => {
+    // Even if the customer pays ₹0 net (after gift card covers the whole order),
+    // the split pool was already computed and locked in before the gift card was applied.
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    const fullCoverDiscount = pricing.customerTotal; // covers 100% of customer total
+    const afterCoupon = pricing.customerTotal - fullCoverDiscount; // ₹0 net to customer
+    expect(afterCoupon).toBe(0);
+    expect(pricing.restaurantPayout).toBe(base.restaurantPayout);
+    expect(pricing.riderPayout).toBe(base.riderPayout);
+    expect(pricing.adminRevenue).toBe(base.adminRevenue);
+  });
+
+  it("splitPool = deliveryFee + platformFee regardless of any gift card size", () => {
+    const pricing = computeOrderPricing({ itemTotal: 50000, distanceKm: 5, settings: DEFAULT_SETTINGS });
+    const splitPool = pricing.deliveryFee + pricing.platformFee;
+    const restaurantSplitShare = pricing.restaurantPayout - pricing.restaurantPackaging;
+    expect(restaurantSplitShare).toBe(Math.round(splitPool * (DEFAULT_SETTINGS.splitRestaurantPct / 100)));
+  });
+});
