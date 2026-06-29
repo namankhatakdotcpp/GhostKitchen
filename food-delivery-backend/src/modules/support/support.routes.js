@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/requireRole.js";
+import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
 import * as svc from "./support.service.js";
 
 const router = Router();
@@ -22,12 +21,12 @@ router.get("/user/support/tickets/:id", authenticate, async (req, res) => {
 });
 
 // Admin
-router.get("/admin/support/tickets", authenticate, requireRole("ADMIN"), async (req, res) => {
+router.get("/admin/support/tickets", authenticate, authorize("ADMIN"), async (req, res) => {
   const tickets = await svc.adminListTickets({ status: req.query.status });
   res.json({ tickets });
 });
 
-router.post("/admin/support/tickets/:id/reply", authenticate, requireRole("ADMIN"), async (req, res) => {
+router.post("/admin/support/tickets/:id/reply", authenticate, authorize("ADMIN"), async (req, res) => {
   const ticket = await svc.adminReplyToTicket(req.params.id, req.body);
   res.json({ ticket });
 });

@@ -108,7 +108,7 @@ export default function ReferralPage() {
 
           {/* Apply a friend's code */}
           <div className="rounded-2xl border border-border bg-white p-5 space-y-3">
-            <p className="text-sm font-bold text-[#1C1C1C]">Have a friend's code?</p>
+            <p className="text-sm font-bold text-[#1C1C1C]">Have a friend&apos;s code?</p>
             <div className="flex gap-2">
               <input
                 value={inputCode}
@@ -125,7 +125,7 @@ export default function ReferralPage() {
                 {applying ? "…" : "Apply"}
               </button>
             </div>
-            <p className="text-xs text-[#686B78]">You'll both earn ₹50 in wallet credits after your first order is delivered.</p>
+            <p className="text-xs text-[#686B78]">You&apos;ll both earn ₹50 in wallet credits after your first order is delivered.</p>
           </div>
 
           {/* Referral list */}

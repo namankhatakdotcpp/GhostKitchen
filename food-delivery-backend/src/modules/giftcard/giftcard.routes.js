@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/requireRole.js";
+import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
 import * as svc from "./giftcard.service.js";
 
 const router = Router();
@@ -17,12 +16,12 @@ router.post("/gift-cards/check", authenticate, async (req, res) => {
 });
 
 // Admin: CRUD
-router.post("/admin/gift-cards", authenticate, requireRole("ADMIN"), async (req, res) => {
+router.post("/admin/gift-cards", authenticate, authorize("ADMIN"), async (req, res) => {
   const card = await svc.adminCreateGiftCard(req.body);
   res.status(201).json({ card });
 });
 
-router.get("/admin/gift-cards", authenticate, requireRole("ADMIN"), async (req, res) => {
+router.get("/admin/gift-cards", authenticate, authorize("ADMIN"), async (req, res) => {
   const cards = await svc.adminListGiftCards();
   res.json({ cards });
 });

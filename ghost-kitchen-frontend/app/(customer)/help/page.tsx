@@ -99,7 +99,7 @@ export default function HelpPage() {
         ) : submitted ? (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-6 text-center">
             <p className="text-lg font-bold text-green-700">Ticket submitted!</p>
-            <p className="text-sm text-green-600 mt-1">We'll reply within 24 hours. Check <Link href="/help/my-tickets" className="underline">My tickets</Link> for updates.</p>
+            <p className="text-sm text-green-600 mt-1">We&apos;ll reply within 24 hours. Check <Link href="/help/my-tickets" className="underline">My tickets</Link> for updates.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="rounded-2xl border border-border bg-white p-5 space-y-4">

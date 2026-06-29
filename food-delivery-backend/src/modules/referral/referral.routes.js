@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middleware/auth.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 import * as svc from "./referral.service.js";
 
 const router = Router();

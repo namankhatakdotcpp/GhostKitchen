@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middleware/auth.js";
+import { authenticate } from "../../middlewares/auth.middleware.js";
 import { getIO } from "../../socket/socketServer.js";
 import * as svc from "./chat.service.js";
 

@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { authenticate } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/requireRole.js";
+import { authenticate, authorize } from "../../middlewares/auth.middleware.js";
 import * as svc from "./addons.service.js";
 
 const router = Router();
@@ -15,7 +14,7 @@ router.get("/menu-items/:menuItemId/addons", async (req, res) => {
 router.post(
   "/role/menu-items/:menuItemId/addons/groups",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     const group = await svc.createAddonGroup(req.params.menuItemId, req.body);
     res.status(201).json({ group });
@@ -25,7 +24,7 @@ router.post(
 router.put(
   "/role/addons/groups/:groupId",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     const { name, required, multiSelect, maxSelect, sortOrder } = req.body;
     const group = await svc.updateAddonGroup(req.params.groupId, { name, required, multiSelect, maxSelect, sortOrder });
@@ -36,7 +35,7 @@ router.put(
 router.delete(
   "/role/addons/groups/:groupId",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     await svc.deleteAddonGroup(req.params.groupId);
     res.json({ ok: true });
@@ -46,7 +45,7 @@ router.delete(
 router.post(
   "/role/addons/groups/:groupId/options",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     const option = await svc.createAddonOption(req.params.groupId, req.body);
     res.status(201).json({ option });
@@ -56,7 +55,7 @@ router.post(
 router.put(
   "/role/addons/options/:optionId",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     const option = await svc.updateAddonOption(req.params.optionId, req.body);
     res.json({ option });
@@ -66,7 +65,7 @@ router.put(
 router.delete(
   "/role/addons/options/:optionId",
   authenticate,
-  requireRole("RESTAURANT", "ADMIN"),
+  authorize("RESTAURANT", "ADMIN"),
   async (req, res) => {
     await svc.deleteAddonOption(req.params.optionId);
     res.json({ ok: true });
