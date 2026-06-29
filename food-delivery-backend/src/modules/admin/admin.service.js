@@ -6,6 +6,8 @@ import { computeETA } from "../../utils/eta.js";
 import { getRiderStatus } from "../../utils/riderStatus.js";
 import { sendPushToUser } from "../push/push.service.js";
 import { createNotification } from "../notification/notification.service.js";
+import { awardPointsForOrder } from "../wallet/wallet.service.js";
+import { processReferralReward } from "../referral/referral.service.js";
 
 // Order statuses that represent an in-flight delivery a rider is actively working.
 const ACTIVE_DELIVERY_STATUSES = ["CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY"];
@@ -72,6 +74,13 @@ export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
   if (!order) throw new AppError("Order not found", 404);
 
   const terminalStatuses = ["DELIVERED", "CANCELLED"];
+  // Terminal-state guard: prevents any re-update of an already-completed or
+  // already-cancelled order. Without this, a sequential double admin call to
+  // DELIVERED would match the fromStatus WHERE (DELIVERED WHERE status=DELIVERED)
+  // and fire loyalty/referral side effects twice. awardPointsForOrder has no
+  // internal idempotency guard of its own, so this is the only check here.
+  if (terminalStatuses.includes(order.status)) return order;
+
   const etaStatuses = ["CONFIRMED", "OUT_FOR_DELIVERY"];
   const estimatedDelivery = etaStatuses.includes(status) && !terminalStatuses.includes(order.status)
     ? computeETA(order.restaurant, order.agent, status, order.deliveryAddress)
@@ -109,6 +118,18 @@ export const updateOrderStatus = async (orderId, newStatus, reason = null) => {
     estimatedDelivery: estimatedDelivery?.toISOString() ?? null,
     timestamp: new Date().toISOString(),
   });
+
+  // Mirror the side effects that orders.controller.js fires on the rider/customer
+  // path. Admin-completed deliveries should earn the same loyalty points and
+  // referral reward as a normal rider-confirmed delivery.
+  if (status === "DELIVERED") {
+    awardPointsForOrder(updatedOrder).catch((err) =>
+      logger.error("Loyalty points award failed (admin path)", { orderId, error: err.message }),
+    );
+    processReferralReward(updatedOrder.customerId).catch((err) =>
+      logger.error("Referral reward failed (admin path)", { orderId, error: err.message }),
+    );
+  }
 
   logger.warn("Admin updated order status", { orderId, oldStatus: order.status, newStatus: status, reason });
   return updatedOrder;

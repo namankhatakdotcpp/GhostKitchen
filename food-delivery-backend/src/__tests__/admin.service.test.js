@@ -83,6 +83,16 @@ vi.mock("../utils/riderStatus.js", () => ({
   getRiderStatus: vi.fn().mockReturnValue("ONLINE"),
 }));
 
+const mockAwardPointsForOrder = vi.fn().mockResolvedValue(null);
+vi.mock("../modules/wallet/wallet.service.js", () => ({
+  awardPointsForOrder: mockAwardPointsForOrder,
+}));
+
+const mockProcessReferralReward = vi.fn().mockResolvedValue(undefined);
+vi.mock("../modules/referral/referral.service.js", () => ({
+  processReferralReward: mockProcessReferralReward,
+}));
+
 // ── Import subjects under test ─────────────────────────────────────────────────
 
 const { prisma } = await import("../config/prisma.js");
@@ -196,11 +206,16 @@ describe("updateOrderStatus", () => {
     expect(computeETA).toHaveBeenCalled();
   });
 
-  it("skips ETA when order already in terminal status", async () => {
+  it("returns the order as-is when it is already in a terminal state (terminal-state guard)", async () => {
+    // Terminal-state guard: no update, no ETA computation, no side effects.
+    // awardPointsForOrder has no internal idempotency, so this guard is the
+    // only thing preventing double-credit on a repeated admin DELIVERED call.
     prisma.order.findUnique.mockResolvedValue(order({ status: "DELIVERED" }));
-    prisma.order.update.mockResolvedValue(order({ status: "CANCELLED" }));
-    await svc.updateOrderStatus("ord-1", "CANCELLED");
+    const result = await svc.updateOrderStatus("ord-1", "CONFIRMED");
+    expect(prisma.order.update).not.toHaveBeenCalled();
     expect(computeETA).not.toHaveBeenCalled();
+    expect(mockAwardPointsForOrder).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: "DELIVERED" });
   });
 
   it("passes { id, status: order.status } in the WHERE clause to guard against concurrent writers", async () => {
@@ -225,6 +240,42 @@ describe("updateOrderStatus", () => {
     expect(result).toMatchObject({ id: "ord-1", status: "DELIVERED" });
     // Socket event should NOT be emitted — the concurrent winner already emitted it
     expect(emitOrderStatusUpdated).not.toHaveBeenCalled();
+  });
+
+  it("fires awardPointsForOrder and processReferralReward when transitioning to DELIVERED", async () => {
+    prisma.order.findUnique.mockResolvedValue(order({ status: "OUT_FOR_DELIVERY" }));
+    prisma.order.update.mockResolvedValue(order({ status: "DELIVERED", customerId: "cust-1" }));
+
+    await svc.updateOrderStatus("ord-1", "DELIVERED");
+
+    expect(mockAwardPointsForOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "ord-1", status: "DELIVERED" }),
+    );
+    expect(mockProcessReferralReward).toHaveBeenCalledWith("cust-1");
+  });
+
+  it("does NOT fire awardPointsForOrder or processReferralReward for non-DELIVERED transitions", async () => {
+    prisma.order.findUnique.mockResolvedValue(order());
+    prisma.order.update.mockResolvedValue(order({ status: "CONFIRMED" }));
+
+    await svc.updateOrderStatus("ord-1", "CONFIRMED");
+
+    expect(mockAwardPointsForOrder).not.toHaveBeenCalled();
+    expect(mockProcessReferralReward).not.toHaveBeenCalled();
+  });
+
+  it("does NOT fire awardPointsForOrder or processReferralReward when a concurrent writer won (P2025 branch)", async () => {
+    const p2025 = new Error("Record not found");
+    p2025.code = "P2025";
+    prisma.order.findUnique
+      .mockResolvedValueOnce(order({ status: "OUT_FOR_DELIVERY" }))
+      .mockResolvedValueOnce(order({ status: "DELIVERED" }));
+    prisma.order.update.mockRejectedValue(p2025);
+
+    await svc.updateOrderStatus("ord-1", "DELIVERED");
+
+    expect(mockAwardPointsForOrder).not.toHaveBeenCalled();
+    expect(mockProcessReferralReward).not.toHaveBeenCalled();
   });
 });
 
